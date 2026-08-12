@@ -350,14 +350,9 @@ body {
   letter-spacing: 0.03em;
 }
 
-.board__empty,
-.board__legend {
+.board__empty {
   font-size: 0.8rem;
   color: var(--muted);
-}
-
-.board__legend {
-  margin: 0.4rem 0 0;
 }
 
 .board__undrawable,

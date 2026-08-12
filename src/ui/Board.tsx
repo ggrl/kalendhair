@@ -116,10 +116,6 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props)
         })}
       </div>
 
-      {/* Directly under the headings, where somebody starts reading. Below the grid it sat 985px
-          away from the colours it explains, which for a read-once sentence is the whole game. */}
-      <p className="board__legend">Gleiche Farbe = gleiche Kundin oder gleicher Kunde am selben Tag.</p>
-
       <div
         className="board__grid"
         style={{
