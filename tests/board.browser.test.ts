@@ -17,6 +17,7 @@ function dayFor(date: string): Day {
       ? [
           {
             id: 'a1',
+            version: 1,
             employeeId: MARCO,
             kind: 'appointment',
             startsAt: '09:00',
@@ -28,6 +29,7 @@ function dayFor(date: string): Day {
           },
           {
             id: 'a2',
+            version: 1,
             employeeId: MARCO,
             kind: 'appointment',
             startsAt: '10:00',
@@ -39,6 +41,7 @@ function dayFor(date: string): Day {
           },
           {
             id: 'a3',
+            version: 1,
             employeeId: MARCO,
             kind: 'appointment',
             startsAt: '10:45',
@@ -50,6 +53,7 @@ function dayFor(date: string): Day {
           },
           {
             id: 'a4',
+            version: 1,
             employeeId: JANA,
             kind: 'appointment',
             startsAt: '14:00',
@@ -63,6 +67,7 @@ function dayFor(date: string): Day {
             // A second appointment carrying notes, so "only one note open at a time" has
             // something to be tested against.
             id: 'a5',
+            version: 1,
             employeeId: JANA,
             kind: 'appointment',
             startsAt: '09:00',
@@ -74,6 +79,7 @@ function dayFor(date: string): Day {
           },
           {
             id: 'b1',
+            version: 1,
             employeeId: JANA,
             kind: 'block',
             startsAt: '12:00',

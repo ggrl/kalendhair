@@ -52,6 +52,38 @@ export function isPlaceable(startsAt: string, endsAt: string): boolean {
   )
 }
 
+const WALL_CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/**
+ * Why a proposed time range cannot be booked, in German, or null if it can.
+ *
+ * German because it reaches the screen, and one function because the browser wants to refuse
+ * a typed time before saving and the server has to refuse it again whatever the browser did.
+ * Two copies of "is this bookable" would agree today and disagree in a month.
+ *
+ * The bookable window lives in this file and nowhere else, which is why
+ * `migrations/001_init.sql` deliberately does not encode 06:00-20:00 in SQL: changing the
+ * salon's hours should be an edit here, not a migration.
+ */
+export function whyNotBookable(startsAt: string, endsAt: string): string | null {
+  if (!WALL_CLOCK.test(startsAt) || !WALL_CLOCK.test(endsAt)) {
+    return 'Uhrzeit muss als HH:MM angegeben werden.'
+  }
+
+  const start = minutesSinceMidnight(startsAt)
+  const end = minutesSinceMidnight(endsAt)
+
+  if (end <= start) return 'Das Ende muss nach dem Beginn liegen.'
+  if (start % SLOT_MINUTES !== 0 || end % SLOT_MINUTES !== 0) {
+    return `Zeiten müssen auf einer Viertelstunde liegen (${SLOT_MINUTES}-Minuten-Raster).`
+  }
+  if (start < minutesSinceMidnight(DAY_STARTS_AT) || end > minutesSinceMidnight(DAY_ENDS_AT)) {
+    return `Termine sind nur zwischen ${DAY_STARTS_AT} und ${DAY_ENDS_AT} möglich.`
+  }
+
+  return null
+}
+
 /** The hour labels down the side: 06:00 to 20:00 inclusive, one per hour. */
 export function hourLabels(): string[] {
   const first = minutesSinceMidnight(DAY_STARTS_AT) / 60
