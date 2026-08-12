@@ -41,10 +41,11 @@ in a tracked file, a log line, or a client bundle.
 
 ## Alternatives rejected
 
-- **Individual accounts via a managed provider** such as Clerk, a native Vercel
-  integration. Gives per-person accountability and clean offboarding, both of which
-  this decision gives up. Rejected as more moving parts than six people in one room
-  need today. This is the natural successor if the consequences above start to hurt.
+- **Individual accounts via a managed authentication provider.** Gives per-person
+  accountability and clean offboarding, both of which this decision gives up. Rejected
+  as more moving parts than six people in one room need today, and it puts staff
+  identities on a third party when ADR-0005 chose self-hosting to avoid exactly that.
+  Still the natural successor if the consequences above start to hurt.
 - **Individual accounts built here**, owning the user table, password hashing and
   sessions. Rejected outright: it is a solved problem, and rolling it yourself is how
   small businesses end up sending breach notifications.
