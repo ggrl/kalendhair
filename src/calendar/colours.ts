@@ -20,10 +20,16 @@ export const PALETTE = [
   '#c2e6a8',
   '#a6e3d0',
   '#a8dcee',
-  '#b8c8f0',
-  '#cfc0ee',
-  '#ecc0e8',
-  '#f6c2d4',
+  // The cool and pink end was originally two-thirds the saturation of the warm end, which
+  // put four pairs within CIE76 deltaE 11-12 of each other - close enough that a shared
+  // colour, which is this feature's entire claim, could not be told from a near miss across
+  // the height of a day. Deepened to match. Not verified for colour vision deficiency:
+  // ADR-0009 already concedes colour alone is not accessible, and the name on both boxes
+  // remains the signal that always works.
+  '#a9bdf2',
+  '#c3aef0',
+  '#eeb0e6',
+  '#f7b4cb',
 ] as const
 
 /** Only the fields colouring needs. Structural, so callers need not own a shared type. */

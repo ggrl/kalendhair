@@ -1,11 +1,13 @@
-import { useState } from 'react'
 import type { Entry } from '../calendar/types'
-import { SLOT_COUNT, slotFromWallClock } from '../calendar/grid'
+import { slotFromWallClock } from '../calendar/grid'
 
 interface Props {
   entry: Entry
   /** 1-based column for CSS grid: column 1 is the time scale. */
   column: number
+  /** True when this box's notes are the ones currently open. Only one may be open at a time. */
+  notesOpen: boolean
+  onToggleNotes: () => void
 }
 
 /**
@@ -15,72 +17,78 @@ interface Props {
  * ADR-0001 forbids two entries overlapping on one employee - so no box ever has to share
  * horizontal space with another. The rule in the database is what makes the layout simple.
  */
-export function EntryBox({ entry, column }: Props) {
-  const [showNotes, setShowNotes] = useState(false)
-
+export function EntryBox({ entry, column, notesOpen, onToggleNotes }: Props) {
   const start = slotFromWallClock(entry.startsAt)
   const end = slotFromWallClock(entry.endsAt)
-
-  // An entry outside the drawn window, or not on a quarter hour, cannot be placed honestly.
-  // Saying so beats drawing it in the wrong row: nothing can create one today, and if that
-  // changes this is the message that will say so.
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > SLOT_COUNT) {
-    return (
-      <div className="entry entry--unplaceable" style={{ gridColumn: column, gridRow: '1 / span 4' }}>
-        {entry.startsAt}&ndash;{entry.endsAt} passt nicht ins Raster
-      </div>
-    )
-  }
-
-  const isBlock = entry.kind === 'block'
+  const slots = end - start
   const timeRange = `${entry.startsAt}–${entry.endsAt}`
 
-  if (isBlock) {
+  const placement = { gridColumn: column, gridRow: `${start + 1} / span ${slots}` }
+
+  if (entry.kind === 'block') {
     return (
-      <div
-        className="entry entry--block"
-        style={{ gridColumn: column, gridRow: `${start + 1} / span ${end - start}` }}
-        title={`${timeRange} gesperrt`}
-      >
+      <div className="entry entry--block" style={placement} title={`${timeRange} gesperrt`}>
         <span className="entry__time">{timeRange}</span>
         <span className="entry__label">Gesperrt</span>
       </div>
     )
   }
 
-  // One row of grid is one line of text. Stacking time, customer and treatment in that space
-  // hides the customer entirely, which puts an appointment on the board that cannot be read.
-  const slots = end - start
-  const compact = slots <= 1
+  // Two grid rows is 35 px of box and 28 px of content, and three stacked lines need 43.
+  // At `slots <= 1` only, a 30-minute appointment took the tall layout it could not hold and
+  // the treatment vanished with nothing on screen saying so - most salon services are 30
+  // minutes, so that was the common case, not an edge one.
+  const compact = slots <= 2
+  const hasNotes = entry.notes !== null
 
-  const summary = [timeRange, entry.customer, entry.treatment, entry.notes].filter(Boolean).join(' · ')
+  // Deliberately excludes the notes. They were in here, and a tooltip appears on hover -
+  // which revealed an allergy note to anyone standing at the desk, breaking the one rule the
+  // brief states about notes. Three separate review passes caught it. What the tooltip is
+  // for is the text a short box had to clip.
+  const summary = [timeRange, entry.customer, entry.treatment].filter(Boolean).join(' · ')
+
+  const className = [
+    'entry',
+    'entry--appointment',
+    compact ? 'entry--compact' : '',
+    // Only a box with something to reveal looks and behaves like it can be opened. Making
+    // every box pressable taught the receptionist that clicking does nothing, which is the
+    // lesson that makes somebody miss the one box carrying an allergy note.
+    hasNotes ? 'entry--has-notes' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const content = (
+    <>
+      <span className="entry__time">{compact ? entry.startsAt : timeRange}</span>
+      <span className="entry__customer">{entry.customer}</span>
+      {!compact && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
+      {hasNotes && <span className="entry__notes-marker">Notiz</span>}
+      {notesOpen && <span className="entry__notes">{entry.notes}</span>}
+    </>
+  )
+
+  if (!hasNotes) {
+    return (
+      <div className={className} style={{ ...placement, backgroundColor: entry.colour ?? undefined }} title={summary}>
+        {content}
+      </div>
+    )
+  }
 
   return (
     <button
       type="button"
-      className={`entry entry--appointment${compact ? ' entry--compact' : ''}`}
-      // Everything the box may have had to clip, available on hover. Not a substitute for
-      // fitting: a receptionist scanning the day should not have to hover.
+      className={className}
       title={summary}
-      style={{
-        gridColumn: column,
-        gridRow: `${start + 1} / span ${end - start}`,
-        // ADR-0009: assigned by the server from the whole day. The browser does not derive
-        // it, or two clients would disagree about which boxes are the same customer.
-        backgroundColor: entry.colour ?? undefined,
-      }}
-      aria-expanded={entry.notes === null ? undefined : showNotes}
-      onClick={() => setShowNotes((open) => !open)}
+      // ADR-0009: the colour is assigned by the server from the whole day. The browser does
+      // not derive it, or two clients would disagree about which boxes are one customer.
+      style={{ ...placement, backgroundColor: entry.colour ?? undefined }}
+      aria-expanded={notesOpen}
+      onClick={onToggleNotes}
     >
-      <span className="entry__time">{compact ? entry.startsAt : timeRange}</span>
-      <span className="entry__customer">{entry.customer}</span>
-      {!compact && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
-      {entry.notes !== null && (
-        <span className="entry__notes-marker" aria-hidden="true">
-          &#9633;
-        </span>
-      )}
-      {showNotes && entry.notes !== null && <span className="entry__notes">{entry.notes}</span>}
+      {content}
     </button>
   )
 }

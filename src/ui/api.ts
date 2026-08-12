@@ -13,9 +13,10 @@ export async function fetchDay(date: string | null): Promise<Day> {
   const response = await fetch(`/api/day${query}`)
 
   if (!response.ok) {
-    // Fail loudly. A board that silently shows an empty day when the request failed is
-    // indistinguishable from a day with nothing booked, and one of those is a lie.
-    throw new Error(`the server answered ${response.status} for ${date ?? 'today'}`)
+    // Fail loudly, and in the language on the screen. A board that silently shows an empty
+    // day when the request failed is indistinguishable from a day with nothing booked, and
+    // one of those is a lie. The message is read by the receptionist, not by me.
+    throw new Error(`Server antwortete mit Status ${response.status}`)
   }
 
   return (await response.json()) as Day

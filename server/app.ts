@@ -16,11 +16,9 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   // Nothing here needs to announce the framework and its presence in a header.
   app.disable('x-powered-by')
 
-  // The built board, served from the same origin as the API so the browser needs no notion
-  // of where the API lives and no CORS header has to exist. Relative to the working
-  // directory, like `migrations/`. Missing simply does not match, which is what `npm run
-  // dev` relies on - Vite serves the front end then and proxies here.
-  app.use(express.static('dist'))
+  // No CORS header is set anywhere, and that absence is load-bearing now that the board and
+  // the API share an origin: it is what stops a page on another site reading a customer list.
+  // A future "just add CORS so the app can call it" would undo it. ADR-0006.
 
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
@@ -45,6 +43,18 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
 
     response.json(await readDay(pool, date, salonTimeZone, new Date()))
   })
+
+  // The built board, served from the same origin as the API. Mounted AFTER the route on
+  // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
+  // of the API, which a review demonstrated. Nothing can write that file today, and this
+  // makes it impossible rather than accidentally untrue.
+  //
+  // Relative to the working directory, like `migrations/`. Missing simply does not match,
+  // which is what `npm run dev` relies on - Vite serves the front end then and proxies here.
+  //
+  // Note for anything added to `.env` from now on: a `VITE_`-prefixed variable is inlined
+  // into the bundle at build time, and this line serves that bundle to everybody.
+  app.use(express.static('dist'))
 
   // Without this, a client with a typo in the path gets Express's HTML "Cannot GET /..."
   // page and puts markup into response.json(). ADR-0006 promises a plain JSON interface

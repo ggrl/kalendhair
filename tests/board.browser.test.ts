@@ -57,7 +57,20 @@ function dayFor(date: string): Day {
             customer: 'Felix Rau',
             treatment: 'Bart',
             notes: null,
-            colour: '#cfc0ee',
+            colour: '#c3aef0',
+          },
+          {
+            // A second appointment carrying notes, so "only one note open at a time" has
+            // something to be tested against.
+            id: 'a5',
+            employeeId: JANA,
+            kind: 'appointment',
+            startsAt: '09:00',
+            endsAt: '10:30',
+            customer: 'Eva Sommer',
+            treatment: 'Strähnen',
+            notes: 'Kommt mit Kinderwagen',
+            colour: '#c2e6a8',
           },
           {
             id: 'b1',
@@ -134,8 +147,8 @@ test('one customer split across the day gets one colour, the customer between th
   // this is the property the whole colour rule exists for.
   await page.goto('/?date=2026-08-13')
 
-  const colourOf = async (name: string): Promise<string> => {
-    const box = page.getByRole('button', { name: new RegExp(name) }).first()
+  const colourOf = async (text: string): Promise<string> => {
+    const box = page.locator('.entry--appointment', { hasText: text }).first()
     return box.evaluate((element) => window.getComputedStyle(element).backgroundColor)
   }
 
@@ -166,7 +179,7 @@ test('the shortest bookable box still shows who it is for', async ({ page }) => 
   // by looking at the rendered board, which is why this test exists at all.
   await page.goto('/?date=2026-08-13')
 
-  const short = page.getByRole('button', { name: /Felix Rau/ })
+  const short = page.locator('.entry--appointment', { hasText: 'Felix Rau' })
   await expect(short).toBeVisible()
   await expect(short).toContainText('Felix Rau')
   await expect(short).toContainText('14:00')
@@ -240,15 +253,22 @@ test('back returns to the previous day', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
 })
 
-test('today is one click away, and is disabled once you are there', async ({ page }) => {
+test('today is one click away, and stays clickable once you are there', async ({ page }) => {
+  // It used to disable itself when the shown day matched the day the server called today at
+  // the last load. A board left open past midnight then insisted yesterday was today, with
+  // the one control that could fix it switched off. It is never disabled now; the header says
+  // which day this is instead.
   await page.goto('/?date=2026-09-24')
-  const today = page.getByRole('button', { name: 'Zu heute springen' })
+  const today = page.getByRole('button', { name: 'Heute' })
 
-  await expect(today).toBeEnabled()
+  await expect(page.getByText('KW 39')).toBeVisible()
+  await expect(page.getByText('· heute')).toHaveCount(0)
+
   await today.click()
 
   await expect(page.getByRole('heading', { name: 'Mittwoch, 12. August 2026' })).toBeVisible()
-  await expect(today).toBeDisabled()
+  await expect(page.getByText('· heute')).toBeVisible()
+  await expect(today).toBeEnabled()
 })
 
 test('with no date in the address bar the server decides the day', async ({ page }) => {
@@ -267,6 +287,93 @@ test('an empty day says so instead of showing a bare grid', async ({ page }) => 
   await page.goto('/?date=2026-08-13')
 
   await expect(page.getByText('Für diesen Tag ist niemand eingeteilt.')).toBeVisible()
+})
+
+test('notes are not revealed by hovering', async ({ page }) => {
+  // The tooltip carried the notes, so resting a pointer on a box showed an allergy note to
+  // anyone standing at the desk. Three review passes found it independently. Asserted on the
+  // attribute, because the visibility assertion above passed the whole time it was broken.
+  await page.goto('/?date=2026-08-13')
+
+  const title = await page.getByRole('button', { name: /Anna Schmidt/ }).first().getAttribute('title')
+
+  expect(title).toContain('Anna Schmidt')
+  expect(title).not.toContain('Reagiert auf Ammoniak')
+})
+
+test('escape closes an open note, and only one is open at a time', async ({ page }) => {
+  await page.goto('/?date=2026-08-13')
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).first().click()
+  await expect(page.getByText('Reagiert auf Ammoniak')).toBeVisible()
+
+  // A second note replaces the first rather than stacking on top of it.
+  await page.getByRole('button', { name: /Eva Sommer/ }).click()
+  await expect(page.getByText('Kommt mit Kinderwagen')).toBeVisible()
+  await expect(page.getByText('Reagiert auf Ammoniak')).toBeHidden()
+
+  await page.keyboard.press('Escape')
+  await expect(page.getByText('Kommt mit Kinderwagen')).toBeHidden()
+})
+
+test('a box with nothing to reveal is not pressable', async ({ page }) => {
+  // Making every box a button taught the receptionist that clicking does nothing, which is
+  // the lesson that makes somebody miss the one box carrying an allergy note.
+  await page.goto('/?date=2026-08-13')
+
+  await expect(page.getByRole('button', { name: /Bea Wolff/ })).toHaveCount(0)
+  await expect(page.locator('.entry--appointment', { hasText: 'Bea Wolff' })).toBeVisible()
+})
+
+test('impatient clicking does not swallow day steps or bury the back button', async ({ page }) => {
+  // Measured under 700 ms of latency during review: three quick clicks produced two requests
+  // and three identical history entries, so the board moved one day and Back appeared dead.
+  // The steps were computed from the loaded day instead of the requested one.
+  const requested: string[] = []
+  await page.route('**/api/day*', async (route) => {
+    const date = new URL(route.request().url()).searchParams.get('date') ?? TODAY
+    requested.push(date)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await route.fulfill({ json: dayFor(date) })
+  })
+
+  await page.goto('/?date=2026-08-13')
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  const next = page.getByRole('button', { name: 'Nächster Tag' })
+  await next.click()
+  await next.click()
+  await next.click()
+
+  await expect(page.getByRole('heading', { name: 'Sonntag, 16. August 2026' })).toBeVisible()
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-08-16')
+  expect(requested).toContain('2026-08-16')
+
+  // One press of Back moves the board, rather than undoing a duplicate history entry.
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: 'Samstag, 15. August 2026' })).toBeVisible()
+})
+
+test('a failed day change keeps saying which day is on screen', async ({ page }) => {
+  // The worst finding of the UX pass: the header showed the loaded day while the URL held the
+  // requested one, so a failed step left somebody reading today's board believing it was
+  // tomorrow - and saying so on the phone.
+  await page.goto('/?date=2026-08-13')
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  await page.route('**/api/day*', async (route) => {
+    await route.fulfill({ status: 500, json: { error: 'internal error' } })
+  })
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+
+  const alert = page.getByRole('alert')
+  await expect(alert).toContainText('2026-08-14')
+  await expect(alert).toContainText('Angezeigt wird weiterhin 2026-08-13')
+  await expect(alert.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible()
+
+  // Header, board and address bar all agree on the day actually being shown.
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-08-13')
 })
 
 test('a failed load says so rather than showing an empty day', async ({ page }) => {

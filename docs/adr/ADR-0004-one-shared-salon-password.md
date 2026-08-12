@@ -51,8 +51,16 @@ in a tracked file, a log line, or a client bundle.
   secure, sensible expiry. No hand-rolled cryptography.
 - The login attempt path needs rate limiting. A single shared password is one guessable
   secret protecting everything.
-- **A `Host` header allowlist belongs in the same branch**, noted here by the security
-  review of the first code so it is not rediscovered. Until authentication exists, the
+- **The deadline is whichever comes first: the first real customer name, or the first bind
+  that is not loopback.** The second arrives quietly and is the one to watch. Deploying to
+  the VPS behind TLS is precisely the act that stops loopback protecting anything -
+  `server/config.ts` accepts `HOST=0.0.0.0` because that is a deliberate choice, and it is
+  the deliberate choice a deploy makes. A deploy is a bad moment to discover the board is
+  public.
+- **A `Host` header allowlist now covers both doors with one check.** Since the built board
+  is served from the same origin as the API, one guard on the way in protects the JSON and
+  the HTML together. That was not true before the front end existed.
+- Noted here by the security review of the first code so it is not rediscovered. Until authentication exists, the
   server is protected only by binding to loopback, and loopback does not stop DNS
   rebinding: a page the salon's own browser visits can point a hostname at `127.0.0.1` and
   read the API same-origin. No CORS header is set, which is what stops a plain cross-origin

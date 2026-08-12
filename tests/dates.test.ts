@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { addDays, addMonths, addWeeks, isoWeek, longGermanDate } from '../src/calendar/dates.js'
+import { isSalonDate } from '../src/calendar/salon-date.js'
+
+/** A step that is expected to land somewhere. Fails loudly rather than typing `!`. */
+function stepped(result: string | null): string {
+  if (result === null) throw new Error('expected the step to produce a date')
+  return result
+}
 
 // ADR-0010. The boundary dates below are a fixed table taken from the ADR, which took them
 // from the system's own date implementation. They are not generated, because the whole point
@@ -62,7 +69,7 @@ describe('addWeeks', () => {
     const start = '2026-08-13'
     expect(isoWeek(start).week).toBe(33)
 
-    const fourWeeksOn = addWeeks(start, 4)
+    const fourWeeksOn = stepped(addWeeks(start, 4))
     expect(fourWeeksOn).toBe('2026-09-10')
     expect(new Date(`${fourWeeksOn}T00:00:00Z`).getUTCDay()).toBe(4)
     expect(isoWeek(fourWeeksOn).week).toBe(37)
@@ -92,7 +99,7 @@ describe('addMonths', () => {
   it('does not come back to where it started, and that is the accepted cost', () => {
     // Documented in ADR-0010 rather than solved: remembering the original day across
     // clicks would make the button's behaviour depend on invisible history.
-    const forward = addMonths('2027-01-31', 1)
+    const forward = stepped(addMonths('2027-01-31', 1))
     expect(forward).toBe('2027-02-28')
     expect(addMonths(forward, -1)).toBe('2027-01-28')
   })
@@ -100,6 +107,36 @@ describe('addMonths', () => {
   it('crosses years in both directions', () => {
     expect(addMonths('2026-11-30', 3)).toBe('2027-02-28')
     expect(addMonths('2026-02-15', -3)).toBe('2025-11-15')
+  })
+})
+
+describe('the edges of the representable calendar', () => {
+  it('refuses a year below 1000 at the boundary, because the arithmetic silently lies there', () => {
+    // Date.UTC(50, 0, 1) means 1950, not year 50, so isoWeek('0050-03-15') used to return
+    // KW -99126 and addMonths('0050-01-31', 1) returned 1950-02-28. Rather than patch each
+    // function, the validator refuses the whole family - nothing books in the first
+    // millennium, and everything downstream may now assume four real digits.
+    expect(isSalonDate('0050-03-15')).toBe(false)
+    expect(isSalonDate('0999-12-31')).toBe(false)
+    expect(isSalonDate('0001-01-01')).toBe(false)
+    expect(isSalonDate('1000-01-01')).toBe(true)
+  })
+
+  it('goes nowhere rather than past the end of the calendar', () => {
+    // toISOString switches to an expanded year form beyond 9999, so one click of "next day"
+    // from an accepted 9999-12-31 used to put `+010000-01` in the address bar.
+    expect(addDays('9999-12-31', 1)).toBeNull()
+    expect(addWeeks('9999-12-30', 1)).toBeNull()
+    expect(addMonths('9999-12-01', 1)).toBeNull()
+
+    // And backwards, out of the range the validator accepts.
+    expect(addDays('1000-01-01', -1)).toBeNull()
+    expect(addMonths('1000-01-31', -1)).toBeNull()
+  })
+
+  it('still steps normally just inside the edges', () => {
+    expect(addDays('9999-12-30', 1)).toBe('9999-12-31')
+    expect(addDays('1000-01-01', 1)).toBe('1000-01-02')
   })
 })
 

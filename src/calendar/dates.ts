@@ -5,16 +5,29 @@
 // Imports nothing, like the rest of `src/calendar`: the server and the browser resolve
 // modules differently and a free-standing file pleases both.
 
+// Every function here assumes its input passed `isSalonDate`, which means a four-digit year
+// of 1000 or more. That is load-bearing rather than tidy: `Date.UTC(50, 0, 1)` means 1950,
+// so a two-digit year would produce a confidently wrong week number rather than an error.
+// The boundary refuses those, so nothing here has to.
+
 /** Days are plain `YYYY-MM-DD`. Parsed as UTC so no local timezone can shift a date. */
 function toUtc(date: string): Date {
   return new Date(`${date}T00:00:00Z`)
 }
 
-function format(value: Date): string {
+/**
+ * Returns `null` past the end of the representable range instead of a string nothing can
+ * read. `toISOString` switches to an expanded form beyond year 9999, so one step from
+ * 9999-12-31 used to put `+010000-01` in the address bar. Callers treat null as "this step
+ * does not go anywhere", which is the honest behaviour at the edge of the calendar.
+ */
+function format(value: Date): string | null {
+  const year = value.getUTCFullYear()
+  if (year < 1000 || year > 9999) return null
   return value.toISOString().slice(0, 10)
 }
 
-export function addDays(date: string, days: number): string {
+export function addDays(date: string, days: number): string | null {
   const shifted = toUtc(date)
   shifted.setUTCDate(shifted.getUTCDate() + days)
   return format(shifted)
@@ -24,7 +37,7 @@ export function addDays(date: string, days: number): string {
  * A week step keeps the weekday. That is the whole point of the feature: a customer asking
  * for the same slot in four weeks is four clicks and the same Thursday.
  */
-export function addWeeks(date: string, weeks: number): string {
+export function addWeeks(date: string, weeks: number): string | null {
   return addDays(date, weeks * 7)
 }
 
@@ -36,7 +49,7 @@ export function addWeeks(date: string, weeks: number): string {
  * across clicks would make the button's behaviour depend on invisible history, which is
  * worse than a step that does not perfectly undo.
  */
-export function addMonths(date: string, months: number): string {
+export function addMonths(date: string, months: number): string | null {
   const start = toUtc(date)
   const targetMonth = start.getUTCMonth() + months
   const year = start.getUTCFullYear() + Math.floor(targetMonth / 12)

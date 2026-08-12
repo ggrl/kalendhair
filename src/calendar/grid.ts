@@ -30,6 +30,17 @@ export function slotFromWallClock(wallClock: string): number {
   return (minutesSinceMidnight(wallClock) - minutesSinceMidnight(DAY_STARTS_AT)) / SLOT_MINUTES
 }
 
+/**
+ * Whether a time range can be drawn on the grid at all: both ends on a quarter hour, and
+ * inside the window. Takes times rather than an entry so this file keeps its promise to
+ * import nothing, and so the board and the box cannot disagree about what is drawable.
+ */
+export function isPlaceable(startsAt: string, endsAt: string): boolean {
+  const start = slotFromWallClock(startsAt)
+  const end = slotFromWallClock(endsAt)
+  return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end <= SLOT_COUNT
+}
+
 /** The hour labels down the side: 06:00 to 20:00 inclusive, one per hour. */
 export function hourLabels(): string[] {
   const first = minutesSinceMidnight(DAY_STARTS_AT) / 60
