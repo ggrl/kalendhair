@@ -2,6 +2,88 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-13 - the write path, and the form
+
+The board can now be edited. Everything below the entry for 2026-08-12 still applies except
+where this entry contradicts it.
+
+### Where things stand
+
+- **`main` is at `620164c`.** Schema, `GET /api/day`, the board, the write path, the form,
+  eleven ADRs, the brief and the README.
+- **PR #11 is open and carries this file** plus a note on ADR-0002. Nothing else is
+  outstanding. Merging it costs nothing and is the tidiest first move tomorrow.
+- **The write path merged as PR #10, with no review pass having read a line of it**, by the
+  owner's decision. This is the second time that has happened and it matters more than the
+  first: the board could only display things wrongly, and this branch can lose a real
+  appointment. `src/ui/App.tsx`, `src/ui/EntryModal.tsx` and `server/write.ts` have been read
+  by nobody but the agent that wrote them. **Run `reviewer` and `security-reviewer` over
+  `620164c` before anything else lands on top of them.**
+
+### What was built, and where
+
+- `migrations/002_appointment_version.sql` - the `version` column, added while the table is
+  empty, which is the only moment a `NOT NULL` column costs nothing.
+- `server/write.ts` - create, change, remove. Every refusal is a German sentence naming one
+  rule, plus a machine-readable code (`invalid`, `clash`, `stale`, `gone`).
+- `server/suggestions.ts` - autocomplete over a rolling year. An empty query returns nothing,
+  because an empty prefix would return the salon's whole customer list in one request.
+- `src/ui/EntryModal.tsx` - the form. Person, times, customer, treatment, notes, a `Sperrzeit`
+  checkbox, and delete behind a confirmation.
+- `src/calendar/grid.ts` gains `whyNotBookable`, used by the browser before saving and by the
+  server regardless - the same function, because two copies would agree today.
+- `tests/write.db.test.ts`, `tests/modal.browser.test.ts`.
+
+### What was verified, and how
+
+Run on `main` at `620164c`:
+
+- `npm run verify` - green.
+- `npm run test` - 62 passed.
+- `export $(grep TEST_DATABASE_URL .env) && npm run test:db` - 65 passed against real Postgres.
+- `npm run test:e2e` - 38 passed in Chromium.
+- `npm audit --audit-level=high` - 0 vulnerabilities.
+- The API was driven by hand: a clash, a zero-length drag and a stale version each came back
+  with their own sentence and status.
+- The owner drove the running board in their own browser.
+
+### What was NOT verified
+
+- **No review pass has read the write path.** See above. This is the largest gap in the project.
+- **Nothing has exercised two people editing at once through the interface.** The stale-version
+  tests are sequential, which is the mechanism and not the race.
+- **`removeEntry` is not inside `guarded`** in `server/write.ts`, so an unreachable constraint
+  failure on delete would surface as a 500 rather than a sentence. Nothing references an
+  appointment, so I believe it is unreachable, and that belief is untested.
+- **The board is writable and unauthenticated.** Loopback still holds and the names are fake, so
+  ADR-0004's deadline has not moved - but anyone who can reach the port can now change data.
+- No keyboard-only pass over the form, and no screen reader has seen the dialogue.
+
+### Unfinished, and what comes next
+
+1. **Review `620164c`** before building on it.
+2. **Dragging**: out of empty grid to create a range, a box to another time or stylist, an edge
+   to resize. The brief's spring-back-with-a-reason belongs here, and the server refusals it
+   needs already exist and are tested.
+3. Authentication, then polling, then the remaining navigation aids.
+4. The application container and the VPS, with the blocking backup gate in the brief.
+
+### What surprised me
+
+- **The owner found two defects that 165 passing tests did not.** The delete confirmation made
+  the actions row wider than the dialogue and pushed `Speichern` off the edge; and the colour
+  legend was unwanted. Both were invisible to the suite because no test measures whether things
+  fit.
+- **Fixing the first one created a worse one.** Hiding the other buttons put `Ja, löschen`
+  exactly where `Speichern` sits on every other view, so a hand that had learned that corner
+  would hit the one action with no undo. The safe answer now holds that position.
+- **A Playwright glob silently disabled four tests.** `**/api/entries*` never matches
+  `/api/entries/a1`, because `*` stops at a slash - so no PATCH or DELETE was intercepted and
+  those tests passed on requests that went nowhere.
+- **A feature request needed no code.** "Let me toggle which columns are visible" turned out to
+  be answered by the `active` flag that already exists. Recorded in ADR-0002 so the next person
+  does not build it.
+
 ## 2026-08-12 - interview, schema, API, board
 
 First working session on this project. It started as an empty workflow template and now has
@@ -9,11 +91,7 @@ a database, an API and a read-only board.
 
 ### Where things stand
 
-- **`main` is at `f6ec955`.** It has the schema, `GET /api/day`, the board, eleven ADRs, the
-  brief and a rewritten README.
-- **PR #9 is open and carries this file.** It is the only thing outstanding, it changes nothing
-  but the work log, and CI is green on it. If you are reading this on `main`, it merged; if you
-  are reading it on a branch, it did not, and merging it costs nothing.
+- `main` was at `f6ec955` when this entry was written. See the entry above for where it is now.
 - **The board merged as PR #8.**
 - **It went through three review rounds.** Round two: logic NO-SHIP, security SHIP, UX (which
   does not vote) found more than the other two together. Round three, after those fixes:
@@ -66,9 +144,7 @@ Run on `main` at `f6ec955`, after the merge:
 - **ADR-0007's daylight-saving reasoning is still unread.** It claims EU transitions fall at
   01:00 UTC, outside the 06:00-20:00 window, so no bookable time is ambiguous. Nobody has
   checked that against the salon's actual timezone.
-- **No write path exists**, so nothing has exercised: turning a constraint violation into a
-  sentence a receptionist can read, the stale-save refusal in ADR-0003, or the version stamp
-  that ADR does not yet have a column for.
+- ~~No write path exists.~~ Built on 2026-08-13; see the entry above.
 - **No authentication exists.** The server is private only because it binds to loopback.
 - **Nothing polls.** The board shows a day loaded once and looks equally trustworthy nine
   hours later, which is the exact failure the brief says the salon has with photographs.
@@ -77,10 +153,7 @@ Run on `main` at `f6ec955`, after the merge:
 
 ### Unfinished, and what comes next
 
-1. **The write path**: create, drag to move, edge-drag to resize, the modal, the two
-   checkboxes for blocks. This needs a `version` column (ADR-0003) - the table is empty, so
-   that is free right now and a migration with a backfill later. It also inherits the review
-   the last board commit did not get.
+1. ~~The write path.~~ Built on 2026-08-13, except the dragging.
 2. **Authentication before any real customer name.** ADR-0004 is marked to be revisited
    first, and its deadline is whichever comes first: the first real name, or the first bind
    that is not loopback. A deploy is the quiet act that ends loopback protection.
