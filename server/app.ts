@@ -13,6 +13,9 @@ import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 export function createApp(pool: Pool, salonTimeZone: string): Express {
   const app = express()
 
+  // Nothing here needs to announce the framework and its presence in a header.
+  app.disable('x-powered-by')
+
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
    * client never has to ask the device what day it is before it can ask for anything.
@@ -37,6 +40,14 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
     response.json(await readDay(pool, date, salonTimeZone, new Date()))
   })
 
+  // Without this, a client with a typo in the path gets Express's HTML "Cannot GET /..."
+  // page and puts markup into response.json(). ADR-0006 promises a plain JSON interface
+  // with a second consumer coming, and a contract that holds only on the happy path is
+  // not a contract. Both review passes named it independently.
+  app.use((_request, response) => {
+    response.status(404).json({ error: 'not found' })
+  })
+
   app.use(jsonErrors)
 
   return app
@@ -52,6 +63,30 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
  * on by an environment variable somebody has to remember is not a safety property.
  */
 const jsonErrors: ErrorRequestHandler = (error, _request, response, _next) => {
-  console.error('request failed', error)
+  console.error('request failed', loggable(error))
   response.status(500).json({ error: 'internal error' })
+}
+
+/**
+ * The parts of an error worth keeping, and none of the row that caused it.
+ *
+ * Logging the whole error object would print a Postgres `detail`, which for a constraint
+ * violation contains every column of the failing row - customer name, treatment, and
+ * `notes`, which is where a salon writes "allergic to ammonia". That is health data, and
+ * a log file is not where anybody decided to keep it. No write path can trigger it yet;
+ * this exists so the write path cannot introduce it silently either.
+ *
+ * `message`, `code` and `constraint` name the rule that was broken, which is what
+ * debugging actually needs, and the stack says where. None of them carry column values.
+ */
+function loggable(error: unknown): unknown {
+  if (!(error instanceof Error)) return { error: String(error) }
+
+  const database = error as Error & { code?: string; constraint?: string }
+  return {
+    message: error.message,
+    code: database.code,
+    constraint: database.constraint,
+    stack: error.stack,
+  }
 }

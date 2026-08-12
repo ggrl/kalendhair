@@ -1,6 +1,6 @@
 import type { Server } from 'node:http'
 import type { Pool } from 'pg'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../server/app.js'
 import { addAppointment, addEmployee, empty, testPool } from './db-helper.js'
 
@@ -19,7 +19,7 @@ beforeAll(async () => {
   const marco = await addEmployee(pool, 'Marco', 1)
   await addAppointment(pool, marco, '2026-08-13', '10:00', '11:00', 'Anna Schmidt', 'Colour')
 
-  server = createApp(pool, TZ).listen(0)
+  server = createApp(pool, TZ).listen(0, '127.0.0.1')
   await new Promise<void>((resolve) => server.once('listening', resolve))
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
@@ -74,6 +74,21 @@ describe('GET /api/day', () => {
     expect(response.status).toBe(400)
     expect(await response.json()).toEqual({ error: 'date must be a single YYYY-MM-DD value' })
   })
+
+  it('answers a wrong path with JSON, not an HTML page', async () => {
+    // A client with a typo would otherwise put Express's "Cannot GET /api/days" markup
+    // into response.json(). ADR-0006 promises a plain JSON interface for more than one
+    // client, and a contract that holds only on the happy path is not a contract.
+    const response = await fetch(`${base}/api/days`)
+    expect(response.status).toBe(404)
+    expect(response.headers.get('content-type')).toMatch(/application\/json/)
+    expect(await response.json()).toEqual({ error: 'not found' })
+  })
+
+  it('does not announce the framework', async () => {
+    const response = await fetch(`${base}/api/day?date=2026-08-13`)
+    expect(response.headers.get('x-powered-by')).toBeNull()
+  })
 })
 
 describe('when the database fails', () => {
@@ -88,7 +103,7 @@ describe('when the database fails', () => {
       query: () => Promise.reject(new Error('relation "appointment" does not exist')),
     } as unknown as Pool
 
-    const failing = createApp(broken, TZ).listen(0)
+    const failing = createApp(broken, TZ).listen(0, '127.0.0.1')
     await new Promise<void>((resolve) => failing.once('listening', resolve))
     const address = failing.address()
     if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
@@ -103,6 +118,44 @@ describe('when the database fails', () => {
       expect(body).not.toMatch(/does not exist/)
       expect(body).not.toMatch(/node_modules|\/Users\/|at async/)
     } finally {
+      await new Promise<void>((resolve, reject) => {
+        failing.close((error) => (error === undefined ? resolve() : reject(error)))
+      })
+    }
+  })
+
+  it('keeps the failing row out of the log', async () => {
+    // A Postgres constraint violation puts every column of the row into `detail`, which
+    // for an appointment means the customer's name and `notes` - where a salon writes
+    // "allergic to ammonia". Logging the error object whole would file health data into
+    // a log nobody chose to keep it in. No write path can reach this yet; the assertion
+    // exists so the write path cannot introduce it quietly.
+    const violation = Object.assign(new Error('new row violates check constraint "appointment_fields_match_kind"'), {
+      code: '23514',
+      constraint: 'appointment_fields_match_kind',
+      detail: 'Failing row contains (id, employee, appointment, 2026-08-13 12:00:00, Anna Schmidt, Colour, allergic to ammonia).',
+    })
+
+    const broken = { query: () => Promise.reject(violation) } as unknown as Pool
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const failing = createApp(broken, TZ).listen(0, '127.0.0.1')
+    await new Promise<void>((resolve) => failing.once('listening', resolve))
+    const address = failing.address()
+    if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
+
+    try {
+      await fetch(`http://127.0.0.1:${address.port}/api/day?date=2026-08-13`)
+
+      const written = JSON.stringify(logged.mock.calls)
+      expect(written).not.toMatch(/Anna Schmidt/)
+      expect(written).not.toMatch(/allergic to ammonia/)
+      expect(written).not.toMatch(/Failing row/)
+      // Still enough to debug with: the rule that was broken is named.
+      expect(written).toMatch(/appointment_fields_match_kind/)
+      expect(written).toMatch(/23514/)
+    } finally {
+      logged.mockRestore()
       await new Promise<void>((resolve, reject) => {
         failing.close((error) => (error === undefined ? resolve() : reject(error)))
       })

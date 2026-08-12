@@ -22,7 +22,11 @@ export async function testPool(): Promise<Pool> {
   // These tests TRUNCATE. Refusing to run against a database whose name does not say it
   // is for tests is the difference between a wrong export costing a rerun and it costing
   // the salon's appointment book, which nothing brings back.
-  const database = connectionString.split('/').pop()?.split('?')[0] ?? ''
+  // Parsed the way `pg` parses it, not by splitting on '/'. Splitting kept a URL fragment,
+  // so `postgres://host/salon#_test` passed the check while the driver connected to
+  // `salon` - and then TRUNCATE ran against the salon's real book. Contrived to type by
+  // accident, unrecoverable if it happened.
+  const database = new URL(connectionString).pathname.slice(1)
   if (!database.endsWith('_test')) {
     throw new Error(
       `TEST_DATABASE_URL points at "${database}", which is not a database whose name ends in _test. ` +

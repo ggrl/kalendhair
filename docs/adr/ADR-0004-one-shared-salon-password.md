@@ -51,6 +51,14 @@ in a tracked file, a log line, or a client bundle.
   secure, sensible expiry. No hand-rolled cryptography.
 - The login attempt path needs rate limiting. A single shared password is one guessable
   secret protecting everything.
+- **A `Host` header allowlist belongs in the same branch**, noted here by the security
+  review of the first code so it is not rediscovered. Until authentication exists, the
+  server is protected only by binding to loopback, and loopback does not stop DNS
+  rebinding: a page the salon's own browser visits can point a hostname at `127.0.0.1` and
+  read the API same-origin. No CORS header is set, which is what stops a plain cross-origin
+  `fetch`, so rebinding is the remaining path. The allowlist is the cheap half of the fix
+  and authentication is the real one. Both are due before the first real customer name is
+  entered.
 
 ## Alternatives rejected
 

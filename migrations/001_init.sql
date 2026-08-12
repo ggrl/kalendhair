@@ -69,6 +69,10 @@ CREATE TABLE appointment (
   -- entirely because a day is selected on starts_at. The bookable window itself
   -- (06:00-20:00) is not enforced here: that constant lives in the application, and
   -- duplicating it in SQL would give one rule two homes. It belongs with the write path.
+  --
+  -- One consequence to know before changing the grid: a row can never end at 00:00. If the
+  -- bookable window ever reaches midnight, the last slot of the day has to express its end
+  -- some other way, and this constraint is what will stop it.
   CONSTRAINT appointment_within_one_day CHECK ((starts_at)::date = (ends_at)::date),
 
   -- The rule. Covers all four combinations without a line of application code:
