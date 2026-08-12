@@ -23,6 +23,12 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Focus scrolls an element flush to the top of the scrollport, which is now 132px of opaque
+     sticky chrome - so tabbing to an afternoon note focused a box nobody could see. */
+  scroll-padding-top: calc(var(--topbar-height) + 3.5rem);
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -95,9 +101,14 @@ body {
   grid-area: next;
 }
 
-.topbar__today {
+.topbar__actions {
+  display: flex;
   grid-area: today;
+  gap: 0.5rem;
   justify-self: center;
+}
+
+.topbar__today {
   padding: 0.35rem 1.4rem;
 }
 
@@ -122,17 +133,22 @@ body {
   min-width: 0;
 }
 
-/* A click has to change something immediately, or the natural response is to click again -
-   and a second click used to land two weeks out. */
-.shell__day--loading {
+/* A click has to change something immediately, or the natural response is to click again - and a
+   second click used to land two weeks out. 0.45 destroys colour discrimination while keeping the
+   layout readable, which is the intended "provisional" reading. Do not dim harder. */
+.shell__fading {
   opacity: 0.45;
 }
 
 .shell__loading {
-  position: absolute;
-  top: 0.25rem;
+  /* Fixed to the viewport, not to the top of a container that scrolls away. Absolutely
+     positioned it measured y = -234 once the board was scrolled to the afternoon, so the only
+     signal that a load was in flight was a 45% opacity. Above the sticky headings, and outside
+     the dimmed element, or the label announcing the load was itself faint. */
+  position: fixed;
+  top: calc(var(--topbar-height) + 0.6rem);
   left: 50%;
-  z-index: 5;
+  z-index: 11;
   margin: 0;
   padding: 0.2rem 0.6rem;
   font-size: 0.85rem;
@@ -163,6 +179,14 @@ body {
   display: grid;
 }
 
+.board__grid {
+  /* Every hour label is lifted onto its line by translateY(-0.4em), and the sticky headings
+     paint over it with an opaque background. For 06:00 there is no scroll position that fixes
+     it, so a permanently half-drawn number sat where the eye starts and read as broken
+     software. */
+  margin-top: 0.4rem;
+}
+
 /* The names must not scroll away: 56 rows is 985px, so on a laptop about 40% of the day is
    always off screen, and unlabelled columns are how an appointment ends up in the wrong
    stylist's day. */
@@ -171,7 +195,7 @@ body {
   top: var(--topbar-height);
   z-index: 9;
   background: var(--paper);
-  box-shadow: 0 1px 0 var(--rule-hour);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 12%);
 }
 
 .board__head {
@@ -264,15 +288,26 @@ body {
 
 /* Boxes of 30 minutes or less are one or two lines tall, which cannot hold three stacked
    lines: the customer's name went missing entirely at 15 minutes and the treatment at 30. */
-.entry--compact {
-  flex-direction: row;
+.entry--compact .entry__line {
+  display: flex;
   gap: 0.3rem;
   align-items: baseline;
-  padding: 0 0.3rem;
   white-space: nowrap;
 }
 
-.entry--compact .entry__customer {
+/* Room for the "Notiz" marker, which is absolutely positioned and reserves none itself - a long
+   name in a short box would otherwise run underneath the word. */
+.entry--has-notes .entry__line {
+  padding-right: 2.9rem;
+}
+
+/* One row of grid is one line of text: the time and the name share it and the treatment does not
+   fit at all. */
+.entry--one-line {
+  padding: 0 0.3rem;
+}
+
+.entry__line .entry__customer {
   /* Without this the span never shrinks - `white-space: nowrap` makes its min-content width
      the full text width - so the ellipsis never appeared and a long name was cut mid-letter
      with no sign that anything was missing. */

@@ -38,7 +38,18 @@ export function slotFromWallClock(wallClock: string): number {
 export function isPlaceable(startsAt: string, endsAt: string): boolean {
   const start = slotFromWallClock(startsAt)
   const end = slotFromWallClock(endsAt)
-  return Number.isInteger(start) && Number.isInteger(end) && start >= 0 && end <= SLOT_COUNT
+  return (
+    Number.isInteger(start) &&
+    Number.isInteger(end) &&
+    start >= 0 &&
+    end <= SLOT_COUNT &&
+    // Without this the name is a promise the function does not keep. A zero-length or
+    // backwards range produced `span 0` or a negative span, which the browser rejects - so the
+    // box fell out of the grid and stacked below the board with no explanation, and it was not
+    // in the report that exists for undrawable entries. `appointment_positive_duration` makes
+    // both impossible in the database; this makes the predicate true on its own terms.
+    end > start
+  )
 }
 
 /** The hour labels down the side: 06:00 to 20:00 inclusive, one per hour. */

@@ -101,6 +101,20 @@ export function isoWeek(date: string): IsoWeek {
  * names the day that was asked for. Formatting a date near midnight through the machine's
  * timezone is how a calendar ends up captioning the wrong day.
  */
+/**
+ * `13.08.2026`. For prose, where the full weekday would be too long - a receptionist reads
+ * `14.08.`, not `2026-08-14`, and an ISO string dropped into a German sentence reads as a
+ * machine talking to itself.
+ */
+export function shortGermanDate(date: string): string {
+  return new Intl.DateTimeFormat('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(toUtc(date))
+}
+
 export function longGermanDate(date: string): string {
   return new Intl.DateTimeFormat('de-DE', {
     weekday: 'long',

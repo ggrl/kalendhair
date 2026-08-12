@@ -2,13 +2,17 @@ import { isoWeek, longGermanDate } from '../calendar/dates'
 
 interface Props {
   date: string
-  today: string
   isToday: boolean
+  /** Wall clock time of the last successful load, or null before the first one. */
+  loadedAt: string | null
+  /** True when the last load failed, so what is on screen is not what was asked for. */
+  stale: boolean
   onStep: (weeks: number) => void
   onToday: () => void
+  onReload: () => void
 }
 
-export function TopBar({ date, today, isToday, onStep, onToday }: Props) {
+export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onReload }: Props) {
   const { week } = isoWeek(date)
 
   return (
@@ -24,10 +28,19 @@ export function TopBar({ date, today, isToday, onStep, onToday }: Props) {
               Only the number is shown - "KW 53" on a date reading 2027 is correct, and a
               second year next to a different year confuses more than it explains. */}
           KW {week}
-          {/* Saying which day this is beats leaving it to a greyed-out button. A disabled
-              control reads as broken, and it was also the only signal that you were not on
-              today. */}
-          {isToday ? <span className="topbar__istoday"> · heute</span> : null}
+          {/* Saying which day this is beats leaving it to a greyed-out button. */}
+          {isToday && <span className="topbar__istoday"> · heute</span>}
+          {/* The board loads once and nothing polls yet, so at 14:00 it looks exactly like a
+              live board loaded at 09:00. The brief's whole premise is that nobody can tell how
+              stale a photograph is; a screen that cannot say either has the same fault with
+              better typography. */}
+          {loadedAt !== null && (
+            <span className={stale ? 'topbar__stand topbar__stand--stale' : 'topbar__stand'}>
+              {' '}
+              · Stand {loadedAt}
+              {stale && ' (nicht aktualisiert)'}
+            </span>
+          )}
         </p>
       </div>
 
@@ -35,13 +48,17 @@ export function TopBar({ date, today, isToday, onStep, onToday }: Props) {
         Nächste Woche &raquo;
       </button>
 
-      {/* Never disabled. It used to grey out when the shown day matched the day the server
-          called today at the last load - so a board left open past midnight insisted that
-          yesterday was today, with the one control that could fix it switched off. Clicking
-          it now always re-asks the server. */}
-      <button type="button" className="topbar__today" onClick={onToday} title={`Zu heute springen (${today})`}>
-        Heute
-      </button>
+      <div className="topbar__actions">
+        {/* Never disabled, and it always asks the server which day today is. The cached answer
+            goes stale at midnight, and a disabled button on a board insisting yesterday is
+            today is the one state with no way out. */}
+        <button type="button" className="topbar__today" onClick={onToday}>
+          Heute
+        </button>
+        <button type="button" className="topbar__today" onClick={onReload}>
+          Aktualisieren
+        </button>
+      </div>
     </header>
   )
 }

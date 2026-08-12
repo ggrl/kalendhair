@@ -5,6 +5,7 @@ import {
   SLOT_COUNT,
   SLOT_MINUTES,
   hourLabels,
+  isPlaceable,
   minutesSinceMidnight,
   slotFromWallClock,
 } from '../src/calendar/grid.js'
@@ -53,5 +54,31 @@ describe('slotFromWallClock', () => {
 
   it('returns a negative slot for a time before the board starts', () => {
     expect(slotFromWallClock('05:45')).toBe(-1)
+  })
+})
+
+describe('isPlaceable', () => {
+  it('accepts what the grid can draw, including both extremes', () => {
+    expect(isPlaceable('06:00', '06:15')).toBe(true)
+    expect(isPlaceable('19:45', '20:00')).toBe(true)
+    expect(isPlaceable('06:00', '20:00')).toBe(true)
+  })
+
+  it('refuses times outside the drawn window', () => {
+    expect(isPlaceable('05:45', '07:00')).toBe(false)
+    expect(isPlaceable('19:00', '21:00')).toBe(false)
+  })
+
+  it('refuses a time that is not on a quarter hour', () => {
+    expect(isPlaceable('09:07', '09:37')).toBe(false)
+  })
+
+  it('refuses a zero-length or backwards range', () => {
+    // Without this the name was a promise the function did not keep: `span 0` and a negative
+    // span are invalid, so the browser dropped the box out of the grid and stacked it below the
+    // board with no explanation, and it did not appear in the report for undrawable entries.
+    // The database forbids both; the predicate now does too.
+    expect(isPlaceable('10:00', '10:00')).toBe(false)
+    expect(isPlaceable('13:00', '12:00')).toBe(false)
   })
 })

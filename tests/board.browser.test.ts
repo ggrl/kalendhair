@@ -367,13 +367,83 @@ test('a failed day change keeps saying which day is on screen', async ({ page })
   await page.getByRole('button', { name: 'Nächster Tag' }).click()
 
   const alert = page.getByRole('alert')
-  await expect(alert).toContainText('2026-08-14')
-  await expect(alert).toContainText('Angezeigt wird weiterhin 2026-08-13')
+  // German dates in German prose: a receptionist reads 14.08., not 2026-08-14.
+  await expect(alert).toContainText('14.08.2026 konnte nicht geladen werden')
+  await expect(alert).toContainText('Angezeigt wird weiterhin 13.08.2026')
   await expect(alert.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible()
 
   // Header, board and address bar all agree on the day actually being shown.
   await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
   expect(new URL(page.url()).searchParams.get('date')).toBe('2026-08-13')
+})
+
+test('a successful retry leaves the address bar on the day now shown', async ({ page }) => {
+  // The test above stopped one click short of the defect. After a failed step the URL is put back
+  // to the day still showing; a successful retry then loaded the new day and left the URL behind,
+  // silently, with no banner - so the next refresh or copied link landed on the wrong day.
+  await page.goto('/?date=2026-08-13')
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  let fail = true
+  await page.route('**/api/day*', async (route) => {
+    const date = new URL(route.request().url()).searchParams.get('date') ?? TODAY
+    if (fail) {
+      fail = false
+      await route.fulfill({ status: 500, json: { error: 'internal error' } })
+      return
+    }
+    await route.fulfill({ json: dayFor(date) })
+  })
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByRole('alert')).toContainText('konnte nicht geladen werden')
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-08-13')
+
+  await page.getByRole('button', { name: 'Erneut versuchen' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  expect(new URL(page.url()).searchParams.get('date')).toBe('2026-08-14')
+
+  // And the promise the URL exists for: a reload returns to the day on screen.
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+})
+
+test('clicking the same step again after a failure retries instead of doing nothing', async ({ page }) => {
+  // Keying the fetch on the date alone made this inert: the target equalled the value already
+  // held, React bailed out, and the click pushed a history entry while fetching nothing.
+  await page.goto('/?date=2026-08-13')
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  const asked: string[] = []
+  let fail = true
+  await page.route('**/api/day*', async (route) => {
+    const date = new URL(route.request().url()).searchParams.get('date') ?? TODAY
+    asked.push(date)
+    if (fail) {
+      fail = false
+      await route.fulfill({ status: 500, json: { error: 'internal error' } })
+      return
+    }
+    await route.fulfill({ json: dayFor(date) })
+  })
+
+  const next = page.getByRole('button', { name: 'Nächster Tag' })
+  await next.click()
+  await expect(page.getByRole('alert')).toBeVisible()
+
+  await next.click()
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+  expect(asked.filter((date) => date === '2026-08-14')).toHaveLength(2)
+})
+
+test('the board says when it was last loaded', async ({ page }) => {
+  // Nothing polls yet, so a board loaded at 09:00 looks exactly like a live one at 14:00 - which
+  // is the failure the brief says the salon already has with photographs.
+  await page.goto('/?date=2026-08-13')
+
+  await expect(page.getByText(/Stand \d{2}:\d{2}/)).toBeVisible()
 })
 
 test('a failed load says so rather than showing an empty day', async ({ page }) => {

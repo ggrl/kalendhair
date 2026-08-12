@@ -11,12 +11,12 @@ a database, an API and a read-only board.
 
 - `main` is at `80933c6`. It has the schema, `GET /api/day`, eleven ADRs, the brief and a
   rewritten README.
-- **`feat/read-only-board` is at `ac09eaa`, open as PR #8, CI green on all three jobs.** It
-  holds the board. It is NOT merged.
-- **Two of three re-review passes had not reported when this note was written.** Security
-  returned SHIP on the fixes. The logic pass (which returned NO-SHIP first time) and the UX
-  pass were still running. Do not assume they came back clean - check PR #8 for comments
-  before merging, and run them again if there is no verdict there.
+- **`feat/read-only-board` holds the board, open as PR #8. It is NOT merged.**
+- **The board went through three review rounds.** Round two: logic NO-SHIP, security SHIP,
+  UX (which does not vote) found more than the other two together. Round three, after those
+  fixes: security SHIP, logic NO-SHIP again, UX found three regressions the fixes had
+  introduced. All of round three is fixed, and **that fix has not itself been reviewed** -
+  re-run all three passes before merging.
 
 ### What was built, and where
 
@@ -100,6 +100,15 @@ Run at the end of the session, on `ac09eaa`:
   empty range overlaps nothing, so a zero-length row was accepted inside an occupied hour.
 - Three independent review passes found the same tooltip bug. Two of them found the JSON-404
   contract wart. Running more than one was not redundant.
+- **Fixes introduced defects of the same family they closed, twice.** Un-disabling `Heute`
+  turned a button that looked wrong into one that looked alive and did nothing, because
+  setting state to a value it already holds does not re-run an effect. And making the address
+  bar agree with the board on failure left it disagreeing after a successful retry - silently,
+  where before it had at least been announced. A fix is a change, and a change needs the same
+  suspicion as the code it replaces.
+- **A search-and-replace on CSS matched a selector as a substring** and deleted
+  `display: grid` from a combined rule, which collapsed the whole board. Every test still
+  passed. The screenshot is the only thing that caught it.
 
 ### Local environment notes
 

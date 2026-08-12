@@ -34,26 +34,33 @@ export function EntryBox({ entry, column, notesOpen, onToggleNotes }: Props) {
     )
   }
 
-  // Two grid rows is 35 px of box and 28 px of content, and three stacked lines need 43.
-  // At `slots <= 1` only, a 30-minute appointment took the tall layout it could not hold and
-  // the treatment vanished with nothing on screen saying so - most salon services are 30
-  // minutes, so that was the common case, not an edge one.
+  // How much text the box can hold, by measurement rather than by taste.
+  //
+  // One row is 17.6px, which after margins, borders and padding leaves room for a single line -
+  // so the time and the name share it and the treatment does not fit at all.
+  //
+  // Two rows leave 31px, and a compact first line plus a treatment line needs 29.5px, so the
+  // treatment DOES fit. It was hidden anyway, which left a 30-minute appointment showing one
+  // line and a blank half-box, with no way to tell "no treatment recorded" from "a treatment
+  // is being hidden from you". Most salon services are 30 minutes, so that was the common case.
+  const oneLine = slots <= 1
   const compact = slots <= 2
   const hasNotes = entry.notes !== null
 
-  // Deliberately excludes the notes. They were in here, and a tooltip appears on hover -
-  // which revealed an allergy note to anyone standing at the desk, breaking the one rule the
-  // brief states about notes. Three separate review passes caught it. What the tooltip is
-  // for is the text a short box had to clip.
+  // Deliberately excludes the notes. They were in here, and a tooltip appears on hover - which
+  // revealed an allergy note to anyone standing at the desk, breaking the one rule the brief
+  // states about notes. Three separate review passes caught it. What the tooltip is for is the
+  // text a short box had to clip.
   const summary = [timeRange, entry.customer, entry.treatment].filter(Boolean).join(' · ')
 
   const className = [
     'entry',
     'entry--appointment',
     compact ? 'entry--compact' : '',
-    // Only a box with something to reveal looks and behaves like it can be opened. Making
-    // every box pressable taught the receptionist that clicking does nothing, which is the
-    // lesson that makes somebody miss the one box carrying an allergy note.
+    oneLine ? 'entry--one-line' : '',
+    // Only a box with something to reveal looks and behaves like it can be opened. Making every
+    // box pressable taught the receptionist that clicking does nothing, which is the lesson that
+    // makes somebody miss the one box carrying an allergy note.
     hasNotes ? 'entry--has-notes' : '',
   ]
     .filter(Boolean)
@@ -61,10 +68,21 @@ export function EntryBox({ entry, column, notesOpen, onToggleNotes }: Props) {
 
   const content = (
     <>
-      <span className="entry__time">{compact ? entry.startsAt : timeRange}</span>
-      <span className="entry__customer">{entry.customer}</span>
-      {!compact && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
-      {hasNotes && <span className="entry__notes-marker">Notiz</span>}
+      {compact ? (
+        <span className="entry__line">
+          <span className="entry__time">{entry.startsAt}</span>
+          <span className="entry__customer">{entry.customer}</span>
+        </span>
+      ) : (
+        <>
+          <span className="entry__time">{timeRange}</span>
+          <span className="entry__customer">{entry.customer}</span>
+        </>
+      )}
+      {!oneLine && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
+      {/* The arrow makes the affordance and the state visible. Escape and a second click both
+          close a note, and nothing on screen said so. */}
+      {hasNotes && <span className="entry__notes-marker">Notiz {notesOpen ? '▴' : '▾'}</span>}
       {notesOpen && <span className="entry__notes">{entry.notes}</span>}
     </>
   )
@@ -82,8 +100,8 @@ export function EntryBox({ entry, column, notesOpen, onToggleNotes }: Props) {
       type="button"
       className={className}
       title={summary}
-      // ADR-0009: the colour is assigned by the server from the whole day. The browser does
-      // not derive it, or two clients would disagree about which boxes are one customer.
+      // ADR-0009: the colour is assigned by the server from the whole day. The browser does not
+      // derive it, or two clients would disagree about which boxes are one customer.
       style={{ ...placement, backgroundColor: entry.colour ?? undefined }}
       aria-expanded={notesOpen}
       onClick={onToggleNotes}
