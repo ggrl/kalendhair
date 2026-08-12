@@ -64,3 +64,9 @@ cookie and every customer name are readable in transit.
   rule resting on a transaction plus its single-writer behaviour. Both beliefs are
   unread and marked in ADR-0001 as something to confirm before writing. If that check
   reverses them, this alternative deserves reopening.
+
+  **One reason that does not count, recorded so it is not cited later.** A planned iOS
+  app is not an argument for Postgres over SQLite. Both sit behind the same server, and
+  no client reaches the database directly under ADR-0006, so a second client cannot tell
+  the difference. Postgres is chosen for the constraint above and for being built for
+  concurrent networked access, not for enabling an app.

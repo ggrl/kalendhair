@@ -55,6 +55,25 @@ enough. Updating data must never change which day is on screen, and the date liv
 the URL so a refresh, a crash or a redeploy returns to the day the person was actually
 on.
 
+An iOS app is expected later, showing the same calendar. It is not built here and
+nothing waits for it, but two schema decisions are made now because they are the
+expensive ones to reverse afterwards.
+
+The API is the only door to the data. No client connects to Postgres, ever, native or
+not: the server is the sole process holding a database connection, and the database port
+is not published outside the compose network. So the API is shaped by what a calendar
+client needs rather than by what the React components happen to hold. See ADR-0006.
+
+Times are stored as salon-local wall clock: a date plus a start and end time in the
+salon's own timezone, rendered in salon time by every client no matter where the device
+is. The salon's timezone is explicit configuration, never inferred from the server, the
+container or the phone asking. A stylist checking the board from another country sees
+the salon's 10:00, not a convincing 09:00. See ADR-0007.
+
+The app is assumed online-only, so ids are server-generated, deletes are deletes, and
+there is no change-tracking or conflict-resolution machinery in the schema. If offline
+editing is ever wanted, that is a schema change and a new ruling, not a feature.
+
 Both hard rules live server-side, because a rule enforced only in the browser is not
 enforced:
 
@@ -98,6 +117,8 @@ Deliberately not doing, and each one will feel missing before it is missed:
 - prices, payments or till
 - mobile or touch support
 - printing, which is worth naming given they are coming from paper
+- the iOS app itself, and any offline capability in it. Expected later, planned for in
+  the schema only, and nothing in this build waits for it
 
 ## Two stages, and the condition between them
 
@@ -139,13 +160,24 @@ with automated tests asserting specifically:
 - notes stay hidden until a box is clicked
 - an unauthenticated request for a day returns no customer data
 - the day on screen does not change when new data arrives
+- a day renders in salon time when the client's own timezone is set to something else
 
 And then the thing no test provides: the salon runs a real day on it and says what is
 wrong with it.
 
 ## Settled rulings
 
-Five decisions from this interview are recorded in `docs/adr/` so a later session
+Seven decisions from this interview are recorded in `docs/adr/` so a later session
 cannot quietly re-decide them: no-overlap per employee, deactivate-never-delete for
-staff, refuse-the-stale-save, shared-password authentication, and self-hosted
-containers rather than a managed platform.
+staff, refuse-the-stale-save, shared-password authentication, self-hosted containers
+rather than a managed platform, the API as the only door to the database, and
+salon-local wall clock time.
+
+Two carry unfinished business, flagged in the ADRs themselves rather than left to be
+rediscovered:
+
+- **ADR-0004** is accepted for the web board but marked to be revisited before any
+  authentication is written, because a planned iOS app puts the shared password on
+  personal phones that leave the building.
+- **ADR-0001** rests on an unread claim about what Postgres can enforce. Settle it
+  before the schema is written.

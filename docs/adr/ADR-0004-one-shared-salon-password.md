@@ -1,7 +1,20 @@
 # ADR-0004: One shared salon password, and what that costs
 
-- Status: accepted
+- Status: accepted for the web board, and to be revisited before authentication is
+  written
 - Date: 2026-08-12
+
+## Revisit before building
+
+An iOS app is planned, which changes the threat this decision was weighed against. A
+shared password is reasonable for machines that live in the salon. A phone leaves the
+building, gets lost, and belongs to someone who may stop working there - and the only
+way to cut one person's access here is changing the password for everybody.
+
+The decision below is unchanged and still correct for the web board. It is flagged
+because retrofitting per-person identity means adding a table of people and redoing
+every session, which is a migration rather than a decision. Settle this before the
+first line of authentication code, not after.
 
 ## Context
 
