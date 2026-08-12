@@ -11,12 +11,16 @@ a database, an API and a read-only board.
 
 - `main` is at `80933c6`. It has the schema, `GET /api/day`, eleven ADRs, the brief and a
   rewritten README.
-- **`feat/read-only-board` holds the board, open as PR #8. It is NOT merged.**
-- **The board went through three review rounds.** Round two: logic NO-SHIP, security SHIP,
-  UX (which does not vote) found more than the other two together. Round three, after those
-  fixes: security SHIP, logic NO-SHIP again, UX found three regressions the fixes had
-  introduced. All of round three is fixed, and **that fix has not itself been reviewed** -
-  re-run all three passes before merging.
+- **The board merged as PR #8.**
+- **It went through three review rounds.** Round two: logic NO-SHIP, security SHIP, UX (which
+  does not vote) found more than the other two together. Round three, after those fixes:
+  security SHIP, logic NO-SHIP again, UX found three regressions the fixes had introduced.
+- **The final fix commit merged without a review pass, by the owner's decision.** Both passes
+  read the commit before it; nothing read the regression fixes themselves. That was a choice,
+  not an oversight: the board is read-only, cannot change any data, and no real customer name
+  can reach it. The reasoning stops holding the moment the write path exists, so **the write
+  branch inherits the job of looking at this code too** - particularly `src/ui/App.tsx`, where
+  every defect of the last two rounds lived.
 
 ### What was built, and where
 
