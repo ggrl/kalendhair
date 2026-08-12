@@ -1,0 +1,39 @@
+import { assertKnownTimeZone } from '../src/calendar/salon-date.js'
+
+export interface Config {
+  databaseUrl: string
+  salonTimeZone: string
+  host: string
+  port: number
+}
+
+/**
+ * Reads configuration and refuses to start without it. No fallback for the database or
+ * the timezone: a guessed connection string fails obviously, but a guessed timezone
+ * produces a board that is quietly a day out for part of every night.
+ */
+export function loadConfig(env: NodeJS.ProcessEnv): Config {
+  const databaseUrl = required(env, 'DATABASE_URL')
+  const salonTimeZone = required(env, 'SALON_TIMEZONE')
+  assertKnownTimeZone(salonTimeZone)
+
+  // Loopback by default because this server has no authentication yet. ADR-0004 is
+  // marked to be revisited before any is written, so until that happens the safe
+  // default is unreachable from the network rather than open to it.
+  const host = env.HOST ?? '127.0.0.1'
+
+  const port = Number(env.PORT ?? '3000')
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`PORT is not a usable port number: ${String(env.PORT)}`)
+  }
+
+  return { databaseUrl, salonTimeZone, host, port }
+}
+
+function required(env: NodeJS.ProcessEnv, name: string): string {
+  const value = env[name]
+  if (value === undefined || value.trim() === '') {
+    throw new Error(`${name} is required and was not set`)
+  }
+  return value
+}

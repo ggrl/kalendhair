@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["node"],
+    "outDir": "dist-server",
+    "rootDir": ".",
+    "sourceMap": true,
+    "noEmitOnError": true
+  },
+  "include": ["server", "src/calendar"]
+}
