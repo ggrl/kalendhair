@@ -3,6 +3,7 @@ import type { ErrorRequestHandler, Express } from 'express'
 import type { Pool } from 'pg'
 import { readDay } from './day.js'
 import { Refused, createEntry, parseEntryInput, removeEntry, updateEntry } from './write.js'
+import { isSuggestable, suggest } from './suggestions.js'
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 
 /**
@@ -69,6 +70,22 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
     response.json(await updateEntry(pool, request.params.id, version, input))
   })
 
+  /**
+   * What the modal offers while somebody types a customer or a treatment.
+   *
+   * A rolling year, and nothing at all for an empty query - an empty prefix would return the
+   * salon's whole customer list in one request.
+   */
+  app.get('/api/suggestions', async (request, response) => {
+    const field = request.query.field
+    if (!isSuggestable(field)) {
+      throw new Refused(400, 'invalid', 'Es kann nur nach Kundin oder Behandlung gesucht werden.')
+    }
+
+    const query = typeof request.query.q === 'string' ? request.query.q : ''
+    response.json(await suggest(pool, field, query, todayIn(salonTimeZone, new Date())))
+  })
+
   /** Removal, version-checked for the same reason a save is. */
   app.delete('/api/entries/:id', async (request, response) => {
     await removeEntry(pool, request.params.id, versionFrom(request.query.version))
@@ -109,7 +126,7 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
 function versionFrom(value: unknown): number {
   const version = Number(value)
   if (!Number.isInteger(version) || version < 1) {
-    throw new Refused(400, 'Es fehlt die Version des Eintrags.')
+    throw new Refused(400, 'invalid', 'Es fehlt die Version des Eintrags.')
   }
   return version
 }
@@ -128,7 +145,7 @@ const jsonErrors: ErrorRequestHandler = (error, _request, response, _next) => {
   // reading the screen, and it is not logged as a failure - a log full of "that slot is taken"
   // is a log nobody reads when something is actually wrong.
   if (error instanceof Refused) {
-    response.status(error.status).json({ error: error.message })
+    response.status(error.status).json({ error: error.message, code: error.code })
     return
   }
 

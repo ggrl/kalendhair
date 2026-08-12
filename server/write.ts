@@ -12,9 +12,20 @@ import { whyNotBookable } from '../src/calendar/grid.js'
  * from a zero-length drag, because they are different mistakes.
  */
 
+/**
+ * Why a write was refused, for a client to switch on.
+ *
+ * The message is German prose for a person; this is for code. Without it the browser would
+ * have to match on the sentence to tell "that slot is taken" (keep the form open, change the
+ * time) from "somebody changed it underneath you" (close and reload) - and a client matching
+ * on display text breaks the moment the wording improves.
+ */
+export type RefusalCode = 'invalid' | 'clash' | 'stale' | 'gone'
+
 export class Refused extends Error {
   constructor(
     readonly status: number,
+    readonly code: RefusalCode,
     message: string,
   ) {
     super(message)
@@ -48,24 +59,24 @@ function text(value: unknown): string | null {
  * useful about which field was wrong.
  */
 export function parseEntryInput(body: unknown): EntryInput {
-  if (typeof body !== 'object' || body === null) throw new Refused(400, 'Ungültige Anfrage.')
+  if (typeof body !== 'object' || body === null) throw new Refused(400, 'invalid', 'Ungültige Anfrage.')
   const raw = body as Record<string, unknown>
 
   const employeeId = text(raw.employeeId)
-  if (employeeId === null) throw new Refused(400, 'Es fehlt die Person, für die der Termin gilt.')
+  if (employeeId === null) throw new Refused(400, 'invalid', 'Es fehlt die Person, für die der Termin gilt.')
 
   const kind: EntryKind = raw.kind === 'block' ? 'block' : 'appointment'
   if (raw.kind !== 'block' && raw.kind !== 'appointment') {
-    throw new Refused(400, 'Unbekannte Art von Eintrag.')
+    throw new Refused(400, 'invalid', 'Unbekannte Art von Eintrag.')
   }
 
   const date = text(raw.date)
-  if (date === null || !isSalonDate(date)) throw new Refused(400, 'Ungültiges Datum.')
+  if (date === null || !isSalonDate(date)) throw new Refused(400, 'invalid', 'Ungültiges Datum.')
 
   const startsAt = text(raw.startsAt) ?? ''
   const endsAt = text(raw.endsAt) ?? ''
   const unbookable = whyNotBookable(startsAt, endsAt)
-  if (unbookable !== null) throw new Refused(400, unbookable)
+  if (unbookable !== null) throw new Refused(400, 'invalid', unbookable)
 
   const customer = text(raw.customer)
   const treatment = text(raw.treatment)
@@ -75,10 +86,10 @@ export function parseEntryInput(body: unknown): EntryInput {
     // ADR-0008: a block is a grey area with no text. Silently dropping the fields would be a
     // silent fallback; saying so is one sentence.
     if (customer !== null || treatment !== null || notes !== null) {
-      throw new Refused(400, 'Eine Sperrzeit hat keine Kundin, keine Behandlung und keine Notiz.')
+      throw new Refused(400, 'invalid', 'Eine Sperrzeit hat keine Kundin, keine Behandlung und keine Notiz.')
     }
   } else if (customer === null) {
-    throw new Refused(400, 'Ohne Namen lässt sich der Termin nicht speichern.')
+    throw new Refused(400, 'invalid', 'Ohne Namen lässt sich der Termin nicht speichern.')
   }
 
   return { employeeId, kind, date, startsAt, endsAt, customer, treatment, notes }
@@ -99,19 +110,19 @@ interface DatabaseError {
 function refusalFor(error: unknown): Refused | null {
   const database = error as DatabaseError
   if (database.code === '23P01') {
-    return new Refused(409, 'Diese Zeit ist bei dieser Person schon belegt.')
+    return new Refused(409, 'clash', 'Diese Zeit ist bei dieser Person schon belegt.')
   }
   if (database.code === '23503') {
-    return new Refused(400, 'Diese Person gibt es nicht.')
+    return new Refused(400, 'invalid', 'Diese Person gibt es nicht.')
   }
   if (database.code === '23514') {
     switch (database.constraint) {
       case 'appointment_positive_duration':
-        return new Refused(400, 'Das Ende muss nach dem Beginn liegen.')
+        return new Refused(400, 'invalid', 'Das Ende muss nach dem Beginn liegen.')
       case 'appointment_within_one_day':
-        return new Refused(400, 'Ein Eintrag darf nicht über Mitternacht gehen.')
+        return new Refused(400, 'invalid', 'Ein Eintrag darf nicht über Mitternacht gehen.')
       case 'appointment_fields_match_kind':
-        return new Refused(400, 'Termin und Sperrzeit haben unterschiedliche Felder.')
+        return new Refused(400, 'invalid', 'Termin und Sperrzeit haben unterschiedliche Felder.')
       default:
         return null
     }
@@ -212,7 +223,7 @@ export async function removeEntry(pool: Pool, id: string, version: number): Prom
 async function whyItMissed(pool: Pool, id: string): Promise<Refused> {
   const stillThere = await pool.query('SELECT 1 FROM appointment WHERE id = $1', [id])
   if (stillThere.rowCount === 0) {
-    return new Refused(409, 'Dieser Eintrag wurde inzwischen gelöscht.')
+    return new Refused(409, 'gone', 'Dieser Eintrag wurde inzwischen gelöscht.')
   }
-  return new Refused(409, 'Der Eintrag wurde inzwischen geändert. Bitte den Tag neu laden.')
+  return new Refused(409, 'stale', 'Der Eintrag wurde inzwischen geändert. Bitte den Tag neu laden.')
 }

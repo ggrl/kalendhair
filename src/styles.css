@@ -199,6 +199,10 @@ body {
 }
 
 .board__head {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  justify-content: center;
   padding: 0.4rem 0.5rem;
   font-weight: 600;
   text-align: center;
@@ -389,4 +393,217 @@ body {
 .shell__failure-detail {
   color: #991b1b;
   font-weight: 400;
+}
+
+/* The whole-day switch, beside the name. ADR-0008: it creates one 06:00-20:00 block row, so it
+   needs no rule of its own.
+
+   Drawn by hand rather than left to the browser, because the native tick is blue and reads as
+   "on" - and what this one means is that nobody is working. A red cross says the opposite thing
+   with the same gesture. It is still an <input type="checkbox">, so the role, the keyboard and
+   the tooltip all come for free. */
+.board__blocked {
+  /* The cross is drawn with absolutely positioned pseudo-elements, so this has to be their
+     containing block. Without it they anchor to whatever is positioned further up and land
+     somewhere else on the board entirely - exactly how the notes marker went wrong. */
+  position: relative;
+  flex: 0 0 auto;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0;
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.2rem;
+  cursor: pointer;
+}
+
+.board__blocked:hover {
+  border-color: var(--alert-ink);
+}
+
+.board__blocked:checked {
+  background: var(--alert-paper);
+  border-color: var(--alert-ink);
+}
+
+/* The cross itself: two lines rather than a glyph, so it does not depend on a font having one
+   and cannot be nudged around by text metrics. */
+.board__blocked:checked::before,
+.board__blocked:checked::after {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 0.62rem;
+  height: 2px;
+  content: '';
+  background: var(--alert-ink);
+  border-radius: 1px;
+}
+
+.board__blocked:checked::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.board__blocked:checked::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.board__blocked:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* Empty grid is clickable, so it should say so under the pointer. */
+.board__column {
+  cursor: crosshair;
+}
+
+.shell__notice {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  background: #fff7ed;
+  border: 1px solid #d9a066;
+  border-radius: 0.3rem;
+}
+
+.shell__notice p {
+  margin: 0;
+}
+
+.shell__notice button {
+  padding: 0.2rem 0.7rem;
+  font: inherit;
+  background: #fff;
+  border: 1px solid #d9a066;
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+/* The form. It covers the board, which is why Escape closes it and why clicking the backdrop
+   does too - a dialogue with no visible way out is the usual complaint about dialogues. */
+.modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3rem 1rem;
+  overflow-y: auto;
+  background: rgb(31 41 55 / 45%);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(28rem, 100%);
+  padding: 1rem 1.1rem 1.1rem;
+  background: var(--paper);
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 25%);
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.modal__row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.modal__row--check {
+  flex-direction: row;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.modal__row input,
+.modal__row select,
+.modal__row textarea {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.3rem;
+}
+
+.modal__row--check input {
+  width: auto;
+  padding: 0;
+}
+
+.modal__times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.modal__problem {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--alert-ink);
+  background: var(--alert-paper);
+  border-radius: 0.3rem;
+}
+
+.modal__actions {
+  display: flex;
+  /* Belt and braces after the confirm row overflowed: if a row of buttons ever gets wider than
+     the dialogue again, it wraps onto a second line instead of putting one off the edge. */
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.2rem;
+}
+
+.modal__spacer {
+  flex: 1 1 auto;
+}
+
+.modal__actions button,
+.modal__confirm button {
+  padding: 0.4rem 0.9rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+/* Written as a descendant so it outranks `.modal__actions button` above, which sets the ink
+   colour - on equal specificity that rule wins and the save button is dark on dark. */
+.modal__actions .modal__save {
+  font-weight: 600;
+  color: #fff;
+  background: #1f2937;
+  border-color: #1f2937;
+}
+
+.modal__actions .modal__danger,
+.modal__confirm .modal__danger {
+  color: var(--alert-ink);
+  border-color: var(--alert-ink);
+}
+
+.modal__confirm {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--alert-ink);
 }

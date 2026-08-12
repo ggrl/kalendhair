@@ -52,6 +52,26 @@ export function isPlaceable(startsAt: string, endsAt: string): boolean {
   )
 }
 
+/** Minutes since midnight back to `HH:MM`. The inverse of `minutesSinceMidnight`. */
+export function wallClockFromMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60)
+  return `${String(hours).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+/**
+ * The quarter-hour slot a click landed on, as a time range one slot long.
+ *
+ * Clamped so a click on the last row cannot propose an end past the close of the day, which the
+ * server would refuse - being unable to click the 19:45 row would be a strange way to enforce
+ * closing time.
+ */
+export function slotAt(slot: number): { startsAt: string; endsAt: string } {
+  const first = minutesSinceMidnight(DAY_STARTS_AT)
+  const last = minutesSinceMidnight(DAY_ENDS_AT)
+  const start = Math.min(Math.max(first + slot * SLOT_MINUTES, first), last - SLOT_MINUTES)
+  return { startsAt: wallClockFromMinutes(start), endsAt: wallClockFromMinutes(start + SLOT_MINUTES) }
+}
+
 const WALL_CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/
 
 /**

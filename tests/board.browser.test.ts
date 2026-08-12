@@ -166,17 +166,17 @@ test('one customer split across the day gets one colour, the customer between th
   expect(between).not.toBe(first)
 })
 
-test('notes stay hidden until the box is clicked', async ({ page }) => {
+test('notes are not on the board, they are in the form the box opens', async ({ page }) => {
+  // Click used to peek at the notes. It opens the editor now, and the notes are a field in it -
+  // one gesture with one meaning, and no note panel covering the appointment underneath.
   await page.goto('/?date=2026-08-13')
 
-  const notes = page.getByText('Reagiert auf Ammoniak')
-  await expect(notes).toBeHidden()
+  await expect(page.getByText('Reagiert auf Ammoniak')).toHaveCount(0)
 
   await page.getByRole('button', { name: /Anna Schmidt/ }).first().click()
-  await expect(notes).toBeVisible()
 
-  await page.getByRole('button', { name: /Anna Schmidt/ }).first().click()
-  await expect(notes).toBeHidden()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await expect(page.getByLabel('Notizen')).toHaveValue('Reagiert auf Ammoniak')
 })
 
 test('the shortest bookable box still shows who it is for', async ({ page }) => {
@@ -207,13 +207,14 @@ test('the notes marker sits on its own box, not somewhere else on the board', as
   expect(marker!.y).toBeGreaterThanOrEqual(box!.y)
 })
 
-test('a block is grey, says so, and carries no customer', async ({ page }) => {
+test('a block says so and carries no customer', async ({ page }) => {
   await page.goto('/?date=2026-08-13')
 
-  const block = page.getByText('Gesperrt')
-  await expect(block).toBeVisible()
-  // Not a button: there is nothing to open, because a block has no notes and no customer.
-  await expect(page.getByRole('button', { name: /Gesperrt/ })).toHaveCount(0)
+  // Exact, because the column headings now also say "ganzer Tag gesperrt".
+  await expect(page.getByText('Gesperrt', { exact: true })).toBeVisible()
+  // It is a button now, because clicking one opens its times and a way to remove it. ADR-0008
+  // gives a block no label, so that is all the form has to hold.
+  await expect(page.getByRole('button', { name: /Gesperrt/ })).toHaveCount(1)
 })
 
 test('the day steps move one day and put it in the address bar', async ({ page }) => {
@@ -305,30 +306,6 @@ test('notes are not revealed by hovering', async ({ page }) => {
 
   expect(title).toContain('Anna Schmidt')
   expect(title).not.toContain('Reagiert auf Ammoniak')
-})
-
-test('escape closes an open note, and only one is open at a time', async ({ page }) => {
-  await page.goto('/?date=2026-08-13')
-
-  await page.getByRole('button', { name: /Anna Schmidt/ }).first().click()
-  await expect(page.getByText('Reagiert auf Ammoniak')).toBeVisible()
-
-  // A second note replaces the first rather than stacking on top of it.
-  await page.getByRole('button', { name: /Eva Sommer/ }).click()
-  await expect(page.getByText('Kommt mit Kinderwagen')).toBeVisible()
-  await expect(page.getByText('Reagiert auf Ammoniak')).toBeHidden()
-
-  await page.keyboard.press('Escape')
-  await expect(page.getByText('Kommt mit Kinderwagen')).toBeHidden()
-})
-
-test('a box with nothing to reveal is not pressable', async ({ page }) => {
-  // Making every box a button taught the receptionist that clicking does nothing, which is
-  // the lesson that makes somebody miss the one box carrying an allergy note.
-  await page.goto('/?date=2026-08-13')
-
-  await expect(page.getByRole('button', { name: /Bea Wolff/ })).toHaveCount(0)
-  await expect(page.locator('.entry--appointment', { hasText: 'Bea Wolff' })).toBeVisible()
 })
 
 test('impatient clicking does not swallow day steps or bury the back button', async ({ page }) => {

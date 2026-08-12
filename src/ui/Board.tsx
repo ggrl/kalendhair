@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react'
+import type { MouseEvent } from 'react'
 import type { Day, Entry } from '../calendar/types'
-import { SLOT_COUNT, SLOT_MINUTES, hourLabels, isPlaceable } from '../calendar/grid'
+import { DAY_ENDS_AT, DAY_STARTS_AT, SLOT_COUNT, SLOT_MINUTES, hourLabels, isPlaceable, slotAt } from '../calendar/grid'
 import { EntryBox } from './EntryBox'
 
 interface Props {
   day: Day
+  onOpenEntry: (entry: Entry) => void
+  onOpenSlot: (employeeId: string, startsAt: string, endsAt: string) => void
+  /** Ticking creates one 06:00-20:00 block; unticking removes the one that is there. */
+  onToggleWholeDay: (employeeId: string, existing: Entry | undefined) => void
 }
 
 interface Undrawn {
@@ -24,26 +28,23 @@ function undrawnReason(entry: Entry, hasColumn: boolean): string | null {
   return null
 }
 
-export function Board({ day }: Props) {
-  // One note open at a time, held here rather than in each box. Several open notes overlap each
-  // other and the appointments beneath them, and there was no way to close one except finding it
-  // again.
-  const [openNoteId, setOpenNoteId] = useState<string | null>(null)
+/** The one block that covers the whole bookable day, if this employee has one. */
+function wholeDayBlock(day: Day, employeeId: string): Entry | undefined {
+  return day.entries.find(
+    (entry) =>
+      entry.employeeId === employeeId &&
+      entry.kind === 'block' &&
+      entry.startsAt === DAY_STARTS_AT &&
+      entry.endsAt === DAY_ENDS_AT,
+  )
+}
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpenNoteId(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-
+export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props) {
   const columnOf = new Map(day.employees.map((employee, index) => [employee.id, index + 2]))
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
   // entries used to be painted at the same fixed position, hiding each other and any real 06:00
-  // appointment, and the box dropped the customer's name - so you could see something was wrong
-  // and not whose appointment it was.
+  // appointment, and the box dropped the customer's name.
   const undrawn: Undrawn[] = []
   const drawable: Entry[] = []
   for (const entry of day.entries) {
@@ -69,10 +70,14 @@ export function Board({ day }: Props) {
   const labels = hourLabels()
   const lastColumn = day.employees.length + 1
 
+  /** Which quarter hour a click landed on, from where it fell inside the column. */
+  function slotFromClick(event: MouseEvent<HTMLDivElement>): number {
+    const box = event.currentTarget.getBoundingClientRect()
+    return Math.floor(((event.clientY - box.top) / box.height) * SLOT_COUNT)
+  }
+
   return (
     <div className="board">
-      {/* Above the board, not below it. `role="alert"` announces it, but a sighted reader only
-          saw "an appointment is missing" after scrolling past 985px of grid. */}
       <Undrawable entries={undrawn} />
 
       {/* Sticky, because 56 rows is taller than a laptop screen: scrolled to the evening, the
@@ -80,11 +85,35 @@ export function Board({ day }: Props) {
           happen. */}
       <div className="board__heads" style={{ gridTemplateColumns: `4rem repeat(${day.employees.length}, 1fr)` }}>
         <div className="board__corner" />
-        {day.employees.map((employee) => (
-          <div key={employee.id} className="board__head">
-            {employee.name}
-          </div>
-        ))}
+        {day.employees.map((employee) => {
+          const blocked = wholeDayBlock(day, employee.id)
+          return (
+            <div key={employee.id} className="board__head">
+              <span>{employee.name}</span>
+              {/* ADR-0008: blocking a whole day is one 06:00-20:00 row and nothing else, which
+                  is why ticking this on a column that already has bookings is refused by the
+                  same constraint that stops any other clash.
+
+                  Still a checkbox, so it keeps the role and the keyboard behaviour, but drawn as
+                  a red cross rather than a tick - a blue tick reads as "on" when what it means is
+                  "nobody is working". The words moved to the tooltip because repeating them in
+                  every column was more noise than the switch is worth, and `aria-label` alone
+                  shows a sighted mouse user nothing. */}
+              <input
+                type="checkbox"
+                className="board__blocked"
+                aria-label={`Ganzen Tag für ${employee.name} sperren`}
+                title={
+                  blocked === undefined
+                    ? `Ganzen Tag für ${employee.name} sperren`
+                    : `Sperre für ${employee.name} aufheben`
+                }
+                checked={blocked !== undefined}
+                onChange={() => onToggleWholeDay(employee.id, blocked)}
+              />
+            </div>
+          )
+        })}
       </div>
 
       {/* Directly under the headings, where somebody starts reading. Below the grid it sat 985px
@@ -126,6 +155,13 @@ export function Board({ day }: Props) {
               borderRight: index + 2 === lastColumn ? '1px solid var(--rule-hour)' : undefined,
               backgroundSize: `100% var(--slot-height), 100% calc(var(--slot-height) * ${slotsPerHour})`,
             }}
+            // Clicking empty grid proposes that quarter hour. Dragging out a range comes later;
+            // until then this is how a booking starts, and the form lets the end time be typed.
+            onClick={(event) => {
+              const { startsAt, endsAt } = slotAt(slotFromClick(event))
+              onOpenSlot(employee.id, startsAt, endsAt)
+            }}
+            aria-label={`Freie Zeit bei ${employee.name}`}
           />
         ))}
 
@@ -134,8 +170,7 @@ export function Board({ day }: Props) {
             key={entry.id}
             entry={entry}
             column={columnOf.get(entry.employeeId) as number}
-            notesOpen={openNoteId === entry.id}
-            onToggleNotes={() => setOpenNoteId((open) => (open === entry.id ? null : entry.id))}
+            onOpen={() => onOpenEntry(entry)}
           />
         ))}
       </div>
