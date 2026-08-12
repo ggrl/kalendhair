@@ -20,7 +20,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   // Loopback by default because this server has no authentication yet. ADR-0004 is
   // marked to be revisited before any is written, so until that happens the safe
   // default is unreachable from the network rather than open to it.
-  const host = env.HOST ?? '127.0.0.1'
+  //
+  // `??` alone was a hole: it catches undefined but not `HOST=`, and Node resolves
+  // listen(port, '') to `::`, which is every interface. An empty line in .env would have
+  // published every customer name on the box's public address while the startup banner
+  // still said loopback. Empty means unset here, exactly as it does for the values above.
+  const host = env.HOST === undefined || env.HOST.trim() === '' ? '127.0.0.1' : env.HOST.trim()
 
   const port = Number(env.PORT ?? '3000')
   if (!Number.isInteger(port) || port < 1 || port > 65535) {

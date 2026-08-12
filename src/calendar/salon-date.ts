@@ -13,6 +13,14 @@ export function isSalonDate(value: string): boolean {
   if (match === null) return false
 
   const [, year, month, day] = match
+
+  // JavaScript has a year zero and Postgres does not - it runs 1 BC straight to 1 AD. So
+  // `0000-01-01` and `0000-02-29` pass every check below and then fail in the database
+  // with `date/time field value out of range`, which is a validator claiming to be
+  // complete while handing the caller a server error. With four digits forced by the
+  // pattern, year zero is the only value JavaScript accepts that Postgres will not.
+  if (year === '0000') return false
+
   const asUtc = new Date(`${year}-${month}-${day}T00:00:00Z`)
   if (Number.isNaN(asUtc.getTime())) return false
 

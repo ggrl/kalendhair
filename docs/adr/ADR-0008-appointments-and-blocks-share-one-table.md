@@ -36,6 +36,17 @@ Consequences for the columns: customer and treatment are meaningful only for
 appointments. They are nullable, with a check tying them to the kind, so a block cannot
 carry a customer name and an appointment cannot be missing one.
 
+Two clarifications from writing the schema, both settled in review:
+
+- **A customer name may not be blank or all spaces.** `IS NOT NULL` alone let an empty
+  string through, and the colour rule keys every nameless box to the same value, so two
+  unrelated boxes came back sharing a colour - the false pair ADR-0009 exists to prevent,
+  arriving from the other end.
+- **A treatment is optional.** The first schema required one, which nothing in the brief or
+  any ADR asks for, and it would refuse the ordinary case of a receptionist holding a name
+  before the customer has decided. Blank is still refused: "not said yet" is NULL, not a
+  space.
+
 **Blocking a whole day is one block row from 06:00 to 20:00.** Not a new concept, not a
 flag on the employee. It follows that ticking the box on a column that already has
 appointments is refused by the existing constraint, which was the chosen behaviour: the

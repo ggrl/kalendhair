@@ -73,9 +73,13 @@ export function assignColours(entries: readonly ColourInput[]): Map<string, stri
     return a[0] < b[0] ? -1 : 1
   })
 
+  // Customers holding more than one box today. Their colours are the ones that carry the
+  // claim, so no overflow may land on them.
+  const withPartner = order.filter(([, group]) => group.length > 1).length
+
   const colourFor = new Map<string, string>()
   order.forEach(([key], index) => {
-    colourFor.set(key, PALETTE[index % PALETTE.length])
+    colourFor.set(key, PALETTE[paletteSlot(index, withPartner)])
   })
 
   const result = new Map<string, string | null>()
@@ -84,6 +88,29 @@ export function assignColours(entries: readonly ColourInput[]): Map<string, stri
     result.set(entry.id, key === null ? null : (colourFor.get(key) ?? null))
   }
   return result
+}
+
+/**
+ * Which palette slot the customer at `index` gets, where `reserved` slots at the front
+ * belong to customers with more than one appointment today.
+ *
+ * A plain `index % PALETTE.length` looked like it implemented the ordering rule and did
+ * the opposite: customer eleven wrapped to slot 0, which is the colour of the customer
+ * with the most appointments. So the one arrangement the rule exists to protect - a pair
+ * unmistakably belonging together - was the first one broken, and a stranger wore the
+ * pair's colour on any day with eleven customers. Overflow reuses only the slots given to
+ * single appointments.
+ */
+function paletteSlot(index: number, reserved: number): number {
+  if (index < PALETTE.length) return index
+
+  const reusable = PALETTE.length - reserved
+  // More multi-appointment customers than colours. Nothing is safe to reuse, so fall back
+  // to plain wrapping rather than pretending otherwise. Ten simultaneous split
+  // appointments in one day is not a salon, but the arithmetic still has to terminate.
+  if (reusable <= 0) return index % PALETTE.length
+
+  return reserved + ((index - PALETTE.length) % reusable)
 }
 
 function earliestStart(entries: readonly ColourInput[]): string {

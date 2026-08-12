@@ -115,6 +115,28 @@ describe('the hole the exclusion constraint alone does not close', () => {
       /appointment_positive_duration/,
     )
   })
+
+  it('refuses a row that crosses midnight', async () => {
+    // The board draws one day. A row from 19:00 to 02:00 has no shape on the grid, and it
+    // hides from the following day entirely because a day is selected on starts_at.
+    await expect(
+      pool.query(
+        `INSERT INTO appointment (employee_id, kind, starts_at, ends_at)
+         VALUES ($1, 'block', $2::timestamp, $3::timestamp)`,
+        [marco, `${DAY} 19:00`, '2026-08-14 02:00'],
+      ),
+    ).rejects.toThrow(/appointment_within_one_day/)
+  })
+
+  it('refuses a block spanning a week', async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO appointment (employee_id, kind, starts_at, ends_at)
+         VALUES ($1, 'block', $2::timestamp, $3::timestamp)`,
+        [marco, '2026-08-20 06:00', '2026-08-27 20:00'],
+      ),
+    ).rejects.toThrow(/appointment_within_one_day/)
+  })
 })
 
 describe('the two kinds stay honest', () => {
@@ -136,6 +158,35 @@ describe('the two kinds stay honest', () => {
         [marco, `${DAY} 12:00`, `${DAY} 13:00`],
       ),
     ).rejects.toThrow(/appointment_fields_match_kind/)
+  })
+
+  it('refuses a blank or all-space customer, not only a null one', async () => {
+    // The first version of this test only tried NULL and passed, so an empty name got in.
+    // Every nameless box then keys to the same '' in the colour rule and they come back
+    // sharing a colour, which is the false pair ADR-0009 exists to prevent.
+    for (const name of ['', '   ']) {
+      await expect(addAppointment(pool, marco, DAY, '12:00', '13:00', name)).rejects.toThrow(
+        /appointment_fields_match_kind/,
+      )
+    }
+  })
+
+  it('allows an appointment with a name and no treatment yet', async () => {
+    // The receptionist has a phone to their ear and a name before they have a decision.
+    // Nothing in the brief or the ADRs makes treatment mandatory.
+    await expect(
+      pool.query(
+        `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, customer)
+         VALUES ($1, 'appointment', $2::timestamp, $3::timestamp, 'Anna')`,
+        [marco, `${DAY} 12:00`, `${DAY} 13:00`],
+      ),
+    ).resolves.toBeTruthy()
+  })
+
+  it('refuses a blank treatment, because that is not the same as none', async () => {
+    await expect(addAppointment(pool, marco, DAY, '12:00', '13:00', 'Anna', '  ')).rejects.toThrow(
+      /appointment_fields_match_kind/,
+    )
   })
 
   it('refuses an unknown kind', async () => {

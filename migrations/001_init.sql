@@ -44,12 +44,32 @@ CREATE TABLE appointment (
   CONSTRAINT appointment_positive_duration CHECK (ends_at > starts_at),
 
   -- Keeps the two kinds honest: a block cannot carry a customer, and an appointment
-  -- cannot be missing one. Notes stay optional for appointments.
+  -- cannot be missing one.
+  --
+  -- `IS NOT NULL` alone was not enough. An empty or all-space customer name passed it,
+  -- and the colour rule then keys every nameless box to the same '' - so two unrelated
+  -- boxes came back in one colour, which is the false-pair claim ADR-0009 exists to
+  -- prevent, arriving from the other end.
+  --
+  -- Treatment is optional. The first version required it, which nothing in the brief or
+  -- the ADRs asks for, and it would refuse the ordinary case of a receptionist with a name
+  -- and not yet a decision. Blank is still refused: a column that means "not said yet"
+  -- should hold NULL, not a space.
   CONSTRAINT appointment_fields_match_kind CHECK (
     (kind = 'block' AND customer IS NULL AND treatment IS NULL AND notes IS NULL)
     OR
-    (kind = 'appointment' AND customer IS NOT NULL AND treatment IS NOT NULL)
+    (kind = 'appointment'
+      AND customer IS NOT NULL
+      AND btrim(customer) <> ''
+      AND (treatment IS NULL OR btrim(treatment) <> ''))
   ),
+
+  -- The board draws one day. A row crossing midnight renders as a box running from 19:00
+  -- to 02:00, which is not a shape the grid has, and it hides from the following day
+  -- entirely because a day is selected on starts_at. The bookable window itself
+  -- (06:00-20:00) is not enforced here: that constant lives in the application, and
+  -- duplicating it in SQL would give one rule two homes. It belongs with the write path.
+  CONSTRAINT appointment_within_one_day CHECK ((starts_at)::date = (ends_at)::date),
 
   -- The rule. Covers all four combinations without a line of application code:
   -- appointment on appointment, appointment on block, block on appointment,

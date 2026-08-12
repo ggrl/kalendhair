@@ -67,10 +67,41 @@ describe('assignColours', () => {
     expect(colours.get('pair-a')).toBe(PALETTE[0])
     expect(colours.get('pair-b')).toBe(PALETTE[0])
 
-    // With one more customer than there are colours, exactly one colour is shared, and
-    // it is shared between two singles rather than by anyone in the pair.
+    // Eleven customers, ten colours, so exactly one colour is worn by two customers. The
+    // point of the ordering rule is which two: it must not be the pair, or a stranger
+    // looks like the other half of a split appointment.
+    //
+    // The first version of this test asserted the opposite while its comment claimed
+    // this, and passed, because a plain modulo wrapped customer eleven onto the pair's
+    // colour. Assert the property, not the arithmetic.
     const singleColours = singles.map((entry) => colours.get(entry.id))
-    expect(singleColours.filter((colour) => colour === PALETTE[0])).toHaveLength(1)
+    expect(singleColours).not.toContain(PALETTE[0])
+
+    const shared = singleColours.filter(
+      (colour, index) => singleColours.indexOf(colour) !== index,
+    )
+    expect(shared).toHaveLength(1)
+    expect(shared[0]).not.toBe(PALETTE[0])
+  })
+
+  it('never lets a single appointment wear a pair\'s colour, however many customers there are', () => {
+    const pairs = [
+      appointment('p1-a', 'Pair One', '09:00'),
+      appointment('p1-b', 'Pair One', '13:00'),
+      appointment('p2-a', 'Pair Two', '09:15'),
+      appointment('p2-b', 'Pair Two', '13:15'),
+    ]
+    const singles = Array.from({ length: 30 }, (_, index) =>
+      appointment(`single-${index}`, `Single ${index}`, '10:00'),
+    )
+
+    const colours = assignColours([...pairs, ...singles])
+    const pairColours = new Set([colours.get('p1-a'), colours.get('p2-a')])
+
+    expect(pairColours.size).toBe(2)
+    for (const single of singles) {
+      expect(pairColours.has(colours.get(single.id))).toBe(false)
+    }
   })
 
   it('produces the same colours whatever order the rows arrive in', () => {
