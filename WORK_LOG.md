@@ -10,7 +10,10 @@ a database, an API and a read-only board.
 ### Where things stand
 
 - **`main` is at `f6ec955`.** It has the schema, `GET /api/day`, the board, eleven ADRs, the
-  brief and a rewritten README. Nothing is outstanding on a branch.
+  brief and a rewritten README.
+- **PR #9 is open and carries this file.** It is the only thing outstanding, it changes nothing
+  but the work log, and CI is green on it. If you are reading this on `main`, it merged; if you
+  are reading it on a branch, it did not, and merging it costs nothing.
 - **The board merged as PR #8.**
 - **It went through three review rounds.** Round two: logic NO-SHIP, security SHIP, UX (which
   does not vote) found more than the other two together. Round three, after those fixes:
