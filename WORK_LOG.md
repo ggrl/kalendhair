@@ -9,8 +9,8 @@ a database, an API and a read-only board.
 
 ### Where things stand
 
-- `main` is at `80933c6`. It has the schema, `GET /api/day`, eleven ADRs, the brief and a
-  rewritten README.
+- **`main` is at `f6ec955`.** It has the schema, `GET /api/day`, the board, eleven ADRs, the
+  brief and a rewritten README. Nothing is outstanding on a branch.
 - **The board merged as PR #8.**
 - **It went through three review rounds.** Round two: logic NO-SHIP, security SHIP, UX (which
   does not vote) found more than the other two together. Round three, after those fixes:
@@ -36,14 +36,15 @@ a database, an API and a read-only board.
 
 ### What was verified, and how
 
-Run at the end of the session, on `ac09eaa`:
+Run on `main` at `f6ec955`, after the merge:
 
-- `npm run verify` - green (typecheck, lint, 51 unit tests, build).
+- `npm run verify` - green (typecheck, lint, 55 unit tests, build).
+- `npm run test` - 55 passed.
 - `export $(grep TEST_DATABASE_URL .env) && npm run test:db` - 41 passed against a real
   Postgres 17 container.
-- `npm run test:e2e` - 22 passed in Chromium.
-- `npm audit --audit-level=high` - 0 vulnerabilities.
-- CI green on all three jobs for `ac09eaa`.
+- `npm run test:e2e` - 25 passed in Chromium.
+- `npm audit --audit-level=high` - 0 vulnerabilities, run earlier in the session.
+- CI green on all three jobs for every commit that merged.
 - The board was driven by hand against a seeded database and screenshotted at 1440x1000 and
   1280x800, scrolled and unscrolled.
 
@@ -70,22 +71,29 @@ Run at the end of the session, on `ac09eaa`:
 
 ### Unfinished, and what comes next
 
-1. Get the two outstanding re-review verdicts on PR #8 and merge it.
-2. **The write path**: create, drag to move, edge-drag to resize, the modal, the two
+1. **The write path**: create, drag to move, edge-drag to resize, the modal, the two
    checkboxes for blocks. This needs a `version` column (ADR-0003) - the table is empty, so
-   that is free right now and a migration with a backfill later.
-3. **Authentication before any real customer name.** ADR-0004 is marked to be revisited
+   that is free right now and a migration with a backfill later. It also inherits the review
+   the last board commit did not get.
+2. **Authentication before any real customer name.** ADR-0004 is marked to be revisited
    first, and its deadline is whichever comes first: the first real name, or the first bind
    that is not loopback. A deploy is the quiet act that ends loopback protection.
-4. Polling, then the remaining navigation aids (date picker, month steps, arrow keys).
-5. The application container and the VPS, with the blocking backup gate in the brief.
+3. Polling, then the remaining navigation aids (date picker, month steps, arrow keys).
+4. The application container and the VPS, with the blocking backup gate in the brief.
+5. Housekeeping: `feat/blocks-and-colours` still exists locally and on the remote. It is an
+   orphan from a stacked-pull-request mistake; its content reached `main` through PR #5, so it
+   is safe to delete. Left alone because deleting a remote branch was not asked for.
 
 ### Open questions for the owner
 
 - `Gesperrt` was questioned by the UX review, which suggested `Nicht verfügbar`. Kept because
   the owner had already approved that word in a preview. Their call.
-- No current-time line and no freshness indicator on the board. Both were raised; polling is
-  a later branch by decision.
+- No current-time line. Raised by the UX review, which judged it can wait: the person always
+  knows what time it is, and it needs the same clock-in-the-client that polling needs.
+- The board now says `Stand HH:MM` with an `Aktualisieren` button. That was built because
+  nothing polls yet, so a board loaded at 09:00 was indistinguishable from a live one at
+  14:00 - the exact failure the brief says the salon already has with photographs. It is a
+  stopgap, not the live board the brief promises.
 - The palette is ten colours, so a day with more than ten distinct customers reuses one. The
   owner accepted this knowing the number.
 
