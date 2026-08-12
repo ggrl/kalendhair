@@ -2,6 +2,8 @@ import express from 'express'
 import type { ErrorRequestHandler, Express } from 'express'
 import type { Pool } from 'pg'
 import { readDay } from './day.js'
+import { Refused, createEntry, parseEntryInput, removeEntry, updateEntry } from './write.js'
+import { isSuggestable, suggest } from './suggestions.js'
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 
 /**
@@ -44,6 +46,52 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
     response.json(await readDay(pool, date, salonTimeZone, new Date()))
   })
 
+  // A day of one salon's entries is a small object. The default 100kb would let somebody post
+  // a megabyte of notes for no reason.
+  const body = express.json({ limit: '16kb' })
+
+  /**
+   * A new appointment or block.
+   *
+   * Answers only the new id. The client reloads the day rather than patching its own copy,
+   * because ADR-0009 assigns colour from the whole day - a new appointment can change the
+   * colour of boxes it never touched, and a client stitching the response into what it already
+   * has would quietly disagree with every other screen.
+   */
+  app.post('/api/entries', body, async (request, response) => {
+    const created = await createEntry(pool, parseEntryInput(request.body))
+    response.status(201).json(created)
+  })
+
+  /** A change to an existing entry, refused if somebody else got there first. ADR-0003. */
+  app.patch('/api/entries/:id', body, async (request, response) => {
+    const input = parseEntryInput(request.body)
+    const version = versionFrom((request.body as { version?: unknown }).version)
+    response.json(await updateEntry(pool, request.params.id, version, input))
+  })
+
+  /**
+   * What the modal offers while somebody types a customer or a treatment.
+   *
+   * A rolling year, and nothing at all for an empty query - an empty prefix would return the
+   * salon's whole customer list in one request.
+   */
+  app.get('/api/suggestions', async (request, response) => {
+    const field = request.query.field
+    if (!isSuggestable(field)) {
+      throw new Refused(400, 'invalid', 'Es kann nur nach Kundin oder Behandlung gesucht werden.')
+    }
+
+    const query = typeof request.query.q === 'string' ? request.query.q : ''
+    response.json(await suggest(pool, field, query, todayIn(salonTimeZone, new Date())))
+  })
+
+  /** Removal, version-checked for the same reason a save is. */
+  app.delete('/api/entries/:id', async (request, response) => {
+    await removeEntry(pool, request.params.id, versionFrom(request.query.version))
+    response.status(204).end()
+  })
+
   // The built board, served from the same origin as the API. Mounted AFTER the route on
   // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
   // of the API, which a review demonstrated.
@@ -74,6 +122,15 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   return app
 }
 
+/** A version from a request body or query string, or a refusal. Never a guess. */
+function versionFrom(value: unknown): number {
+  const version = Number(value)
+  if (!Number.isInteger(version) || version < 1) {
+    throw new Refused(400, 'invalid', 'Es fehlt die Version des Eintrags.')
+  }
+  return version
+}
+
 /**
  * Express's default handler writes `err.stack` into the response body unless NODE_ENV is
  * `production`, and `npm start` does not set it - so on the VPS a database failure would
@@ -84,6 +141,26 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
  * on by an environment variable somebody has to remember is not a safety property.
  */
 const jsonErrors: ErrorRequestHandler = (error, _request, response, _next) => {
+  // A refusal is the rules working, not a fault. It carries a sentence written for the person
+  // reading the screen, and it is not logged as a failure - a log full of "that slot is taken"
+  // is a log nobody reads when something is actually wrong.
+  if (error instanceof Refused) {
+    response.status(error.status).json({ error: error.message, code: error.code })
+    return
+  }
+
+  // Malformed or oversized JSON never reaches a handler, so express reports it here. Without
+  // this it would be a 500, telling the caller the server broke when in fact they did.
+  const parsed = error as { type?: string }
+  if (parsed.type === 'entity.parse.failed') {
+    response.status(400).json({ error: 'Die Anfrage war kein gültiges JSON.' })
+    return
+  }
+  if (parsed.type === 'entity.too.large') {
+    response.status(413).json({ error: 'Die Anfrage ist zu groß.' })
+    return
+  }
+
   console.error('request failed', loggable(error))
   response.status(500).json({ error: 'internal error' })
 }

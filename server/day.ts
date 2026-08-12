@@ -5,6 +5,7 @@ import { todayIn } from '../src/calendar/salon-date.js'
 
 interface EntryRow {
   id: string
+  version: number
   employee_id: string
   kind: EntryKind
   starts_at: string
@@ -40,6 +41,7 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
 
   const entries = await pool.query<EntryRow>(
     `SELECT id,
+            version,
             employee_id,
             kind,
             to_char(starts_at, 'HH24:MI') AS starts_at,
@@ -69,6 +71,7 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
     employees: employees.rows,
     entries: entries.rows.map((row): Entry => ({
       id: row.id,
+      version: row.version,
       employeeId: row.employee_id,
       kind: row.kind,
       startsAt: row.starts_at,

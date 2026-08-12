@@ -1,0 +1,11 @@
+-- ADR-0003: a save against a stale version is refused.
+--
+-- Added now, while the table is empty, because that is the only moment a NOT NULL column
+-- costs nothing. Later it would be a migration with a backfill on live appointments.
+--
+-- There is no trigger and no locking. Every update names the version it read and runs as
+-- `UPDATE ... WHERE id = $1 AND version = $2`, incrementing as it goes; zero rows affected
+-- IS the refusal. `rules/less-is-more.md` bans locks and leases for collisions nobody has
+-- seen and names this exact shape as the acceptable one: a single condition asserting the
+-- state you read, and an honest message when it matches nothing.
+ALTER TABLE appointment ADD COLUMN version integer NOT NULL DEFAULT 1;

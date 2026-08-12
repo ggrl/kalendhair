@@ -21,6 +21,12 @@ export interface Employee {
  */
 export interface Entry {
   id: string
+  /**
+   * ADR-0003. The client sends this back with any change, and a save against a version the
+   * database has already moved past is refused rather than applied. Without it on the read
+   * side there is no way to make that check, so it is part of an entry, not an extra.
+   */
+  version: number
   employeeId: string
   kind: EntryKind
   startsAt: WallClock

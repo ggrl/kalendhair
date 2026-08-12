@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Day } from '../calendar/types'
+import type { Day, Entry } from '../calendar/types'
+import { DAY_ENDS_AT, DAY_STARTS_AT } from '../calendar/grid'
 import { addDays, addWeeks, shortGermanDate } from '../calendar/dates'
 import { isSalonDate } from '../calendar/salon-date'
-import { fetchDay } from './api'
+import { Refused, createEntry, fetchDay, removeEntry } from './api'
 import { Board } from './Board'
+import { EntryModal } from './EntryModal'
 import { TopBar } from './TopBar'
 
 /**
@@ -53,6 +55,15 @@ export function App() {
    * screen making a claim it cannot support.
    */
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
+
+  /** The entry being edited, or a proposed slot for a new one. Null when nothing is open. */
+  const [editor, setEditor] = useState<{
+    editing: Entry | null
+    draft: { employeeId: string; startsAt: string; endsAt: string }
+  } | null>(null)
+
+  /** Something that happened to the data, as opposed to something that failed to load. */
+  const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
     // Back and forward have to move the board, or the address bar is decoration.
@@ -139,6 +150,61 @@ export function App() {
     setTarget((previous) => ({ ...previous, attempt: previous.attempt + 1 }))
   }, [])
 
+  /**
+   * After any successful write. The whole day is reloaded rather than patched in place, because
+   * ADR-0009 assigns colour from the whole day: booking one appointment can change the colour of
+   * boxes it never touched, and a client stitching its own copy together would quietly disagree
+   * with every other screen.
+   */
+  const saved = useCallback(() => {
+    setEditor(null)
+    setNotice(null)
+    reload()
+  }, [reload])
+
+  /** The day underneath moved on, so what was on screen cannot be trusted against it. */
+  const outOfDate = useCallback(
+    (message: string) => {
+      setEditor(null)
+      setNotice(message)
+      reload()
+    },
+    [reload],
+  )
+
+  /**
+   * ADR-0008: blocking a whole day is one 06:00-20:00 row, so this needs no rule of its own -
+   * ticking it on a column that already has bookings is refused by the same constraint that
+   * refuses any other clash, and the refusal says so.
+   */
+  const toggleWholeDay = useCallback(
+    (employeeId: string, existing: Entry | undefined, date: string) => {
+      const work =
+        existing === undefined
+          ? createEntry({
+              employeeId,
+              kind: 'block',
+              date,
+              startsAt: DAY_STARTS_AT,
+              endsAt: DAY_ENDS_AT,
+              customer: null,
+              treatment: null,
+              notes: null,
+            })
+          : removeEntry(existing.id, existing.version)
+
+      void work.then(
+        () => saved(),
+        (error: unknown) => {
+          setNotice(error instanceof Refused || error instanceof Error ? error.message : String(error))
+          // Reload either way: a refusal means the board's copy is not what the database holds.
+          reload()
+        },
+      )
+    },
+    [reload, saved],
+  )
+
   if (day === null) {
     return (
       <main className="shell">
@@ -192,6 +258,15 @@ export function App() {
         </div>
       )}
 
+      {notice !== null && (
+        <div className="shell__notice" role="alert">
+          <p>{notice}</p>
+          <button type="button" onClick={() => setNotice(null)}>
+            Verstanden
+          </button>
+        </div>
+      )}
+
       <div className="shell__board">
         {/* Narrow full-height strips rather than wide blocks: six columns on a laptop is
             already tight, and full height keeps them easy to hit without taking width. */}
@@ -211,7 +286,19 @@ export function App() {
               the board had gone faint. */}
           {loading && <p className="shell__loading">Termine werden geladen …</p>}
           <div className={loading ? 'shell__fading' : undefined}>
-            <Board day={day} />
+            <Board
+              day={day}
+              onOpenEntry={(entry) =>
+                setEditor({
+                  editing: entry,
+                  draft: { employeeId: entry.employeeId, startsAt: entry.startsAt, endsAt: entry.endsAt },
+                })
+              }
+              onOpenSlot={(employeeId, startsAt, endsAt) =>
+                setEditor({ editing: null, draft: { employeeId, startsAt, endsAt } })
+              }
+              onToggleWholeDay={(employeeId, existing) => toggleWholeDay(employeeId, existing, day.date)}
+            />
           </div>
         </div>
 
@@ -225,6 +312,18 @@ export function App() {
           <span aria-hidden="true">›</span>
         </button>
       </div>
+
+      {editor !== null && (
+        <EntryModal
+          date={day.date}
+          employees={day.employees}
+          editing={editor.editing}
+          draft={editor.draft}
+          onClose={() => setEditor(null)}
+          onSaved={saved}
+          onOutOfDate={outOfDate}
+        />
+      )}
     </main>
   )
 }

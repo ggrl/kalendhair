@@ -52,6 +52,58 @@ export function isPlaceable(startsAt: string, endsAt: string): boolean {
   )
 }
 
+/** Minutes since midnight back to `HH:MM`. The inverse of `minutesSinceMidnight`. */
+export function wallClockFromMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60)
+  return `${String(hours).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+}
+
+/**
+ * The quarter-hour slot a click landed on, as a time range one slot long.
+ *
+ * Clamped so a click on the last row cannot propose an end past the close of the day, which the
+ * server would refuse - being unable to click the 19:45 row would be a strange way to enforce
+ * closing time.
+ */
+export function slotAt(slot: number): { startsAt: string; endsAt: string } {
+  const first = minutesSinceMidnight(DAY_STARTS_AT)
+  const last = minutesSinceMidnight(DAY_ENDS_AT)
+  const start = Math.min(Math.max(first + slot * SLOT_MINUTES, first), last - SLOT_MINUTES)
+  return { startsAt: wallClockFromMinutes(start), endsAt: wallClockFromMinutes(start + SLOT_MINUTES) }
+}
+
+const WALL_CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/**
+ * Why a proposed time range cannot be booked, in German, or null if it can.
+ *
+ * German because it reaches the screen, and one function because the browser wants to refuse
+ * a typed time before saving and the server has to refuse it again whatever the browser did.
+ * Two copies of "is this bookable" would agree today and disagree in a month.
+ *
+ * The bookable window lives in this file and nowhere else, which is why
+ * `migrations/001_init.sql` deliberately does not encode 06:00-20:00 in SQL: changing the
+ * salon's hours should be an edit here, not a migration.
+ */
+export function whyNotBookable(startsAt: string, endsAt: string): string | null {
+  if (!WALL_CLOCK.test(startsAt) || !WALL_CLOCK.test(endsAt)) {
+    return 'Uhrzeit muss als HH:MM angegeben werden.'
+  }
+
+  const start = minutesSinceMidnight(startsAt)
+  const end = minutesSinceMidnight(endsAt)
+
+  if (end <= start) return 'Das Ende muss nach dem Beginn liegen.'
+  if (start % SLOT_MINUTES !== 0 || end % SLOT_MINUTES !== 0) {
+    return `Zeiten müssen auf einer Viertelstunde liegen (${SLOT_MINUTES}-Minuten-Raster).`
+  }
+  if (start < minutesSinceMidnight(DAY_STARTS_AT) || end > minutesSinceMidnight(DAY_ENDS_AT)) {
+    return `Termine sind nur zwischen ${DAY_STARTS_AT} und ${DAY_ENDS_AT} möglich.`
+  }
+
+  return null
+}
+
 /** The hour labels down the side: 06:00 to 20:00 inclusive, one per hour. */
 export function hourLabels(): string[] {
   const first = minutesSinceMidnight(DAY_STARTS_AT) / 60
