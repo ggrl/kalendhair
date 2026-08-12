@@ -16,6 +16,10 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   // Nothing here needs to announce the framework and its presence in a header.
   app.disable('x-powered-by')
 
+  // No CORS header is set anywhere, and that absence is load-bearing now that the board and
+  // the API share an origin: it is what stops a page on another site reading a customer list.
+  // A future "just add CORS so the app can call it" would undo it. ADR-0006.
+
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
    * client never has to ask the device what day it is before it can ask for anything.
@@ -39,6 +43,23 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
 
     response.json(await readDay(pool, date, salonTimeZone, new Date()))
   })
+
+  // The built board, served from the same origin as the API. Mounted AFTER the route on
+  // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
+  // of the API, which a review demonstrated.
+  //
+  // Precisely what that buys, because the first version of this comment overclaimed: the
+  // route now wins on every path a client actually sends. Non-canonical spellings such as
+  // `/api//day` and `/api/./day` do not match the Express route at all and still fall
+  // through to here, where static normalises them. Nothing can write a file into `dist` over
+  // HTTP, so that is a residue rather than a hole - but it is not "impossible".
+  //
+  // Relative to the working directory, like `migrations/`. Missing simply does not match,
+  // which is what `npm run dev` relies on - Vite serves the front end then and proxies here.
+  //
+  // Note for anything added to `.env` from now on: a `VITE_`-prefixed variable is inlined
+  // into the bundle at build time, and this line serves that bundle to everybody.
+  app.use(express.static('dist'))
 
   // Without this, a client with a typo in the path gets Express's HTML "Cannot GET /..."
   // page and puts markup into response.json(). ADR-0006 promises a plain JSON interface

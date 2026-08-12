@@ -45,6 +45,18 @@ the data behind it is fake names on one developer's machine, and the binding is 
 the moment the application service joins the compose file. **Stage two publishes nothing.**
 If you find this port bound to anything other than `127.0.0.1`, that is a defect.
 
+### The absence of a CORS header is part of this decision
+
+Added after the board landed. The built front end is served from the same origin as the API,
+so the browser never makes a cross-origin request and **no `Access-Control-Allow-Origin`
+header is set anywhere.** That absence is load-bearing: it is what stops a page on another
+site reading a day of customer names out of a logged-in browser.
+
+The tempting undoing of it is "just add CORS so the app can call it". A native iOS app is not
+a browser and is not subject to the same-origin policy, so it needs no such header. Anything
+that appears to require one is a browser on another origin, which is the case this is meant
+to refuse. Serve it from this origin instead.
+
 ## Consequences
 
 - Every rule has exactly one home, which is what `rules/coding-standards.md` asks for.

@@ -23,6 +23,10 @@ That is a design decision, not an accident, and it is why it can be public.
 ## Where secrets live instead
 
 - Locally: an environment file that is listed in `.gitignore` before it is created.
+  **Careful, on this project: a variable named `VITE_something` is not server-side.** Vite
+  inlines it into the browser bundle at build time, and the server publishes that bundle to
+  everybody. A gitignored `.env` protects a value from version control, not from a build. If
+  something must stay on the server, do not give it that prefix.
 - In a hosting platform: its own environment-variable store, set through its console
   or command line, never in a file in the repository.
 - In an automation pipeline: its secret store, exposed to a job as an environment

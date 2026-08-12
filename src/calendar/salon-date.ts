@@ -14,12 +14,18 @@ export function isSalonDate(value: string): boolean {
 
   const [, year, month, day] = match
 
-  // JavaScript has a year zero and Postgres does not - it runs 1 BC straight to 1 AD. So
-  // `0000-01-01` and `0000-02-29` pass every check below and then fail in the database
-  // with `date/time field value out of range`, which is a validator claiming to be
-  // complete while handing the caller a server error. With four digits forced by the
-  // pattern, year zero is the only value JavaScript accepts that Postgres will not.
-  if (year === '0000') return false
+  // Years below 1000 are refused, which closes two problems at once.
+  //
+  // JavaScript has a year zero and Postgres does not - it runs 1 BC straight to 1 AD - so
+  // `0000-01-01` used to reach the database and come back as a server error from a
+  // validator claiming to be complete.
+  //
+  // Two-digit years are worse, because they fail silently rather than loudly:
+  // `Date.UTC(50, 0, 1)` means 1950, not year 50, so `isoWeek('0050-03-15')` returned
+  // `KW -99126` and `addMonths('0050-01-31', 1)` returned `1950-02-28`. Rather than patch
+  // each function, the boundary refuses the whole family. Nothing books an appointment in
+  // the first millennium, and everything downstream may now assume a four-digit year.
+  if (Number(year) < 1000) return false
 
   const asUtc = new Date(`${year}-${month}-${day}T00:00:00Z`)
   if (Number.isNaN(asUtc.getTime())) return false

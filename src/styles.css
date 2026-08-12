@@ -1,15 +1,392 @@
 :root {
-  font-family: Sora, Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #222b3c;
-  background: #eef2f4;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --slot-height: 1.1rem;
+  /* Fixed on purpose. The column headings stick directly below the top bar, so the offset has
+     to be a number both agree on - guessing it pinned the names behind the bar, where a
+     higher z-index hid them completely and the scrolled board was unlabelled columns again. */
+  --topbar-height: 6.5rem;
+  --ink: #1f2937;
+  --muted: #6b7280;
+  --paper: #fdfdfc;
+  /* The rules were 1.17:1 and 1.46:1 against the paper, which made a quarter-hour line
+     impossible to resolve - so "is 10:45 free?" could not be answered by eye, only by
+     counting down from an hour label. */
+  --rule-quarter: #e2e0da;
+  --rule-hour: #b8b5ad;
+  --block-grey: #d4d4d4;
+  --alert-ink: #7f1d1d;
+  --alert-paper: #fee2e2;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+* {
+  box-sizing: border-box;
+}
 
-.shell { min-height: 100vh; }
-.hero { background: #222b3c; color: #f8fafc; padding: 4.5rem max(1.25rem, calc((100vw - 980px) / 2)); }
-.hero h1 { margin: .15rem 0 .5rem; font-size: clamp(2.6rem, 6vw, 5rem); letter-spacing: -.06em; }
-.hero p { color: #b9c4d0; font-size: 1.2rem; max-width: 42rem; }
+html {
+  /* Focus scrolls an element flush to the top of the scrollport, which is now 132px of opaque
+     sticky chrome - so tabbing to an afternoon note focused a box nobody could see. */
+  scroll-padding-top: calc(var(--topbar-height) + 3.5rem);
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+}
+
+.shell {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0.75rem;
+}
+
+/* Top bar: date and week in the middle, week steps either side, today below. Sticky with the
+   column headings, because a board scrolled to the evening otherwise shows neither the date
+   nor whose column is whose. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'prev date next'
+    'today today today';
+  align-items: center;
+  gap: 0.3rem 1rem;
+  height: var(--topbar-height);
+  padding-bottom: 0.5rem;
+  background: var(--paper);
+}
+
+.topbar__date {
+  grid-area: date;
+  text-align: center;
+}
+
+.topbar__date h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.topbar__week {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.topbar__istoday {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.topbar__step,
+.topbar__today {
+  padding: 0.5rem 0.9rem;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.topbar__step:first-of-type {
+  grid-area: prev;
+}
+
+.topbar__step:nth-of-type(2) {
+  grid-area: next;
+}
+
+.topbar__actions {
+  display: flex;
+  grid-area: today;
+  gap: 0.5rem;
+  justify-self: center;
+}
+
+.topbar__today {
+  padding: 0.35rem 1.4rem;
+}
+
+.topbar__step:hover,
+.topbar__today:hover {
+  background: #f3f4f6;
+}
+
+/* The board, flanked by the day steps. */
+.shell__board {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  /* Keeps the day strips a usable height on a day with nothing on it, where the board
+     collapses to one line of text. */
+  min-height: 12rem;
+}
+
+.shell__day {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* A click has to change something immediately, or the natural response is to click again - and a
+   second click used to land two weeks out. 0.45 destroys colour discrimination while keeping the
+   layout readable, which is the intended "provisional" reading. Do not dim harder. */
+.shell__fading {
+  opacity: 0.45;
+}
+
+.shell__loading {
+  /* Fixed to the viewport, not to the top of a container that scrolls away. Absolutely
+     positioned it measured y = -234 once the board was scrolled to the afternoon, so the only
+     signal that a load was in flight was a 45% opacity. Above the sticky headings, and outside
+     the dimmed element, or the label announcing the load was itself faint. */
+  position: fixed;
+  top: calc(var(--topbar-height) + 0.6rem);
+  left: 50%;
+  z-index: 11;
+  margin: 0;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.85rem;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.3rem;
+  transform: translateX(-50%);
+}
+
+.edge {
+  flex: 0 0 1.75rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--muted);
+  background: #f6f6f4;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.edge:hover {
+  background: #ececea;
+  color: var(--ink);
+}
+
+.board__heads,
+.board__grid {
+  display: grid;
+}
+
+.board__grid {
+  /* Every hour label is lifted onto its line by translateY(-0.4em), and the sticky headings
+     paint over it with an opaque background. For 06:00 there is no scroll position that fixes
+     it, so a permanently half-drawn number sat where the eye starts and read as broken
+     software. */
+  margin-top: 0.4rem;
+}
+
+/* The names must not scroll away: 56 rows is 985px, so on a laptop about 40% of the day is
+   always off screen, and unlabelled columns are how an appointment ends up in the wrong
+   stylist's day. */
+.board__heads {
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 9;
+  background: var(--paper);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 12%);
+}
+
+.board__head {
+  padding: 0.4rem 0.5rem;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid var(--rule-hour);
+  overflow-wrap: anywhere;
+}
+
+.board__hour {
+  padding-right: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: right;
+  /* Nudged up so the label sits on its line rather than under it. */
+  transform: translateY(-0.4em);
+}
+
+/* The last label marks the bottom of the final row, not the top of a row after it. */
+.board__hour--last {
+  align-self: end;
+  transform: translateY(0.4em);
+}
+
+.board__column {
+  border-left: 1px solid var(--rule-hour);
+  background-image:
+    linear-gradient(to bottom, var(--rule-quarter) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--rule-hour) 1px, transparent 1px);
+  background-repeat: repeat-y;
+}
+
+/* A box. Boxes never overlap, because ADR-0001 forbids it in the database, so grid rows are
+   enough and nothing has to share horizontal space. */
+.entry {
+  /* Anchors the notes marker to its own box. Without it the marker positions against
+     .board__grid, the nearest positioned ancestor, and a marker for the first column lands
+     in the top-right of the last one. */
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  overflow: hidden;
+  margin: 1px 2px;
+  padding: 0.1rem 0.3rem;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  color: var(--ink);
+  text-align: left;
+  border: 1px solid rgb(0 0 0 / 18%);
+  border-radius: 0.25rem;
+}
+
+/* Only a box with a note can be opened, so only that one looks clickable. */
+.entry--has-notes {
+  cursor: pointer;
+}
+
+.entry--block {
+  color: #374151;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--block-grey),
+    var(--block-grey) 5px,
+    #c9c9c9 5px,
+    #c9c9c9 10px
+  );
+}
+
+.entry__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  /* Was #4b5563, which scored 4.46:1 on three of the ten palette colours - under the 4.5:1
+     small-text threshold, on the field that gets scanned most. */
+  color: var(--ink);
+}
+
+.entry__customer {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.entry__treatment,
+.entry__label {
+  overflow-wrap: anywhere;
+}
+
+/* Boxes of 30 minutes or less are one or two lines tall, which cannot hold three stacked
+   lines: the customer's name went missing entirely at 15 minutes and the treatment at 30. */
+.entry--compact .entry__line {
+  display: flex;
+  gap: 0.3rem;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+/* Room for the "Notiz" marker, which is absolutely positioned and reserves none itself - a long
+   name in a short box would otherwise run underneath the word. */
+.entry--has-notes .entry__line {
+  padding-right: 2.9rem;
+}
+
+/* One row of grid is one line of text: the time and the name share it and the treatment does not
+   fit at all. */
+.entry--one-line {
+  padding: 0 0.3rem;
+}
+
+.entry__line .entry__customer {
+  /* Without this the span never shrinks - `white-space: nowrap` makes its min-content width
+     the full text width - so the ellipsis never appeared and a long name was cut mid-letter
+     with no sign that anything was missing. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* An open note runs past its box, which is the point: a 15-minute box cannot hold a
+   sentence. It also has to win against the boxes below it - every box shares z-index 1. */
+.entry--has-notes:has(.entry__notes) {
+  z-index: 3;
+  overflow: visible;
+}
+
+.entry__notes {
+  position: relative;
+  z-index: 2;
+  margin-top: 0.15rem;
+  padding: 0.2rem 0.3rem;
+  white-space: pre-wrap;
+  background: #fffbe8;
+  border: 1px solid #d9c98a;
+  border-radius: 0.2rem;
+}
+
+/* A word, not a glyph. An empty 9px square outline read as a rendering artefact rather than
+   as "there is something written about this customer". */
+.entry__notes-marker {
+  position: absolute;
+  top: 0;
+  right: 0.2rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: #3f3f46;
+  letter-spacing: 0.03em;
+}
+
+.board__empty,
+.board__legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.board__legend {
+  margin: 0.4rem 0 0;
+}
+
+.board__undrawable,
+.shell__failure {
+  padding: 0.4rem 0.6rem;
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  color: var(--alert-ink);
+  background: var(--alert-paper);
+  border-radius: 0.3rem;
+}
+
+.board__undrawable p,
+.shell__failure p {
+  margin: 0 0 0.3rem;
+}
+
+.board__undrawable ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.shell__failure button {
+  font: inherit;
+  padding: 0.25rem 0.7rem;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--alert-ink);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.shell__failure-detail {
+  color: #991b1b;
+  font-weight: 400;
+}
