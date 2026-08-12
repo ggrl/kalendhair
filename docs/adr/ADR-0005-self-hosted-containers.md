@@ -59,11 +59,13 @@ cookie and every customer name are readable in transit.
   apart within weeks, which is the exact failure this decision exists to prevent.
 - **SQLite instead of Postgres.** Genuinely attractive here: no second container, no
   connection string, and a backup is copying one file, which matters for a salon with
-  no sysadmin. Rejected on ADR-0001. Postgres is believed to be able to express
-  no-overlap as a real database constraint, and SQLite is believed not to, leaving the
-  rule resting on a transaction plus its single-writer behaviour. Both beliefs are
-  unread and marked in ADR-0001 as something to confirm before writing. If that check
-  reverses them, this alternative deserves reopening.
+  no sysadmin. Rejected on ADR-0001, and that rejection is now verified rather than
+  believed. Postgres enforces no-overlap as a real exclusion constraint, proved against
+  17.10. SQLite 3.51.0 rejects `EXCLUDE USING gist` as a syntax error and has no
+  `tsrange` function, and its own `CREATE TABLE` documentation lists only PRIMARY KEY,
+  UNIQUE, CHECK and FOREIGN KEY as table constraints. There is no equivalent, so the
+  rule would rest on application code plus SQLite's single-writer behaviour rather than
+  on the database. This alternative is closed.
 
   **One reason that does not count, recorded so it is not cited later.** A planned iOS
   app is not an argument for Postgres over SQLite. Both sit behind the same server, and
