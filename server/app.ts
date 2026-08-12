@@ -46,8 +46,13 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
 
   // The built board, served from the same origin as the API. Mounted AFTER the route on
   // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
-  // of the API, which a review demonstrated. Nothing can write that file today, and this
-  // makes it impossible rather than accidentally untrue.
+  // of the API, which a review demonstrated.
+  //
+  // Precisely what that buys, because the first version of this comment overclaimed: the
+  // route now wins on every path a client actually sends. Non-canonical spellings such as
+  // `/api//day` and `/api/./day` do not match the Express route at all and still fall
+  // through to here, where static normalises them. Nothing can write a file into `dist` over
+  // HTTP, so that is a residue rather than a hole - but it is not "impossible".
   //
   // Relative to the working directory, like `migrations/`. Missing simply does not match,
   // which is what `npm run dev` relies on - Vite serves the front end then and proxies here.
