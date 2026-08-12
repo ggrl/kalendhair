@@ -33,6 +33,23 @@ day reads correctly.
 - Nothing here deletes personal data on request. If that becomes a requirement, it is a
   separate, deliberate mechanism, not a side effect of removing a colleague.
 
+## The column count is a consequence of this, not a setting
+
+Added 2026-08-12, after a request to make columns hideable was interviewed and turned out to
+need no code.
+
+**The board draws a column per active employee, and that is the whole rule.** Four stylists
+means four columns; a fifth appears the day a fifth person is added, and the board scales to
+six without anybody configuring anything. The count follows the staff list because of the
+`active` flag this ADR introduced, so there is nothing separate to keep in step with it.
+
+A per-column show and hide control was considered and rejected as machinery for a problem
+that does not exist. If it is ever revisited, the interview surfaced one rule it would have to
+obey: **a column holding an appointment may not be hidden.** A hidden column with a real
+booking in it is an appointment that exists, is charged for, and is invisible - the customer
+arrives and nobody expects them. That is the same call this ADR already makes for deactivated
+staff, who keep their column on any day they have entries.
+
 ## Alternatives rejected
 
 - **Block removal until the employee's future days are clear.** Predictable, and it
