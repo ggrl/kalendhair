@@ -50,6 +50,23 @@ two appointments - the dye sets while somebody else is cut - is visibly one pers
 places. The colour is computed by the server from the whole day, never stored, and grey
 is kept out of the palette. See ADR-0009.
 
+Navigation surrounds the board rather than sitting inside it. Previous and next day are
+narrow full-height strips pinned to the outer left and right edges: big targets for a
+mouse without stealing width from six columns on a laptop, which is already tight. The
+top bar carries the day's date and its calendar week as `KW 33`, with previous and next
+week beside them, so a customer asking for the same slot in four weeks is four clicks on
+the same weekday.
+
+Also in the top bar, in this build order rather than all at once: a today button first,
+because once week steps exist somebody will be six weeks out and need one click back;
+then a date picker, month steps, and left and right arrow keys for day movement. Week and
+month steps keep the weekday; month steps clamp the day of the month, which is not
+reversible. Week numbers are ISO 8601, whose year is not always the year in the date. See
+ADR-0010.
+
+Landing on a day the salon is shut shows an empty board, exactly as flipping the paper to
+a Sunday does. There is no concept of opening days and this keeps it that way.
+
 A checkbox in the same modal makes the row a grey block instead of an appointment:
 time nobody may be booked into, with no customer, no treatment and no label. A checkbox
 beside a column heading blocks that employee's whole day, which is one block row from
@@ -126,6 +143,10 @@ Awkward, each needing an answer in code:
 - unticking the whole-day box
 - a block on a deactivated employee's column
 - text staying readable on a coloured 15-minute box
+- 1 January 2027, which is in ISO week 53 of 2026, so the header must read KW 53 on a date
+  that says 2027
+- stepping a month forward from 31 January, and stepping back again, which does not return
+- arrow keys pressed while a box is selected or the modal is open
 
 ## Non-goals
 
@@ -189,17 +210,21 @@ with automated tests asserting specifically:
   colour is not grey
 - the same name differing only by case or surrounding whitespace gets one colour
 - a whole-day block on a column with existing appointments is refused and names the clash
+- the week number is right on 2026-12-28 through 2027-01-04, where the ISO week-year and
+  the calendar year disagree, and 2026 has a week 53
+- a month step from 31 January clamps to the end of February, in a leap year and out of one
 
 And then the thing no test provides: the salon runs a real day on it and says what is
 wrong with it.
 
 ## Settled rulings
 
-Nine decisions from this interview are recorded in `docs/adr/` so a later session
+Ten decisions from this interview are recorded in `docs/adr/` so a later session
 cannot quietly re-decide them: no-overlap per employee, deactivate-never-delete for
 staff, refuse-the-stale-save, shared-password authentication, self-hosted containers
 rather than a managed platform, the API as the only door to the database, salon-local
-wall clock time, one table for appointments and blocks, and per-day colour assignment.
+wall clock time, one table for appointments and blocks, per-day colour assignment, and
+ISO week and month-step arithmetic.
 
 Two carry unfinished business, flagged in the ADRs themselves rather than left to be
 rediscovered:
