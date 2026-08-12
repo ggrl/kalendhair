@@ -33,6 +33,18 @@ Two consequences for how the API is built, starting now rather than retrofitted:
 - The database port is never published to the host or the internet. In `docker compose`
   the database is reachable on the internal network by the server and nothing else.
 
+### One named exception, for local development only
+
+Amended 2026-08-12, when the first code was written. Until the server itself runs as a
+container beside the database, the server and the test suite run on the host and cannot
+reach an unpublished port. So `docker-compose.yml` binds the database to `127.0.0.1`
+only.
+
+This is an exception, not a relaxation. Loopback is not the network and not the internet,
+the data behind it is fake names on one developer's machine, and the binding is deleted
+the moment the application service joins the compose file. **Stage two publishes nothing.**
+If you find this port bound to anything other than `127.0.0.1`, that is a defect.
+
 ## Consequences
 
 - Every rule has exactly one home, which is what `rules/coding-standards.md` asks for.

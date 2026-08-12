@@ -14,7 +14,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // Tests reach the database and the server modules directly, so they need Node's
+    // types even though everything under src/ that ships to the browser does not.
+    "types": ["node"]
   },
   "include": ["src", "tests"]
 }

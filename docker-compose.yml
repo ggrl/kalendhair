@@ -1,0 +1,37 @@
+# ADR-0005: the same file runs on a laptop now and on a VPS later, which is the whole
+# reason for containers here - it closes the gap between the two.
+#
+# The application service is not here yet. There is no front end to serve and no
+# authentication, so a container would only wrap an API that must not be reachable.
+# It joins when the board exists.
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: salon
+      POSTGRES_USER: salon
+      # Local development only. Stage two supplies this from the environment and never
+      # from a tracked file: see rules/secrets.md.
+      # No default on purpose. rules/secrets.md forbids a password in a committed file,
+      # including as an example, and a placeholder default is the thing people forget to
+      # change. Compose refuses to start until this is set in .env, which is gitignored.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      # ADR-0006 forbids publishing the database port, with one named exception: local
+      # development and the test suite run on the host and have to reach it. Bound to
+      # loopback so it is not reachable from the network, and dropped entirely once the
+      # application runs in a container beside this one.
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U salon -d salon']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

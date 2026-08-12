@@ -49,11 +49,21 @@ Details that follow:
 - Adding a second appointment for a customer can change the colours of other boxes on
   that day, because assignment depends on the whole set. Correct, and worth knowing
   before somebody reports it as a bug.
-- **The meaning degrades on a busy day, and this was chosen knowingly.** Once the day has
-  more distinct customers than the palette has colours, two strangers will share one and
-  look like a pair. The ordering rule above limits the damage to single appointments but
-  does not remove it. The alternative that avoids it entirely is recorded below; if
-  accidental pairs start misleading people, that is the thing to switch to.
+- **The meaning degrades once the palette runs out, and this was chosen knowingly.** The
+  palette is **ten** colours - the number was unknown when this was decided and is now
+  fixed in `src/calendar/colours.ts`. Six stylists over a fourteen-hour day will pass ten
+  distinct customers on most days, not only busy ones, so two strangers sharing a colour
+  is the ordinary case rather than the exception. Confirmed as acceptable by the owner
+  after the number was known: overlapping colours are not a problem worth more machinery.
+- **The ordering rule guarantees the repeat never lands on a customer who has two boxes.**
+  This is the part that carries the claim, so it is enforced rather than hoped for: when
+  the palette is exhausted, overflow reuses only the slots given to single appointments.
+  The first implementation did not do this. A plain `index % PALETTE.length` wrapped
+  customer eleven onto slot zero, which is the colour of the customer with the most
+  appointments - so the one arrangement the rule exists to protect was the first thing it
+  broke, and a test asserted that behaviour while its comment claimed the opposite. Found
+  by review, fixed, and now covered by a test that asserts the property instead of the
+  arithmetic.
 - **Colour alone is not accessible.** A customer who cannot distinguish two palette
   colours cannot see the link, and a grey block is only distinguishable from a coloured
   appointment if the palette keeps clear of grey. The palette needs choosing for

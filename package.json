@@ -8,21 +8,30 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty false",
+    "dev:server": "node --env-file-if-exists=.env --watch dist-server/server/index.js",
+    "build": "tsc -b && vite build && tsc -p tsconfig.server.json",
+    "start": "node --env-file-if-exists=.env dist-server/server/index.js",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint . --max-warnings 0",
-    "test": "vitest run --exclude '**/*.browser.test.ts'",
+    "test": "vitest run --exclude '**/*.browser.test.ts' --exclude '**/*.db.test.ts'",
+    "test:db": "vitest run db.test --no-file-parallelism",
     "test:e2e": "playwright test",
+    "db:up": "docker compose up -d db",
+    "db:down": "docker compose down",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@playwright/test": "^1.49.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",

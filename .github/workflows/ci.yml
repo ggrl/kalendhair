@@ -26,6 +26,41 @@ jobs:
       - run: npm run verify
       - run: npm audit --audit-level=high
 
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: salon_test
+          POSTGRES_USER: salon
+          # Trust rather than a password, so no credential appears in this file at all -
+          # rules/secrets.md. Safe here and nowhere else: the container is created for
+          # this job, reachable only from it, and destroyed with it.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U salon -d salon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # These prove the rules the database enforces - no overlap for an employee, blocks
+      # included, and the zero-length hole the exclusion constraint alone leaves open. A
+      # mock would only prove the mock agrees with itself, so they need a real Postgres
+      # and cannot run inside `npm run verify`.
+      - run: npm run test:db
+        env:
+          TEST_DATABASE_URL: postgres://salon@127.0.0.1:5432/salon_test
+
   browser:
     runs-on: ubuntu-latest
     timeout-minutes: 15
