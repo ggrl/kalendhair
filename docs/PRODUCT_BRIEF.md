@@ -77,10 +77,11 @@ editing is ever wanted, that is a schema change and a new ruling, not a feature.
 Both hard rules live server-side, because a rule enforced only in the browser is not
 enforced:
 
-- Overlap should be a database constraint rather than a read-then-write check. Two
-  simultaneous saves can both pass a check. Only the database can settle that race. I
-  have not yet confirmed the exact Postgres mechanism and will read it before writing
-  it.
+- Overlap is a database constraint, not a read-then-write check. Two simultaneous saves
+  can both pass a check, and that was demonstrated rather than assumed: without the
+  constraint, two concurrent transactions each counted zero clashes and both inserted,
+  double-booking one stylist. Postgres refuses it via an exclusion constraint. The
+  verified schema, and the zero-length hole that testing exposed, are in ADR-0001.
 - A save carrying a stale version stamp is refused, not merged. This stays even with a
   live board, as the backstop for two people editing one box inside a single polling
   interval.
@@ -179,5 +180,7 @@ rediscovered:
 - **ADR-0004** is accepted for the web board but marked to be revisited before any
   authentication is written, because a planned iOS app puts the shared password on
   personal phones that leave the building.
-- **ADR-0001** rests on an unread claim about what Postgres can enforce. Settle it
-  before the schema is written.
+- **ADR-0001** rested on an unread claim about what Postgres can enforce. That is now
+  settled: read in the documentation and proved against PostgreSQL 17.10, including the
+  concurrent case and a zero-length hole the test exposed. The verified schema is in the
+  ADR.
