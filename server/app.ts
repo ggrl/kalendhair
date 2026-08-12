@@ -16,6 +16,12 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   // Nothing here needs to announce the framework and its presence in a header.
   app.disable('x-powered-by')
 
+  // The built board, served from the same origin as the API so the browser needs no notion
+  // of where the API lives and no CORS header has to exist. Relative to the working
+  // directory, like `migrations/`. Missing simply does not match, which is what `npm run
+  // dev` relies on - Vite serves the front end then and proxies here.
+  app.use(express.static('dist'))
+
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
    * client never has to ask the device what day it is before it can ask for anything.

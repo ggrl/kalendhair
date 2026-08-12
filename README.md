@@ -26,10 +26,15 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | --- | --- |
 | Database schema, with the no-overlap rule enforced by Postgres | done |
 | `GET /api/day` - one day of columns and boxes, with colours assigned | done |
-| The board itself: grid, columns, coloured boxes, grey blocks, notes on click | not started |
-| Navigation: day and week steps, today, date picker, `KW` number | not started |
-| Creating and editing appointments by dragging | not started |
+| The board: 06:00-20:00 grid, a column per employee, coloured boxes, grey blocks, notes on click | done |
+| Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
+| Navigation: date picker, month steps, arrow keys | not started |
+| Live updates, by polling the day on screen | not started |
+| Creating, moving and editing appointments | not started |
 | Authentication | not started, and blocking before real data |
+
+The screen is German. Code, comments and these documents are English - they are for whoever
+maintains it, not for the salon.
 
 **Nothing here is ready for a real customer name.** There is no authentication yet, so the
 server binds to loopback and says so at startup. See
@@ -68,6 +73,11 @@ On a fresh database that answers `{"date":"2026-08-13","today":"...","employees"
 An empty day is the correct answer, not a broken one: there is no seed data and no way to
 add any yet, because the write path does not exist. The database tests are where entries
 and colours are exercised.
+
+The board itself is served from the same address, so `http://127.0.0.1:3000` shows it. On a
+fresh database it will say `Für diesen Tag ist niemand eingeteilt.` until an employee exists.
+While working on the front end, `npm run dev` gives Vite on
+[127.0.0.1:4173](http://127.0.0.1:4173) with hot reload, proxying `/api` to the server above.
 
 `npm run db:down` stops the database. Add `-v` by hand if you want to delete its data.
 

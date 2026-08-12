@@ -1,15 +1,281 @@
 :root {
-  font-family: Sora, Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #222b3c;
-  background: #eef2f4;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  --slot-height: 1.1rem;
+  --ink: #1f2937;
+  --paper: #fdfdfc;
+  --rule-quarter: #ecebe7;
+  --rule-hour: #d6d4ce;
+  --block-grey: #d4d4d4;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--ink);
 }
 
-* { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+* {
+  box-sizing: border-box;
+}
 
-.shell { min-height: 100vh; }
-.hero { background: #222b3c; color: #f8fafc; padding: 4.5rem max(1.25rem, calc((100vw - 980px) / 2)); }
-.hero h1 { margin: .15rem 0 .5rem; font-size: clamp(2.6rem, 6vw, 5rem); letter-spacing: -.06em; }
-.hero p { color: #b9c4d0; font-size: 1.2rem; max-width: 42rem; }
+body {
+  margin: 0;
+  background: var(--paper);
+}
+
+.shell {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 0.75rem;
+}
+
+/* Top bar: date and week in the middle, week steps either side, today below. */
+.topbar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    'prev date next'
+    'today today today';
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding-bottom: 0.75rem;
+}
+
+.topbar__date {
+  grid-area: date;
+  text-align: center;
+}
+
+.topbar__date h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.topbar__week {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  color: #6b7280;
+  letter-spacing: 0.04em;
+}
+
+.topbar__step {
+  padding: 0.5rem 0.9rem;
+  font: inherit;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.topbar__step:first-of-type {
+  grid-area: prev;
+}
+
+.topbar__step:nth-of-type(2) {
+  grid-area: next;
+}
+
+.topbar__today {
+  grid-area: today;
+  justify-self: center;
+  padding: 0.35rem 1.4rem;
+  font: inherit;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.topbar__today:disabled {
+  color: #9ca3af;
+  cursor: default;
+}
+
+.topbar__step:hover,
+.topbar__today:not(:disabled):hover {
+  background: #f3f4f6;
+}
+
+/* The board, flanked by the day steps. */
+.shell__board {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.edge {
+  flex: 0 0 1.75rem;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: #6b7280;
+  background: #f6f6f4;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+.edge:hover {
+  background: #ececea;
+  color: var(--ink);
+}
+
+.board {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.board__heads,
+.board__grid {
+  display: grid;
+}
+
+.board__head {
+  padding: 0.4rem 0.5rem;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid var(--rule-hour);
+  overflow-wrap: anywhere;
+}
+
+.board__grid {
+  position: relative;
+}
+
+.board__hour {
+  padding-right: 0.4rem;
+  font-size: 0.75rem;
+  color: #6b7280;
+  text-align: right;
+  /* Nudged up so the label sits on its line rather than under it. */
+  transform: translateY(-0.4em);
+}
+
+.board__column {
+  border-left: 1px solid var(--rule-hour);
+  background-image:
+    linear-gradient(to bottom, var(--rule-quarter) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--rule-hour) 1px, transparent 1px);
+  background-repeat: repeat-y;
+}
+
+.board__column:last-of-type {
+  border-right: 1px solid var(--rule-hour);
+}
+
+/* A box. Boxes never overlap, because ADR-0001 forbids it in the database, so grid rows
+   are enough and nothing has to share horizontal space. */
+.entry {
+  /* Anchors the notes marker to its own box. Without it the marker positions against
+     .board__grid, which is the nearest positioned ancestor, and lands in the top-right of
+     the whole board - a marker for an appointment in the first column appearing over the
+     last one. Found by looking at the board, not by a test. */
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  overflow: hidden;
+  margin: 1px 2px;
+  padding: 0.1rem 0.3rem;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  text-align: left;
+  border: 1px solid rgb(0 0 0 / 18%);
+  border-radius: 0.25rem;
+}
+
+.entry--appointment {
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.entry--block {
+  color: #4b5563;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--block-grey),
+    var(--block-grey) 5px,
+    #c9c9c9 5px,
+    #c9c9c9 10px
+  );
+}
+
+.entry--unplaceable {
+  color: #7f1d1d;
+  background: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.entry__time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  color: #4b5563;
+}
+
+.entry__customer {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* A 15-minute box is one line tall, so the stacked layout pushed the customer's name out of
+   sight and left a box showing only a time - the appointment was on the board and unreadable.
+   The shortest boxes put the start time and the name on one line instead, and the treatment
+   moves to the tooltip. */
+.entry--compact {
+  flex-direction: row;
+  gap: 0.3rem;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
+.entry--compact .entry__customer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entry__treatment,
+.entry__label {
+  overflow-wrap: anywhere;
+}
+
+/* Notes stay hidden until the box is clicked. When open they may run past the box, which is
+   the point: a 15-minute box cannot hold a sentence. */
+.entry__notes {
+  position: relative;
+  z-index: 2;
+  margin-top: 0.15rem;
+  padding: 0.2rem 0.3rem;
+  white-space: pre-wrap;
+  background: #fffbe8;
+  border: 1px solid #d9c98a;
+  border-radius: 0.2rem;
+}
+
+.entry__notes-marker {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.25rem;
+  font-size: 0.6rem;
+  color: #4b5563;
+}
+
+/* An open note runs past its box, which is the point: a 15-minute box cannot hold a
+   sentence. It also has to win against the boxes below it - every box shares z-index 1, so
+   without this the note is painted over by whatever comes later in the day. */
+.entry--appointment:has(.entry__notes) {
+  z-index: 3;
+  overflow: visible;
+}
+
+.board__empty,
+.board__scale-note,
+.board__orphans,
+.shell__stale {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.board__orphans,
+.shell__stale {
+  padding: 0.4rem 0.6rem;
+  color: #7f1d1d;
+  background: #fee2e2;
+  border-radius: 0.3rem;
+}

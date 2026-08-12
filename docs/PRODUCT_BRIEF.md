@@ -50,6 +50,12 @@ two appointments - the dye sets while somebody else is cut - is visibly one pers
 places. The colour is computed by the server from the whole day, never stored, and grey
 is kept out of the palette. See ADR-0009.
 
+**The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Gesperrt`,
+the date format - is German, because that is the language they work in and `KW` was asked
+for by name. Code, comments, commit messages and these documents stay English: they are for
+whoever maintains the thing, not for the salon. There is no translation mechanism and no
+second language, because there is no second audience.
+
 Navigation surrounds the board rather than sitting inside it. Previous and next day are
 narrow full-height strips pinned to the outer left and right edges: big targets for a
 mouse without stealing width from six columns on a laptop, which is already tight. The
