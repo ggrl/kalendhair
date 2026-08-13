@@ -48,12 +48,21 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
 
   useEffect(() => {
     // Focus lands inside the dialogue, or a keyboard user is left on the board behind it - and on
-    // a field, never on the Sperrzeit box. That box is first in DOM order, so the dialogue used to
-    // hand the keyboard the one control that destroys data: a single Space, the ordinary key for
-    // scrolling, turned an open booking into an unlabelled grey block, and ADR-0008 leaves a block
-    // no room for the customer, the treatment or the notes that were there. Löschen asks before it
-    // does less than that.
-    dialog.current?.querySelector<HTMLElement>('input:not([type="checkbox"]), select, textarea')?.focus()
+    // nothing that changes the entry by being pressed.
+    //
+    // Two goes at this. It was the Sperrzeit box, first in DOM order, which is the one control
+    // that destroys data: one Space - the ordinary key for scrolling - turned an open booking into
+    // an unlabelled grey block, and ADR-0008 leaves a block no room for the customer, the
+    // treatment or the notes. Skipping checkboxes then handed the keyboard the Person select,
+    // where on Windows and Linux a single ArrowDown silently reassigns the stylist on a form whose
+    // Speichern asks nothing.
+    //
+    // So: the customer field, where a stray key types a character somebody can see and delete -
+    // and it is where the hand is going anyway on a new booking. A Sperrzeit has no such field, and
+    // then the dialogue itself takes focus: the title is announced, Tab reaches the controls, and
+    // no key press can change what is about to be saved.
+    const customer = dialog.current?.querySelector<HTMLElement>('input[list]')
+    ;(customer ?? dialog.current)?.focus()
   }, [])
 
   useEffect(() => {
@@ -141,7 +150,16 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
 
   return (
     <div className="modal__backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={`${ids}-title`} ref={dialog}>
+      {/* `tabIndex={-1}` so the dialogue can hold focus itself when there is no customer field to
+          take it - focusable by script, never by Tab. */}
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={`${ids}-title`}
+        tabIndex={-1}
+        ref={dialog}
+      >
         <h2 id={`${ids}-title`}>{editing === null ? 'Neuer Eintrag' : 'Eintrag bearbeiten'}</h2>
 
         <label className="modal__row modal__row--check">

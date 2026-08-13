@@ -1,7 +1,7 @@
 import type { Pool } from 'pg'
 import type { EntryKind } from '../src/calendar/types.js'
 import { isSalonDate } from '../src/calendar/salon-date.js'
-import { whyNotBookable } from '../src/calendar/grid.js'
+import { TIME_TAKEN, whyNotBookable } from '../src/calendar/grid.js'
 
 /**
  * Creating, changing and removing entries.
@@ -110,7 +110,9 @@ interface DatabaseError {
 function refusalFor(error: unknown): Refused | null {
   const database = error as DatabaseError
   if (database.code === '23P01') {
-    return new Refused(409, 'clash', 'Diese Zeit ist bei dieser Person schon belegt.')
+    // The same sentence the browser uses to refuse a drag before sending it: one wording, one
+    // home in `src/calendar/grid.ts`. This is still the authority - the constraint decides.
+    return new Refused(409, 'clash', TIME_TAKEN)
   }
   if (database.code === '23503') {
     return new Refused(400, 'invalid', 'Diese Person gibt es nicht.')

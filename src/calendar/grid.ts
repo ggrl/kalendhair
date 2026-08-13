@@ -59,6 +59,27 @@ export function wallClockFromMinutes(minutes: number): string {
 }
 
 /**
+ * A range of slots as wall clock times, clamped to the board.
+ *
+ * `endSlot` is exclusive, and the clamping is what stops a drag off the top or the bottom of the
+ * grid from proposing a time the server would refuse: dragging above 06:00 or below 20:00 stops
+ * at the edge rather than springing back with a message, because the cursor being past the edge
+ * of the board is not a mistake anybody needs telling about.
+ *
+ * The floor of one slot is here too. A drag that collapses a box to nothing would otherwise
+ * produce `ends_at = starts_at`, which `appointment_positive_duration` refuses.
+ */
+export function rangeFromSlots(startSlot: number, endSlot: number): { startsAt: string; endsAt: string } {
+  const first = minutesSinceMidnight(DAY_STARTS_AT)
+  const start = Math.min(Math.max(startSlot, 0), SLOT_COUNT - 1)
+  const end = Math.min(Math.max(endSlot, start + 1), SLOT_COUNT)
+  return {
+    startsAt: wallClockFromMinutes(first + start * SLOT_MINUTES),
+    endsAt: wallClockFromMinutes(first + end * SLOT_MINUTES),
+  }
+}
+
+/**
  * The quarter-hour slot a click landed on, as a time range one slot long.
  *
  * Clamped so a click on the last row cannot propose an end past the close of the day, which the
@@ -66,10 +87,54 @@ export function wallClockFromMinutes(minutes: number): string {
  * closing time.
  */
 export function slotAt(slot: number): { startsAt: string; endsAt: string } {
-  const first = minutesSinceMidnight(DAY_STARTS_AT)
-  const last = minutesSinceMidnight(DAY_ENDS_AT)
-  const start = Math.min(Math.max(first + slot * SLOT_MINUTES, first), last - SLOT_MINUTES)
-  return { startsAt: wallClockFromMinutes(start), endsAt: wallClockFromMinutes(start + SLOT_MINUTES) }
+  return rangeFromSlots(slot, slot + 1)
+}
+
+/**
+ * One sentence, one home. The browser says this before it sends a drag it can already see is
+ * occupied; the server says the same thing when the exclusion constraint refuses one. Two copies
+ * of the wording would drift apart the first time anybody improved it.
+ */
+export const TIME_TAKEN = 'Diese Zeit ist bei dieser Person schon belegt.'
+
+/** The parts of an entry that decide whether something else fits beside it. */
+interface Booked {
+  id: string
+  employeeId: string
+  startsAt: string
+  endsAt: string
+}
+
+/**
+ * Why a proposed range cannot go where it is being dropped, in German, or null if it can.
+ *
+ * **The authority is the exclusion constraint, not this function.** ADR-0001 puts the no-overlap
+ * rule in Postgres precisely because two saves can both read a clear slot and both write, and
+ * nothing here changes that: every drag is still refused by the database if it slips past this.
+ * What this buys is that a drag onto obviously occupied time costs no round trip and the box
+ * never appears to land somewhere it cannot stay.
+ *
+ * Half-open comparison, exactly as `tsrange(starts_at, ends_at, '[)')` in the constraint:
+ * 11:00-12:00 sits cleanly after 10:00-11:00, and a 15-minute grid is nothing but adjacent
+ * appointments, so inclusive bounds would make every one of them a false clash.
+ */
+export function whyNotFree(
+  booked: readonly Booked[],
+  candidate: { id?: string; employeeId: string; startsAt: string; endsAt: string },
+): string | null {
+  const start = minutesSinceMidnight(candidate.startsAt)
+  const end = minutesSinceMidnight(candidate.endsAt)
+
+  const occupied = booked.some(
+    (entry) =>
+      entry.employeeId === candidate.employeeId &&
+      // An entry never clashes with itself: a resize keeps most of the time it already holds.
+      entry.id !== candidate.id &&
+      minutesSinceMidnight(entry.startsAt) < end &&
+      start < minutesSinceMidnight(entry.endsAt),
+  )
+
+  return occupied ? TIME_TAKEN : null
 }
 
 const WALL_CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/

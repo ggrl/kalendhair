@@ -3,7 +3,7 @@ import type { Day, Entry } from '../calendar/types'
 import { DAY_ENDS_AT, DAY_STARTS_AT } from '../calendar/grid'
 import { addDays, addWeeks, shortGermanDate } from '../calendar/dates'
 import { isSalonDate } from '../calendar/salon-date'
-import { Refused, createEntry, fetchDay, removeEntry } from './api'
+import { Refused, createEntry, fetchDay, removeEntry, updateEntry } from './api'
 import { Board } from './Board'
 import { EntryModal } from './EntryModal'
 import { TopBar } from './TopBar'
@@ -183,6 +183,42 @@ export function App() {
   )
 
   /**
+   * A move or a resize, once the pointer is released. The gesture is the edit: there is no form
+   * and no confirmation, which is the whole point of dragging - and no undo either, which is why
+   * the board refuses a drop it can already see is occupied rather than trying it.
+   *
+   * ADR-0003 still decides the race. The version sent is the one the entry was read at, so a box
+   * somebody else has changed since is refused rather than quietly overwritten.
+   *
+   * `date` arrives from the caller for the same reason the editor captures it: the day on screen
+   * is the day being written to, and reading it later reads whatever has arrived since.
+   */
+  const dragged = useCallback(
+    (
+      entry: Entry,
+      target: { employeeId: string; startsAt: string; endsAt: string },
+      date: string,
+    ) => {
+      void updateEntry(entry.id, entry.version, {
+        employeeId: target.employeeId,
+        kind: entry.kind,
+        date,
+        startsAt: target.startsAt,
+        endsAt: target.endsAt,
+        // Everything the drag did not touch travels back unchanged. A move is a move, not an edit.
+        customer: entry.customer,
+        treatment: entry.treatment,
+        notes: entry.notes,
+      }).then(saved, (error: unknown) => {
+        setNotice(error instanceof Error ? error.message : String(error))
+        // Reload either way: a refusal means the board's copy is not what the database holds.
+        reload()
+      })
+    },
+    [reload, saved],
+  )
+
+  /**
    * ADR-0008: blocking a whole day is one 06:00-20:00 row, so this needs no rule of its own -
    * ticking it on a column that already has bookings is refused by the same constraint that
    * refuses any other clash, and the refusal says so.
@@ -295,7 +331,12 @@ export function App() {
               painted behind the headings and dimmed to 45% itself - the one element saying why
               the board had gone faint. */}
           {loading && <p className="shell__loading">Termine werden geladen …</p>}
-          <div className={loading ? 'shell__fading' : undefined}>
+          {/* `inert` and not only the CSS `pointer-events: none` that was here first. That
+              stopped the mouse and left the keyboard: a review pass tabbed into the dimmed board
+              during a load, pressed Space on a column checkbox, and blocked the whole day that
+              was leaving - the exact bug the dimming was added to close. `inert` takes the whole
+              subtree out of the tab order and out of hit testing in one attribute. */}
+          <div className={loading ? 'shell__fading' : undefined} inert={loading}>
             <Board
               day={day}
               onOpenEntry={(entry) =>
@@ -309,6 +350,8 @@ export function App() {
                 setEditor({ date: day.date, editing: null, draft: { employeeId, startsAt, endsAt } })
               }
               onToggleWholeDay={(employeeId, existing) => toggleWholeDay(employeeId, existing, day.date)}
+              onDragged={(entry, target) => dragged(entry, target, day.date)}
+              onRefused={setNotice}
             />
           </div>
         </div>

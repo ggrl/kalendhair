@@ -1,7 +1,20 @@
-import type { MouseEvent } from 'react'
+import { useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { Day, Entry } from '../calendar/types'
-import { DAY_ENDS_AT, DAY_STARTS_AT, SLOT_COUNT, SLOT_MINUTES, hourLabels, isPlaceable, slotAt } from '../calendar/grid'
+import {
+  DAY_ENDS_AT,
+  DAY_STARTS_AT,
+  SLOT_COUNT,
+  SLOT_MINUTES,
+  hourLabels,
+  isPlaceable,
+  rangeFromSlots,
+  slotAt,
+  whyNotFree,
+} from '../calendar/grid'
 import { EntryBox } from './EntryBox'
+import { previewOf } from './gesture'
+import type { Gesture, Preview } from './gesture'
 
 interface Props {
   day: Day
@@ -9,6 +22,13 @@ interface Props {
   onOpenSlot: (employeeId: string, startsAt: string, endsAt: string) => void
   /** Ticking creates one 06:00-20:00 block; unticking removes the one that is there. */
   onToggleWholeDay: (employeeId: string, existing: Entry | undefined) => void
+  /**
+   * A move or a resize that has been let go of. The entry is the one that was read, version and
+   * all, so ADR-0003 still decides what happens if somebody else changed it in the meantime.
+   */
+  onDragged: (entry: Entry, target: { employeeId: string; startsAt: string; endsAt: string }) => void
+  /** A gesture this board refused before sending it, and the German sentence saying why. */
+  onRefused: (reason: string) => void
 }
 
 interface Undrawn {
@@ -39,8 +59,12 @@ function wholeDayBlock(day: Day, employeeId: string): Entry | undefined {
   )
 }
 
-export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props) {
+export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragged, onRefused }: Props) {
   const columnOf = new Map(day.employees.map((employee, index) => [employee.id, index + 2]))
+
+  const grid = useRef<HTMLDivElement>(null)
+  const columns = useRef<(HTMLDivElement | null)[]>([])
+  const [gesture, setGesture] = useState<Gesture | null>(null)
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
   // entries used to be painted at the same fixed position, hiding each other and any real 06:00
@@ -70,11 +94,171 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props)
   const labels = hourLabels()
   const lastColumn = day.employees.length + 1
 
-  /** Which quarter hour a click landed on, from where it fell inside the column. */
-  function slotFromClick(event: MouseEvent<HTMLDivElement>): number {
-    const box = event.currentTarget.getBoundingClientRect()
-    return Math.floor(((event.clientY - box.top) / box.height) * SLOT_COUNT)
+  /**
+   * Why the gesture cannot be dropped where it is, or null.
+   *
+   * Only occupied time can refuse a gesture. The other half of "is this bookable" - inside the
+   * day, on a quarter hour, not zero length - cannot fail here, because `rangeFromSlots` clamps
+   * every gesture into the window by construction; calling `whyNotBookable` as well was a check
+   * that could only ever return null. The server calls it regardless, on every write.
+   *
+   * This is not the authority either. ADR-0001 leaves that to the exclusion constraint, which
+   * decides again on every write; this is the browser refusing what the server would refuse
+   * anyway, so a mis-drag costs no round trip.
+   */
+  function refusalFor(preview: Preview, range: { startsAt: string; endsAt: string }, held?: Entry): string | null {
+    return whyNotFree(day.entries, { id: held?.id, employeeId: preview.employeeId, ...range })
   }
+
+  /** Which quarter hour a pointer is over, clamped to the board. */
+  function slotFrom(clientY: number): number {
+    const box = grid.current?.getBoundingClientRect()
+    if (box === undefined) return 0
+    const row = Math.floor(((clientY - box.top) / box.height) * SLOT_COUNT)
+    return Math.min(Math.max(row, 0), SLOT_COUNT - 1)
+  }
+
+  /**
+   * Whose column a pointer is over. Measured from the columns themselves rather than by dividing
+   * the grid up, because column one is the time scale and its width is in `rem`.
+   *
+   * Past either end it stays with the outermost column: a drag that wanders onto the day strip is
+   * a drag to that stylist, not a drop into nothing.
+   */
+  function employeeFrom(clientX: number): string | null {
+    const boxes = day.employees.map((employee, index) => ({
+      id: employee.id,
+      box: columns.current[index]?.getBoundingClientRect(),
+    }))
+    const drawn = boxes.filter((column): column is { id: string; box: DOMRect } => column.box !== undefined)
+    if (drawn.length === 0) return null
+
+    const over = drawn.find(({ box }) => clientX >= box.left && clientX < box.right)
+    if (over !== undefined) return over.id
+    return clientX < drawn[0].box.left ? drawn[0].id : drawn[drawn.length - 1].id
+  }
+
+  /** Half a row. Less than this is a hand holding still, not somebody moving an appointment. */
+  function dragStartsAfter(): number {
+    const box = grid.current?.getBoundingClientRect()
+    return box === undefined ? SLOT_MINUTES : box.height / SLOT_COUNT / 2
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
+    // Left button only. A right click belongs to the browser's own menu, and a middle click on a
+    // board that saves on release is nobody's intention.
+    if (event.button !== 0) return
+
+    const target = event.target as HTMLElement
+    const box = target.closest<HTMLElement>('[data-entry-id]')
+    const slot = slotFrom(event.clientY)
+    const held = { date: day.date, fromY: event.clientY, travelled: false }
+
+    if (box !== null) {
+      const entry = drawable.find((candidate) => candidate.id === box.dataset.entryId)
+      if (entry === undefined) return
+      const edge = target.dataset.edge
+      setGesture(
+        edge === 'top' || edge === 'bottom'
+          ? { ...held, kind: 'resize', entry, edge, slot }
+          : { ...held, kind: 'move', entry, employeeId: entry.employeeId, anchorSlot: slot, slot },
+      )
+    } else {
+      const employeeId = employeeFrom(event.clientX)
+      if (employeeId === null) return
+      setGesture({ ...held, kind: 'create', employeeId, anchorSlot: slot, slot })
+    }
+
+    // Capture, so a drag that leaves the grid - or the window - still ends up here rather than
+    // being lost with the box left mid-move.
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
+    if (gesture === null) return
+    const slot = slotFrom(event.clientY)
+    const farEnough = gesture.travelled || Math.abs(event.clientY - gesture.fromY) >= dragStartsAfter()
+
+    if (gesture.kind === 'move') {
+      const employeeId = employeeFrom(event.clientX) ?? gesture.employeeId
+      // Sideways counts on its own: crossing into another column is unmistakably deliberate, and a
+      // column is far wider than any twitch. Only a move can do it - a resize belongs to the
+      // entry's own column, and a range being dragged out stays in the column it started in,
+      // because reaching sideways while deciding how long something takes is not a change of
+      // stylist.
+      const travelled = farEnough || employeeId !== gesture.employeeId
+      if (slot !== gesture.slot || employeeId !== gesture.employeeId || travelled !== gesture.travelled) {
+        setGesture({ ...gesture, slot, employeeId, travelled })
+      }
+      return
+    }
+
+    if (slot !== gesture.slot || farEnough !== gesture.travelled) {
+      setGesture({ ...gesture, slot, travelled: farEnough })
+    }
+  }
+
+  function onPointerUp(): void {
+    if (gesture === null) return
+    const held = gesture
+    setGesture(null)
+
+    // The board went to another day while the pointer was down - a mouse's back button needs no
+    // pointer event to do it. Whatever this gesture was aiming at is no longer on screen, columns
+    // included, so it is abandoned rather than applied to a day nobody was looking at.
+    if (held.date !== day.date) {
+      onRefused('Der angezeigte Tag hat sich geändert. Es wurde nichts verschoben.')
+      return
+    }
+
+    // A press that never travelled is a click, whatever row line it happened to sit on. On a box
+    // that opens the form; on empty grid it proposes the quarter hour that was pressed.
+    //
+    // Opened from here rather than left to the box's own click handler, because capturing the
+    // pointer retargets the click that follows to the capturing element - the grid - so a box
+    // pressed with a mouse never sees one. The handler on the box stays for the keyboard, where
+    // Enter produces a click and no pointer events at all.
+    if (!held.travelled) {
+      if (held.kind === 'create') {
+        const one = slotAt(held.anchorSlot)
+        onOpenSlot(held.employeeId, one.startsAt, one.endsAt)
+      } else {
+        onOpenEntry(held.entry)
+      }
+      return
+    }
+
+    const preview = previewOf(held)
+    const range = rangeFromSlots(preview.startSlot, preview.endSlot)
+    // Dragged out and back again: the brief's own awkward case. Nothing changed, so nothing is
+    // written and no form opens - the gesture was already answered by putting it back.
+    if (!preview.changed) return
+
+    const reason = refusalFor(preview, range, held.kind === 'create' ? undefined : held.entry)
+    if (reason !== null) {
+      // The box springs back by itself: clearing the gesture draws it at the time it still has.
+      // A proposal that was painted red is refused here too, rather than opening a form that
+      // would only be refused on Speichern - which is the whole point of saying so before the
+      // release.
+      onRefused(reason)
+      return
+    }
+
+    if (held.kind === 'create') {
+      // Still nothing written. The range is a proposal, and the form is where it becomes an entry.
+      onOpenSlot(preview.employeeId, range.startsAt, range.endsAt)
+      return
+    }
+
+    onDragged(held.entry, { employeeId: preview.employeeId, startsAt: range.startsAt, endsAt: range.endsAt })
+  }
+
+  const preview = gesture === null || !gesture.travelled ? null : previewOf(gesture)
+  const previewRange = preview === null ? null : rangeFromSlots(preview.startSlot, preview.endSlot)
+  const previewRefused =
+    preview === null || previewRange === null
+      ? false
+      : refusalFor(preview, previewRange, gesture?.kind === 'create' ? undefined : gesture?.entry) !== null
 
   return (
     <div className="board">
@@ -118,9 +302,27 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props)
 
       <div
         className="board__grid"
+        ref={grid}
         style={{
           gridTemplateColumns: `4rem repeat(${day.employees.length}, 1fr)`,
           gridTemplateRows: `repeat(${SLOT_COUNT}, var(--slot-height))`,
+        }}
+        // One set of handlers for the whole grid, not one per column, because a move crosses
+        // columns and a gesture that changes owner halfway through cannot be tracked by the thing
+        // it started on.
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        // A cancelled pointer writes nothing, and says so if there was anything to write. The
+        // board going inert while a day loads is one way to get here - `inert` drops pointer
+        // capture, so a day arriving under a held pointer ends the gesture before the release
+        // does - and an operating system gesture is another. Either way the box goes back to the
+        // time it still has, and silence would leave somebody believing they had moved it.
+        onPointerCancel={() => {
+          if (gesture?.travelled === true) {
+            onRefused('Die Bewegung wurde abgebrochen. Es wurde nichts verschoben.')
+          }
+          setGesture(null)
         }}
       >
         {labels.map((label, index) => {
@@ -143,6 +345,9 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props)
           <div
             key={employee.id}
             className="board__column"
+            ref={(element) => {
+              columns.current[index] = element
+            }}
             style={{
               gridColumn: index + 2,
               gridRow: `1 / span ${SLOT_COUNT}`,
@@ -151,24 +356,45 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay }: Props)
               borderRight: index + 2 === lastColumn ? '1px solid var(--rule-hour)' : undefined,
               backgroundSize: `100% var(--slot-height), 100% calc(var(--slot-height) * ${slotsPerHour})`,
             }}
-            // Clicking empty grid proposes that quarter hour. Dragging out a range comes later;
-            // until then this is how a booking starts, and the form lets the end time be typed.
-            onClick={(event) => {
-              const { startsAt, endsAt } = slotAt(slotFromClick(event))
-              onOpenSlot(employee.id, startsAt, endsAt)
-            }}
             aria-label={`Freie Zeit bei ${employee.name}`}
           />
         ))}
 
-        {drawable.map((entry) => (
-          <EntryBox
-            key={entry.id}
-            entry={entry}
-            column={columnOf.get(entry.employeeId) as number}
-            onOpen={() => onOpenEntry(entry)}
-          />
-        ))}
+        {/* What a drag on empty grid is proposing. Not an entry: nothing exists until the form
+            is saved, so this is drawn as an outline and reads out the times it would ask for. */}
+        {preview !== null && previewRange !== null && gesture?.kind === 'create' && (
+          <div
+            className={`board__proposal${previewRefused ? ' board__proposal--refused' : ''}`}
+            style={{
+              gridColumn: columnOf.get(preview.employeeId) as number,
+              gridRow: `${preview.startSlot + 1} / span ${preview.endSlot - preview.startSlot}`,
+            }}
+            aria-hidden="true"
+          >
+            {previewRange.startsAt}–{previewRange.endsAt}
+          </div>
+        )}
+
+        {drawable.map((entry) => {
+          const held =
+            preview !== null && gesture !== null && gesture.kind !== 'create' && gesture.entry.id === entry.id
+              ? preview
+              : null
+
+          return (
+            <EntryBox
+              key={entry.id}
+              entry={entry}
+              column={columnOf.get(held?.employeeId ?? entry.employeeId) as number}
+              drag={
+                held === null
+                  ? undefined
+                  : { startSlot: held.startSlot, endSlot: held.endSlot, refused: previewRefused }
+              }
+              onOpen={() => onOpenEntry(entry)}
+            />
+          )
+        })}
       </div>
     </div>
   )

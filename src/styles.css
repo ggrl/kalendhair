@@ -138,11 +138,10 @@ body {
    layout readable, which is the intended "provisional" reading. Do not dim harder. */
 .shell__fading {
   opacity: 0.45;
-  /* And it takes no clicks while it is being replaced. Dimmed but live, it accepted them against
-     the day that was leaving: a whole-day tick landed on the day on screen, the arriving day then
-     showed the box unticked, and the second tick blocked that day too - two days blocked, one of
-     them never chosen. Nothing here scrolls on its own, so the page still scrolls under it. */
-  pointer-events: none;
+  /* The board takes nothing at all while it is being replaced: `inert` in App.tsx does that, for
+     the keyboard as well as the pointer. This rule only dims. It said `pointer-events: none` at
+     first, which stopped the mouse and left Tab and Space working - a review pass blocked a whole
+     day that way, which is the bug the dimming exists to close. */
 }
 
 .shell__loading {
@@ -261,9 +260,76 @@ body {
   border-radius: 0.25rem;
 }
 
-/* Only a box with a note can be opened, so only that one looks clickable. */
-.entry--has-notes {
-  cursor: pointer;
+/* Every box can be picked up and every box opens on a click, so every box says so. `grab` rather
+   than `pointer`: a press here is as likely to move the appointment as to open it. The old rule
+   put `pointer` on notes-carrying boxes only, from when a box with no note did nothing at all. */
+.entry {
+  cursor: grab;
+}
+
+.entry--dragging {
+  /* Above its neighbours while it travels over them, and above the grid lines. */
+  z-index: 3;
+  cursor: grabbing;
+  opacity: 0.9;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+}
+
+/* The drop will not be taken. Said before the release rather than after it, because the box
+   springing back with a sentence is a worse way to learn the slot was occupied.
+
+   Thinner than a travelling box, and deliberately so: at 0.9 the box being dragged hid the
+   appointment it was refusing to land on, which is the one thing worth seeing at that moment.
+   Found in a screenshot, not in a test - no assertion measures what is behind something. */
+.entry--refused {
+  cursor: not-allowed;
+  opacity: 0.55;
+  outline: 2px solid var(--alert-ink);
+  outline-offset: -2px;
+}
+
+/* The two resize edges. A share of the box rather than a fixed height: one 15-minute row is
+   17.6px, so two 6px handles would leave nothing in the middle to grab for a move. */
+.entry__grip {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 25%;
+  min-height: 3px;
+  max-height: 6px;
+  cursor: ns-resize;
+}
+
+.entry__grip--top {
+  top: 0;
+}
+
+.entry__grip--bottom {
+  bottom: 0;
+}
+
+/* A range being dragged out on empty grid. Deliberately not drawn as an entry, because nothing
+   exists yet: the form still has to be filled in and saved. */
+.board__proposal {
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1px 2px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: rgb(31 41 55 / 8%);
+  border: 1px dashed rgb(31 41 55 / 55%);
+  border-radius: 0.25rem;
+  /* It follows the pointer; it must never be what the pointer is over. */
+  pointer-events: none;
+}
+
+.board__proposal--refused {
+  color: var(--alert-ink);
+  background: rgb(153 27 27 / 10%);
+  border-color: var(--alert-ink);
 }
 
 .entry--block {
@@ -453,9 +519,15 @@ body {
   outline-offset: 1px;
 }
 
-/* Empty grid is clickable, so it should say so under the pointer. */
+/* Empty grid is clickable and draggable, so it should say so under the pointer. */
 .board__column {
   cursor: crosshair;
+}
+
+/* Dragging across boxes and hour labels would otherwise select their text, and a half-highlighted
+   board looks broken. Nothing here is worth copying: the times are on the paper page too. */
+.board__grid {
+  user-select: none;
 }
 
 .shell__notice {
