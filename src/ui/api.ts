@@ -1,4 +1,5 @@
-import type { Day, EntryKind } from '../calendar/types'
+import type { Day, EntryKind, StaffMember } from '../calendar/types'
+import { PIN_HEADER } from '../calendar/types'
 
 /**
  * The browser's only way to the data. ADR-0006: the server is the only door, so everything
@@ -151,6 +152,75 @@ async function messageFrom(response: Response): Promise<string> {
     // Not JSON. The status is still the truth about what happened.
   }
   return `Server antwortete mit Status ${response.status}`
+}
+
+/**
+ * Why a settings request was refused when the PIN was the reason.
+ *
+ * Told apart from `Unauthenticated` because the answer differs: an ended session means the login
+ * screen, and a wrong PIN means the PIN prompt. Answering both the same way would log somebody
+ * out of the board for mistyping a digit.
+ */
+export class PinRefused extends Error {}
+
+/**
+ * Every settings request, with the PIN in the header the server reads it from.
+ *
+ * The PIN is passed in rather than kept here, because the screen holds it for exactly as long as
+ * it is open and nothing else should be able to reach it. ADR-0017: it is asked for again every
+ * time.
+ */
+async function settings(pin: string, path: string, init: RequestInit = {}): Promise<Response> {
+  const response = await fetch(`/api/settings${path}`, {
+    ...init,
+    headers: {
+      ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
+      ...init.headers,
+      // Last, so no future caller can drop the PIN by passing headers of its own.
+      [PIN_HEADER]: pin,
+    },
+  })
+
+  if (response.status === 401) throw new Unauthenticated('Bitte anmelden.')
+  if (response.status === 403) throw new PinRefused(await messageFrom(response))
+  if (!response.ok) throw new Error(await messageFrom(response))
+
+  return response
+}
+
+/** Opens the screen, and nothing else. A wrong PIN is the only thing this can say. */
+export async function unlockSettings(pin: string): Promise<void> {
+  await settings(pin, '/unlock', { method: 'POST' })
+}
+
+export async function fetchStaff(pin: string): Promise<StaffMember[]> {
+  return (await (await settings(pin, '/staff')).json()) as StaffMember[]
+}
+
+export async function addStaff(pin: string, name: string): Promise<void> {
+  await settings(pin, '/staff', { method: 'POST', body: JSON.stringify({ name }) })
+}
+
+/** A rename, or a change of whether somebody is on the board. ADR-0012 decides what that shows. */
+export async function updateStaff(pin: string, id: string, change: { name?: string; active?: boolean }): Promise<void> {
+  await settings(pin, `/staff/${id}`, { method: 'PATCH', body: JSON.stringify(change) })
+}
+
+export async function moveStaff(pin: string, id: string, direction: 'up' | 'down'): Promise<void> {
+  await settings(pin, `/staff/${id}/move`, { method: 'POST', body: JSON.stringify({ direction }) })
+}
+
+export async function removeStaff(pin: string, id: string): Promise<void> {
+  await settings(pin, `/staff/${id}`, { method: 'DELETE' })
+}
+
+/** ADR-0017: this ends every session in the salon, this one included. */
+export async function changePassword(pin: string, password: string): Promise<void> {
+  await settings(pin, '/password', { method: 'POST', body: JSON.stringify({ password }) })
+}
+
+export async function changePin(pin: string, newPin: string): Promise<void> {
+  await settings(pin, '/pin', { method: 'POST', body: JSON.stringify({ pin: newPin }) })
 }
 
 /**

@@ -34,7 +34,8 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
-| A settings screen for staff, hours and credentials, behind the PIN | not started - designed in ADR-0018 |
+| A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
+| The salon's core hours, editable from that screen instead of hardcoded | not started - the rest of ADR-0018 |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
@@ -99,11 +100,10 @@ curl -b cookies.txt 'http://127.0.0.1:3000/api/day?date=2026-08-13'
 ```
 
 On a fresh database that answers `{"date":"2026-08-13","today":"...","employees":[],"entries":[]}`.
-An empty day is the correct answer, not a broken one: there is no seed data, and staff are the
-one thing the application still cannot create. The board needs at least one employee row before
-it can show anything, and today that is an `INSERT` by hand; appointments themselves can be made
-in the form as soon as a column exists. The database tests exercise entries and colours without
-any of that.
+An empty day is the correct answer, not a broken one: there is no seed data. The board needs at
+least one employee before it can show anything, and since 2026-08-13 the salon can add one
+itself - `Einstellungen` in the top bar, behind the PIN. The database tests exercise entries and
+colours without any of that.
 
 The board itself is served from the same address, so `http://127.0.0.1:3000` shows it: the
 login screen first, then, on a fresh database, `Für diesen Tag ist niemand eingeteilt.` until an
@@ -165,7 +165,7 @@ re-decide.
 | [0015](docs/adr/ADR-0015-core-hours-shade-the-board-and-refuse-nothing.md) | Core hours shade the board and refuse nothing |
 | [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
 | [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - built, except the PIN check, which has nothing to guard yet |
-| [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - **not yet built** |
+| [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - staff and credentials built, hours not |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

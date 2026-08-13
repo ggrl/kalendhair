@@ -67,6 +67,15 @@ changes.
   desk, and they all need the new password. That is what makes it useful when somebody leaves.
 - **The PIN is convenience, recorded as such.** If it ever needs to be a real boundary, that is a
   lockout and probably per-person accounts, which is a new ruling and a bigger one.
+- **Guessing the PIN also slows the building down, which this ruling did not say.** Found by a
+  security pass when the settings screen was built: each guess is a scrypt derive on Node's
+  four-thread pool, and `express.static` uses the same pool. Two hundred guesses in flight from
+  one logged-in console took asset delivery from 27ms to 1218ms and covered all ten thousand
+  PINs in 65 seconds. The board itself keeps working - Postgres runs on sockets, not that pool -
+  but anybody loading the page during that minute waits. Accepted on the same grounds as the
+  rest: it needs a valid session, so it is a colleague, and this ADR already gave up on stopping
+  a colleague who is determined. It is written down because "no lockout" was decided about
+  guessing, not about the machine, and a future reader deserves both halves.
 - **`.env.example` gains four names with no values**, and the startup check gains four reasons to
   refuse. A missing secret stopping the server is the behaviour that already exists for the
   database password.

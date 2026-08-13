@@ -32,7 +32,12 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
     `SELECT e.id, e.name
        FROM employee e
       WHERE e.active
-      ORDER BY e.position, e.name`,
+      -- Ties break on the id and never on the name. ADR-0002 chose position over the name
+      -- for column order precisely so that renaming somebody does not move them, and with the
+      -- name as the tiebreaker that promise held only while every position was distinct - which
+      -- nothing enforces. A review pass renamed the middle of three rows sharing a position and
+      -- watched her column move on every day of the board.
+      ORDER BY e.position, e.id`,
   )
 
   // Joined to the same condition, not filtered afterwards, because an entry whose column is not

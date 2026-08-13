@@ -7,14 +7,19 @@ import { Refused, createEntry, parseEntryInput, removeEntry, updateEntry } from 
 import { isSuggestable, suggest } from './suggestions.js'
 import {
   currentVersion,
+  pinMatches,
   replaceCredentials,
+  replacePassword,
+  replacePin,
   secretMatches,
   versionForPassword,
   whyPasswordUnusable,
   whyPinUnusable,
 } from './credentials.js'
+import { addStaff, moveStaff, readStaff, removeStaff, updateStaff } from './staff.js'
 import { SESSION_COOKIE, SESSION_LIFETIME_MS, issueSession, readSession, sessionCookieFrom, shouldRefresh } from './session.js'
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
+import { PIN_HEADER } from '../src/calendar/types.js'
 
 /** What the HTTP surface needs. The connection string and the bind address are startup's business. */
 export interface AppConfig extends Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'cookieSecure'> {
@@ -135,6 +140,100 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    * data in it, and it has to load for anybody to reach the login screen at all.
    */
   app.use('/api', requireSession(pool, config))
+
+  /**
+   * And everything under `/api/settings` needs the PIN as well. ADR-0017: it sits behind a valid
+   * session, so it is not the boundary between the salon and the internet - it is the boundary
+   * between using the board and changing it.
+   *
+   * In a header rather than a body, so that one guard covers the reads too and no PIN is ever
+   * spelled into a URL, where it would land in every access log the request passes through. A
+   * custom header has a second effect worth naming: a cross-site form post cannot set one, so
+   * these routes are out of reach of the request shape SameSite=Lax still allows.
+   *
+   * The PIN is checked on every settings request, not exchanged for anything. The owner chose to
+   * be asked each time the screen is opened, and a screen that holds no ticket cannot leave one
+   * lying around on the front desk machine.
+   */
+  app.use('/api/settings', requirePin(pool))
+
+  /**
+   * Nothing but the PIN check, for opening the screen.
+   *
+   * The screen needs an answer before it draws anything, and "fetch the staff list and see if it
+   * fails" would put a refusal in the place where a prompt belongs.
+   */
+  app.post('/api/settings/unlock', (_request, response) => {
+    response.status(204).end()
+  })
+
+  /** The staff list the salon manages: everybody, including the people not on the board. */
+  app.get('/api/settings/staff', async (_request, response) => {
+    response.json(await readStaff(pool))
+  })
+
+  app.post('/api/settings/staff', body, async (request, response) => {
+    response.status(201).json(await addStaff(pool, stringField(request.body, 'name') ?? ''))
+  })
+
+  /** A rename, or a change of whether somebody is on the board at all. ADR-0012 decides the rest. */
+  app.patch('/api/settings/staff/:id', body, async (request, response) => {
+    const name = stringField(request.body, 'name')
+    const active = booleanField(request.body, 'active')
+
+    if (name === null && active === null) {
+      throw new Refused(400, 'invalid', 'Es wurde nichts geändert.')
+    }
+
+    await updateStaff(pool, request.params.id, {
+      name: name ?? undefined,
+      active: active ?? undefined,
+    })
+    response.status(204).end()
+  })
+
+  /** One step up or down the column order. ADR-0018: buttons, not a second drag implementation. */
+  app.post('/api/settings/staff/:id/move', body, async (request, response) => {
+    const direction = stringField(request.body, 'direction')
+    if (direction !== 'up' && direction !== 'down') {
+      throw new Refused(400, 'invalid', 'Es geht nur nach oben oder nach unten.')
+    }
+
+    await moveStaff(pool, request.params.id, direction)
+    response.status(204).end()
+  })
+
+  /** ADR-0018's narrow exception to ADR-0002, refused by the foreign key for anybody with history. */
+  app.delete('/api/settings/staff/:id', async (request, response) => {
+    await removeStaff(pool, request.params.id)
+    response.status(204).end()
+  })
+
+  /**
+   * A new salon password, which ends every session in the salon including this one. ADR-0017.
+   *
+   * Answered with 204 and nothing else. The client's own next request is refused, which is how
+   * it finds out - the same path as any other expired session, rather than a second mechanism
+   * that only this screen knows about.
+   */
+  app.post('/api/settings/password', body, async (request, response) => {
+    const password = stringField(request.body, 'password') ?? ''
+    const unusable = whyPasswordUnusable(password)
+    if (unusable !== null) throw new Refused(400, 'invalid', unusable)
+
+    await replacePassword(pool, password)
+    response.status(204).end()
+  })
+
+  /** A new PIN, which ends nothing: no session was ever bought with one. */
+  app.post('/api/settings/pin', body, async (request, response) => {
+    const pin = stringField(request.body, 'pin') ?? ''
+    const unusable = whyPinUnusable(pin)
+    if (unusable !== null) throw new Refused(400, 'invalid', unusable)
+
+    await replacePin(pool, pin)
+    response.status(204).end()
+  })
 
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
@@ -260,6 +359,26 @@ function requireSession(pool: Pool, config: AppConfig): RequestHandler {
   }
 }
 
+/**
+ * Refuses every settings request that does not carry the PIN.
+ *
+ * 403 and not 401: the difference matters to the client, because a session that has ended sends
+ * somebody to the login screen and a wrong PIN sends them back to the PIN prompt. Answering both
+ * with 401 would have the settings screen log people out for a mistyped digit.
+ */
+function requirePin(pool: Pool): RequestHandler {
+  return async (request, response, next) => {
+    const pin = request.header(PIN_HEADER)
+
+    if (pin === undefined || !(await pinMatches(pool, pin))) {
+      response.status(403).json({ error: 'Die PIN stimmt nicht.' })
+      return
+    }
+
+    next()
+  }
+}
+
 /** The one place a session cookie is written, so its attributes cannot drift apart. */
 function setSession(response: express.Response, config: AppConfig, version: number): void {
   response.cookie(SESSION_COOKIE, issueSession(config.sessionSecret, version, Date.now()), {
@@ -323,6 +442,13 @@ function stringField(body: unknown, name: string): string | null {
   if (typeof body !== 'object' || body === null) return null
   const value = (body as Record<string, unknown>)[name]
   return typeof value === 'string' ? value : null
+}
+
+/** The same for a flag, where null means "not mentioned" and is different from false. */
+function booleanField(body: unknown, name: string): boolean | null {
+  if (typeof body !== 'object' || body === null) return null
+  const value = (body as Record<string, unknown>)[name]
+  return typeof value === 'boolean' ? value : null
 }
 
 /** A version from a request body or query string, or a refusal. Never a guess. */

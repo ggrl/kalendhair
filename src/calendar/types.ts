@@ -2,6 +2,15 @@
 // imports nothing itself - the two sides resolve modules differently and a shared file
 // with its own imports would have to please both.
 
+/**
+ * Where the PIN travels on a settings request. ADR-0017 and ADR-0018.
+ *
+ * A header, so that one guard on the server covers the reads as well as the writes and no PIN is
+ * ever spelled into a URL, where every access log on the way would keep a copy. Named here
+ * because both sides have to agree on it, and a string typed twice is a rule with two homes.
+ */
+export const PIN_HEADER = 'x-salon-pin'
+
 /** A calendar date in the salon's own timezone, as `YYYY-MM-DD`. Never an instant. */
 export type SalonDate = string
 
@@ -13,6 +22,23 @@ export type EntryKind = 'appointment' | 'block'
 export interface Employee {
   id: string
   name: string
+}
+
+/**
+ * One row of the staff list the settings screen manages: ADR-0018.
+ *
+ * More than the board's `Employee` on purpose. The board draws the people who are on it and needs
+ * nothing else; this screen is where somebody who is off it can be brought back, so it has to
+ * carry the state the board filters on.
+ */
+export interface StaffMember extends Employee {
+  active: boolean
+  /**
+   * Whether this row may be deleted, which is true only for somebody who has never held an entry.
+   * ADR-0018's narrow exception to ADR-0002. The foreign key is the authority and refuses either
+   * way; this is what stops the screen offering a button that could only ever fail.
+   */
+  deletable: boolean
 }
 
 /**
