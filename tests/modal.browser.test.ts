@@ -9,6 +9,7 @@ import type { Day } from '../src/calendar/types.js'
 const MARCO = '11111111-1111-1111-1111-111111111111'
 const JANA = '22222222-2222-2222-2222-222222222222'
 const TODAY = '2026-08-13'
+const YESTERDAY = '2026-08-12'
 
 interface Recorded {
   method: string
@@ -86,6 +87,38 @@ async function stub(
       return
     }
     await route.fulfill({ status: 201, json: { id: 'new' } })
+  })
+
+  return seen
+}
+
+/**
+ * Like `stub`, but answers whichever date is asked for instead of always the same day, because
+ * these tests turn on which day is on screen. Anna exists on TODAY only. `slowFrom` makes that
+ * numbered day request onwards take two seconds, which is the window the board spends dimmed.
+ */
+async function stubDays(page: Page, slowFrom = Number.POSITIVE_INFINITY): Promise<Recorded[]> {
+  const seen: Recorded[] = []
+  let asks = 0
+
+  await page.route('**/api/suggestions*', async (route) => {
+    await route.fulfill({ json: [] })
+  })
+
+  await page.route('**/api/day*', async (route) => {
+    asks += 1
+    if (asks >= slowFrom) await new Promise((resolve) => setTimeout(resolve, 2000))
+    const asked = new URL(route.request().url()).searchParams.get('date') ?? TODAY
+    await route.fulfill({ json: { ...dayWith(asked === TODAY ? [ANNA] : []), date: asked } })
+  })
+
+  await page.route('**/api/entries**', async (route) => {
+    seen.push({
+      method: route.request().method(),
+      url: route.request().url(),
+      body: route.request().postDataJSON(),
+    })
+    await route.fulfill({ status: 200, json: { version: 4 } })
   })
 
   return seen
@@ -321,6 +354,65 @@ test('escape and the backdrop both close the form without saving', async ({ page
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   expect(seen).toHaveLength(0)
+})
+
+test('a day arriving under the form does not take the save with it', async ({ page }) => {
+  // The form saves to the day it was opened on. Reading the loaded day at save time meant Back -
+  // or a two-finger swipe - moved the open appointment to the previous day: not stale, not a
+  // clash, so nothing on the server refuses it, and the form never showed a date to give it away.
+  const seen = await stubDays(page)
+  await page.goto(`/?date=${YESTERDAY}`)
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+
+  await page.goBack()
+  // The form is still open over a board that has moved to another day. That is the situation.
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Speichern' }).click()
+
+  expect(seen).toHaveLength(1)
+  expect(seen[0].method).toBe('PATCH')
+  expect(seen[0].body).toMatchObject({ date: TODAY, version: 3 })
+})
+
+test('the board takes no clicks while the next day is on its way', async ({ page }) => {
+  // The dimmed board used to be live. A whole-day tick then landed on the day that was leaving,
+  // the arriving day showed the box unticked, and the second tick blocked that day too.
+  const seen = await stubDays(page, 2)
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.locator('.shell__fading')).toBeVisible()
+
+  // page.mouse, not click(): clicking through the API waits for the element to be hittable, which
+  // is the very thing under test.
+  const box = (await page.getByRole('checkbox', { name: /Ganzen Tag für Marco/ }).boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+
+  const column = (await page.locator('.board__column').first().boundingBox())!
+  await page.mouse.click(column.x + 40, column.y + 8)
+
+  expect(seen).toHaveLength(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+})
+
+test('the keyboard is never handed the Sperrzeit box', async ({ page }) => {
+  // It is first in DOM order and it is the one control that destroys data: ADR-0008 leaves a block
+  // no room for a customer, a treatment or the notes, and there is no undo.
+  await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await expect(page.getByLabel(/Sperrzeit/)).not.toBeFocused()
+
+  // Space, the ordinary key for scrolling a page, and the backdrop scrolls.
+  await page.keyboard.press('Space')
+
+  await expect(page.getByLabel(/Sperrzeit/)).not.toBeChecked()
+  await expect(page.getByLabel('Kundin / Kunde')).toHaveValue('Anna Schmidt')
+  await expect(page.getByLabel('Notizen')).toHaveValue('Reagiert auf Ammoniak')
 })
 
 test('typing a name offers what has been typed before', async ({ page }) => {
