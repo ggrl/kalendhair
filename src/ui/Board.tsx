@@ -10,8 +10,10 @@ import {
   isPlaceable,
   rangeFromSlots,
   slotAt,
+  slotFromWallClock,
   whyNotFree,
 } from '../calendar/grid'
+import { coreHoursOn } from '../calendar/opening'
 import { EntryBox } from './EntryBox'
 import { previewOf } from './gesture'
 import type { Gesture, Preview } from './gesture'
@@ -46,6 +48,30 @@ function undrawnReason(entry: Entry, hasColumn: boolean): string | null {
     return 'die Zeit liegt außerhalb von 06:00–20:00 oder nicht auf einer Viertelstunde'
   }
   return null
+}
+
+/**
+ * The stretches of the day the salon is not normally working, as grid rows.
+ *
+ * Shading only: ADR-0015. Nothing here refuses a booking, and `grid.ts` still owns the bookable
+ * window - 06:00 to 20:00, every day, for everybody. A closed day comes back as one band covering
+ * the board.
+ *
+ * The slots are clamped because `CORE_HOURS` is a hand-edited constant: hours reaching outside the
+ * bookable window would otherwise ask the grid for a negative row or one past its last, which the
+ * browser answers by dropping the element out of the grid entirely.
+ */
+function closedBands(date: string): { startSlot: number; endSlot: number }[] {
+  const core = coreHoursOn(date)
+  if (core === null) return [{ startSlot: 0, endSlot: SLOT_COUNT }]
+
+  const opens = Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT)
+  const closes = Math.min(Math.max(slotFromWallClock(core.to), 0), SLOT_COUNT)
+
+  return [
+    { startSlot: 0, endSlot: opens },
+    { startSlot: closes, endSlot: SLOT_COUNT },
+  ].filter((band) => band.endSlot > band.startSlot)
 }
 
 /** The one block that covers the whole bookable day, if this employee has one. */
@@ -344,6 +370,21 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
             </div>
           )
         })}
+
+        {/* Behind everything else, and never in the way of a pointer: the hours the salon does not
+            normally work, so the ordinary working day is the white part. It stops at column 2 so
+            the hour scale stays plain. */}
+        {closedBands(day.date).map((band) => (
+          <div
+            key={band.startSlot}
+            className="board__closed"
+            style={{
+              gridColumn: `2 / span ${day.employees.length}`,
+              gridRow: `${band.startSlot + 1} / span ${band.endSlot - band.startSlot}`,
+            }}
+            aria-hidden="true"
+          />
+        ))}
 
         {day.employees.map((employee, index) => (
           <div

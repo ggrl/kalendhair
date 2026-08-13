@@ -71,7 +71,13 @@ reversible. Week numbers are ISO 8601, whose year is not always the year in the 
 ADR-0010.
 
 Landing on a day the salon is shut shows an empty board, exactly as flipping the paper to
-a Sunday does. There is no concept of opening days and this keeps it that way.
+a Sunday does. Nothing about opening hours refuses a booking - the full 06:00-20:00 stays
+bookable every day of the week, which is the half of this line that still holds.
+
+What changed on 2026-08-13, by ADR-0015: the board now *draws* the salon's core hours. Tuesday
+to Friday 09:00-18:00 and Saturday 08:00-13:30 stay white; everything else, and all of Sunday
+and Monday, is shaded light red. It is shading and not a rule, it takes no clicks, and the
+sentence that used to say there is no concept of opening days is therefore no longer true.
 
 A checkbox in the same modal makes the row a grey block instead of an appointment:
 time nobody may be booked into, with no customer and no treatment. It may carry an optional

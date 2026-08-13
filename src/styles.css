@@ -237,6 +237,18 @@ body {
   background-repeat: repeat-y;
 }
 
+/* The hours the salon does not normally work: ADR-0015. Translucent rather than a flat fill, so
+   the quarter-hour and hour rules still show through it - the grid has to stay readable at 07:00,
+   because appointments outside these hours are perfectly legal and do happen.
+
+   Below every box and behind the pointer. It says "unusual", not "forbidden": nothing here refuses
+   a booking, and the only thing that does is the exclusion constraint. */
+.board__closed {
+  z-index: 0;
+  background: rgb(220 38 38 / 7%);
+  pointer-events: none;
+}
+
 /* A box. Boxes never overlap, because ADR-0001 forbids it in the database, so grid rows are
    enough and nothing has to share horizontal space. */
 .entry {
