@@ -6,8 +6,12 @@ import {
   SLOT_MINUTES,
   hourLabels,
   isPlaceable,
+  TIME_TAKEN,
   whyNotBookable,
+  whyNotFree,
   minutesSinceMidnight,
+  rangeFromSlots,
+  slotAt,
   slotFromWallClock,
 } from '../src/calendar/grid.js'
 
@@ -125,5 +129,67 @@ describe('whyNotBookable', () => {
     // 13:07 to 12:07 is both backwards and off the quarter hour. Being told it is backwards is
     // more use than being told about the grid.
     expect(whyNotBookable('13:07', '12:07')).toMatch(/Ende muss nach dem Beginn/)
+  })
+})
+
+describe('a range dragged out on the grid', () => {
+  it('turns slots into wall clock times', () => {
+    // Slot 0 is 06:00. Sixteen quarter hours later is 10:00.
+    expect(rangeFromSlots(16, 20)).toEqual({ startsAt: '10:00', endsAt: '11:00' })
+  })
+
+  it('clamps a drag that runs off either end of the board', () => {
+    // Dragging above 06:00 or below 20:00 stops at the edge. The cursor being past the end of the
+    // board is not a mistake worth a message.
+    expect(rangeFromSlots(-8, 4)).toEqual({ startsAt: '06:00', endsAt: '07:00' })
+    expect(rangeFromSlots(52, 60)).toEqual({ startsAt: '19:00', endsAt: '20:00' })
+  })
+
+  it('never collapses to nothing, whichever way the drag went', () => {
+    // `appointment_positive_duration` refuses a zero-length entry, and the grid cannot draw one.
+    expect(rangeFromSlots(16, 16)).toEqual({ startsAt: '10:00', endsAt: '10:15' })
+    expect(rangeFromSlots(16, 8)).toEqual({ startsAt: '10:00', endsAt: '10:15' })
+    // The last row keeps its slot rather than being pushed past closing time.
+    expect(rangeFromSlots(56, 56)).toEqual({ startsAt: '19:45', endsAt: '20:00' })
+  })
+
+  it('agrees with slotAt, which is the same question one slot long', () => {
+    expect(slotAt(16)).toEqual(rangeFromSlots(16, 17))
+  })
+})
+
+describe('whether a drop lands on occupied time', () => {
+  const MARCO = 'marco'
+  const JANA = 'jana'
+  const booked = [
+    { id: 'a1', employeeId: MARCO, startsAt: '10:00', endsAt: '11:00' },
+    { id: 'b1', employeeId: JANA, startsAt: '14:00', endsAt: '15:00' },
+  ]
+
+  it('refuses time that overlaps the same person', () => {
+    expect(whyNotFree(booked, { employeeId: MARCO, startsAt: '10:30', endsAt: '11:30' })).toBe(TIME_TAKEN)
+    // Swallowing an existing entry whole is still an overlap.
+    expect(whyNotFree(booked, { employeeId: MARCO, startsAt: '09:00', endsAt: '12:00' })).toBe(TIME_TAKEN)
+  })
+
+  it('allows a neighbour that starts exactly where the last one ended', () => {
+    // The constraint compares `tsrange(starts_at, ends_at, '[)')`, so touching is not
+    // overlapping. A 15-minute grid is nothing but adjacent appointments: inclusive bounds here
+    // would refuse almost every real booking.
+    expect(whyNotFree(booked, { employeeId: MARCO, startsAt: '11:00', endsAt: '11:30' })).toBeNull()
+    expect(whyNotFree(booked, { employeeId: MARCO, startsAt: '09:00', endsAt: '10:00' })).toBeNull()
+  })
+
+  it('does not mind the same time on somebody else', () => {
+    expect(whyNotFree(booked, { employeeId: JANA, startsAt: '10:00', endsAt: '11:00' })).toBeNull()
+  })
+
+  it('lets an entry keep the time it already holds', () => {
+    // A resize overlaps almost all of itself, so without this every resize would be refused.
+    expect(whyNotFree(booked, { id: 'a1', employeeId: MARCO, startsAt: '10:00', endsAt: '11:30' })).toBeNull()
+  })
+
+  it('says nothing about an empty day', () => {
+    expect(whyNotFree([], { employeeId: MARCO, startsAt: '10:00', endsAt: '11:00' })).toBeNull()
   })
 })

@@ -1,11 +1,33 @@
 import type { Entry } from '../calendar/types'
-import { slotFromWallClock } from '../calendar/grid'
+import { rangeFromSlots, slotFromWallClock } from '../calendar/grid'
 
 interface Props {
   entry: Entry
   /** 1-based column for CSS grid: column 1 is the time scale. */
   column: number
+  /**
+   * Where this box is being dragged to, while a gesture holds it. The box is drawn there and
+   * reads out that time, so the person sees the appointment they are about to have rather than
+   * the one they started with - and `refused` says the drop will not be taken, before they let go.
+   */
+  drag?: { startSlot: number; endSlot: number; refused: boolean }
   onOpen: () => void
+}
+
+/**
+ * The two edges a resize starts from.
+ *
+ * Real elements rather than a pixel test against the box's rectangle, so the cursor changes on
+ * its own and the hit area is the same thing the eye sees. Sized as a share of the box in CSS,
+ * because a fixed 6px would swallow a 15-minute box whole: one slot is 17.6px.
+ */
+function Grips() {
+  return (
+    <>
+      <span className="entry__grip entry__grip--top" data-edge="top" aria-hidden="true" />
+      <span className="entry__grip entry__grip--bottom" data-edge="bottom" aria-hidden="true" />
+    </>
+  )
 }
 
 /**
@@ -19,25 +41,31 @@ interface Props {
  * for editing. That replaces click-to-peek at the notes, which the modal shows instead - one
  * gesture with one meaning, and no note panel covering the appointment underneath it.
  */
-export function EntryBox({ entry, column, onOpen }: Props) {
-  const start = slotFromWallClock(entry.startsAt)
-  const end = slotFromWallClock(entry.endsAt)
+export function EntryBox({ entry, column, drag, onOpen }: Props) {
+  const start = drag?.startSlot ?? slotFromWallClock(entry.startsAt)
+  const end = drag?.endSlot ?? slotFromWallClock(entry.endsAt)
   const slots = end - start
-  const timeRange = `${entry.startsAt}–${entry.endsAt}`
+  const shown = drag === undefined ? entry : rangeFromSlots(drag.startSlot, drag.endSlot)
+  const timeRange = `${shown.startsAt}–${shown.endsAt}`
 
   const placement = { gridColumn: column, gridRow: `${start + 1} / span ${slots}` }
+  // Both classes are pure feedback: the drag is decided by where the pointer is, never by what
+  // the box looks like.
+  const dragClass = drag === undefined ? '' : drag.refused ? ' entry--dragging entry--refused' : ' entry--dragging'
 
   if (entry.kind === 'block') {
     return (
       <button
         type="button"
-        className="entry entry--appointment entry--block"
+        className={`entry entry--appointment entry--block${dragClass}`}
         style={placement}
         title={`${timeRange} gesperrt`}
+        data-entry-id={entry.id}
         onClick={onOpen}
       >
         <span className="entry__time">{timeRange}</span>
         <span className="entry__label">Gesperrt</span>
+        <Grips />
       </button>
     )
   }
@@ -59,6 +87,7 @@ export function EntryBox({ entry, column, onOpen }: Props) {
     compact ? 'entry--compact' : '',
     oneLine ? 'entry--one-line' : '',
     entry.notes !== null ? 'entry--has-notes' : '',
+    dragClass.trim(),
   ]
     .filter(Boolean)
     .join(' ')
@@ -71,11 +100,12 @@ export function EntryBox({ entry, column, onOpen }: Props) {
       // ADR-0009: the colour is assigned by the server from the whole day. The browser does not
       // derive it, or two clients would disagree about which boxes are one customer.
       style={{ ...placement, backgroundColor: entry.colour ?? undefined }}
+      data-entry-id={entry.id}
       onClick={onOpen}
     >
       {compact ? (
         <span className="entry__line">
-          <span className="entry__time">{entry.startsAt}</span>
+          <span className="entry__time">{shown.startsAt}</span>
           <span className="entry__customer">{entry.customer}</span>
         </span>
       ) : (
@@ -88,6 +118,7 @@ export function EntryBox({ entry, column, onOpen }: Props) {
       {/* Still a signal that there is something written about this customer, even though the
           text now lives in the form rather than popping out of the box. */}
       {entry.notes !== null && <span className="entry__notes-marker">Notiz</span>}
+      <Grips />
     </button>
   )
 }
