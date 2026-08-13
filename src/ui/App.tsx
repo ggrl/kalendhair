@@ -7,6 +7,7 @@ import { Refused, Unauthenticated, createEntry, fetchDay, removeEntry, updateEnt
 import { Board } from './Board'
 import { EntryModal } from './EntryModal'
 import { Login } from './Login'
+import { Settings } from './Settings'
 import { TopBar } from './TopBar'
 
 /**
@@ -18,6 +19,23 @@ import { TopBar } from './TopBar'
 function dateFromUrl(): string | null {
   const value = new URLSearchParams(window.location.search).get('date')
   return value !== null && isSalonDate(value) ? value : null
+}
+
+/** Whether the settings screen is the thing on screen. In the address bar for the same reason
+ *  the date is: a refresh, a crash or a redeploy comes back to where somebody was. */
+function settingsFromUrl(): boolean {
+  return new URLSearchParams(window.location.search).has('settings')
+}
+
+/**
+ * The address bar, written as a whole rather than one parameter at a time.
+ *
+ * Both parts every time, because they used to be written by different pieces of code: a load
+ * settling while the settings screen was open rewrote the address to the date alone, and the
+ * settings screen then vanished on the next refresh with nothing having asked it to.
+ */
+function urlFor(date: string, settings: boolean): string {
+  return `?date=${date}${settings ? '&settings' : ''}`
 }
 
 /**
@@ -65,6 +83,8 @@ export function App() {
    * surfaces as the login screen at the next load rather than at the next refresh.
    */
   const [needsLogin, setNeedsLogin] = useState(false)
+  /** ADR-0018's screen, which is the whole page while it is open rather than a layer over the board. */
+  const [settings, setSettings] = useState(settingsFromUrl)
 
   /**
    * The entry being edited, or a proposed slot for a new one. Null when nothing is open.
@@ -86,8 +106,12 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    // Back and forward have to move the board, or the address bar is decoration.
-    const onPop = () => setTarget((previous) => ({ date: dateFromUrl(), attempt: previous.attempt + 1 }))
+    // Back and forward have to move the board, or the address bar is decoration. That includes
+    // stepping back out of the settings screen, which is a history entry like any other.
+    const onPop = () => {
+      setSettings(settingsFromUrl())
+      setTarget((previous) => ({ date: dateFromUrl(), attempt: previous.attempt + 1 }))
+    }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
@@ -116,7 +140,7 @@ export function App() {
         //
         // Replace rather than push: settling a load is not a navigation step.
         if (new URLSearchParams(window.location.search).get('date') !== loaded.date) {
-          window.history.replaceState(null, '', `?date=${loaded.date}`)
+          window.history.replaceState(null, '', urlFor(loaded.date, settingsFromUrl()))
         }
       })
       .catch((error: unknown) => {
@@ -145,7 +169,7 @@ export function App() {
         // how somebody reads tomorrow's board and says today's times out loud on the phone.
         setDay((shown) => {
           if (shown !== null) {
-            window.history.replaceState(null, '', `?date=${shown.date}`)
+            window.history.replaceState(null, '', urlFor(shown.date, settingsFromUrl()))
           }
           return shown
         })
@@ -165,7 +189,7 @@ export function App() {
     // clicks left three identical entries, so Back had to be pressed three times before the
     // board moved at all.
     if (new URLSearchParams(window.location.search).get('date') !== next) {
-      window.history.pushState(null, '', `?date=${next}`)
+      window.history.pushState(null, '', urlFor(next, false))
     }
     setTarget((previous) => ({ date: next, attempt: previous.attempt + 1 }))
   }, [])
@@ -307,6 +331,31 @@ export function App() {
     )
   }
 
+  // After the login check and before anything that reads `day`: the settings screen needs a
+  // session but not a board, and somebody who lands on `?settings` with no session must meet the
+  // login screen rather than a PIN prompt for a salon they are not in.
+  if (settings) {
+    return (
+      <Settings
+        onClose={() => {
+          // `?date=` with nothing after it is not a date. Landing straight on `?settings` before
+          // any day has arrived is the case, and the bare path means "today", which is right.
+          const date = day?.date ?? target.date
+          window.history.pushState(null, '', date === null ? window.location.pathname : urlFor(date, false))
+          setSettings(false)
+          // The staff list decides the columns, so the board behind this is out of date the
+          // moment anything here was changed. Reloading always beats working out whether to.
+          reload()
+        }}
+        onSignedOut={() => {
+          // Changing the salon password ends every session, this one included. ADR-0017.
+          setSettings(false)
+          setNeedsLogin(true)
+        }}
+      />
+    )
+  }
+
   if (day === null) {
     return (
       <main className="shell">
@@ -345,6 +394,10 @@ export function App() {
         onStep={(weeks) => goTo(addWeeks(pending, weeks))}
         onToday={goToday}
         onReload={reload}
+        onSettings={() => {
+          window.history.pushState(null, '', urlFor(shown, true))
+          setSettings(true)
+        }}
       />
 
       {failure !== null && (

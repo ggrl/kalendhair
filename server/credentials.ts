@@ -131,17 +131,60 @@ export async function versionForPassword(pool: Pool, password: string): Promise<
 }
 
 /**
+ * Whether this is the PIN that guards the settings screen. ADR-0017.
+ *
+ * No lockout and no counter, deliberately: four digits is ten thousand guesses, the owner was
+ * told what that means and accepted it, and everybody who can reach the prompt is already
+ * looking at every customer name on the board. What it costs to guess is one scrypt derive per
+ * try, which is the only brake there is and the only one this ADR allows.
+ */
+export async function pinMatches(pool: Pool, pin: string): Promise<boolean> {
+  const result = await pool.query<{ pin_hash: string }>('SELECT pin_hash FROM salon_credential WHERE id = 1')
+  const row = result.rows[0]
+  if (row === undefined) throw new Error('salon_credential has no row: the PIN is not set')
+
+  return secretMatches(pin, row.pin_hash)
+}
+
+/**
+ * A new salon password, and everybody logged out - the person who changed it included.
+ *
+ * That is ADR-0017's whole reason for the version column, so it increments here. The screen
+ * warns first, because being thrown back to the login screen by your own click is alarming when
+ * it is a surprise and obvious when it is not.
+ */
+export async function replacePassword(pool: Pool, password: string): Promise<void> {
+  await write(pool, 'UPDATE salon_credential SET password_hash = $1, version = version + 1 WHERE id = 1', [
+    await hashSecret(password),
+  ])
+}
+
+/**
+ * A new PIN, and nobody logged out.
+ *
+ * The version is about the password: it exists so that a password change ends the sessions the
+ * old password bought. A PIN change ends nothing, because no session was ever bought with a PIN -
+ * it is asked for again every time the settings screen is opened.
+ */
+export async function replacePin(pool: Pool, pin: string): Promise<void> {
+  await write(pool, 'UPDATE salon_credential SET pin_hash = $1 WHERE id = 1', [await hashSecret(pin)])
+}
+
+/**
  * A new password and a new PIN, and everybody logged out.
  *
  * The version increments in the same statement that writes the hashes, so there is no moment
  * where the new password is live and an old session still is.
  */
 export async function replaceCredentials(pool: Pool, password: string, pin: string): Promise<void> {
-  const result = await pool.query(
-    `UPDATE salon_credential
-        SET password_hash = $1, pin_hash = $2, version = version + 1
-      WHERE id = 1`,
-    [await hashSecret(password), await hashSecret(pin)],
-  )
+  await write(pool, 'UPDATE salon_credential SET password_hash = $1, pin_hash = $2, version = version + 1 WHERE id = 1', [
+    await hashSecret(password),
+    await hashSecret(pin),
+  ])
+}
+
+/** Any of the three writes above, with the missing-row case in one place. */
+async function write(pool: Pool, sql: string, values: string[]): Promise<void> {
+  const result = await pool.query(sql, values)
   if (result.rowCount !== 1) throw new Error('salon_credential has no row: nothing was changed')
 }

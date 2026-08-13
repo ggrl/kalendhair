@@ -11,9 +11,10 @@ interface Props {
   onStep: (weeks: number) => void
   onToday: () => void
   onReload: () => void
+  onSettings: () => void
 }
 
-export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onReload }: Props) {
+export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onReload, onSettings }: Props) {
   const { week } = isoWeek(date)
   const holiday = holidayName(date)
 
@@ -64,6 +65,11 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onRelo
         </button>
         <button type="button" className="topbar__today" onClick={onReload}>
           Aktualisieren
+        </button>
+        {/* Last, and styled like the others rather than louder. It is the thing somebody needs
+            twice a year, and the PIN behind it is what makes reaching it by accident harmless. */}
+        <button type="button" className="topbar__today" onClick={onSettings}>
+          Einstellungen
         </button>
       </div>
     </header>

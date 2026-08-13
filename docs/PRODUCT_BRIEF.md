@@ -50,9 +50,11 @@ does not, and a master password in the environment that can reset the other two 
 No email of any kind - no reset links, no notifications. See ADR-0017 and ADR-0018, which record
 what was rejected on the way, including an email reset the owner proposed and withdrew.
 
-Of that, what exists today is the login screen, the session that a password change ends, and the
-master password's reset screen. The PIN is stored and can be reset, and nothing checks it yet -
-there is no screen behind it until ADR-0018 is built.
+Of that, what exists today is everything except the core hours: the login screen, the session that
+a password change ends, the master password's reset screen, and behind the PIN, the screen that
+manages the staff list and both credentials. The hours are still a constant in the code, so
+changing them is still a release - ADR-0015's own condition for becoming configuration, met and
+not yet acted on.
 
 The board is a CSS grid of 15-minute rows from 06:00 to 20:00, one column per active
 employee, with absolutely positioned appointment boxes: drag to create, drag to move

@@ -1,6 +1,7 @@
 # ADR-0018: The settings screen owns staff and hours
 
-- Status: accepted, **not yet implemented**
+- Status: accepted. **Staff and credentials built on 2026-08-13; the core hours are not**, and
+  until they are, ADR-0015's constant is still the only place they live
 - Date: 2026-08-13
 - Amends: [ADR-0002](ADR-0002-employees-are-deactivated-never-deleted.md) with one narrow
   exception, and supersedes the "core hours are a constant, not configuration" paragraph of
@@ -65,6 +66,26 @@ table.
   screen makes deactivation a one-click action rather than an `UPDATE` by hand.
 - Editing the hours changes the shading on days that already happened. See above; accepted.
 - Nothing here touches the board's gestures, the write path for appointments, or the colour rule.
+
+## What building it settled, on 2026-08-13
+
+The staff half and the credentials half are built; the hours are not, and were deliberately left
+for their own change. Four things this ruling did not say, decided while writing it:
+
+- **The PIN is asked for every time the screen is opened**, and it is the owner's choice over
+  anything longer-lived. There is no unlock ticket of any kind: the PIN travels in a header on
+  every settings request, the server checks it on each one, and the screen holds it in memory for
+  exactly as long as it is on screen. Nothing to leave lying around on the front desk machine.
+- **A wrong PIN is 403 and an ended session is 401**, because the screen's answer differs: one
+  sends somebody back to the PIN prompt and the other to the login screen. The session is checked
+  first, so somebody with the PIN and no session learns nothing about whether their four digits
+  were right.
+- **Reordering renumbers the whole list from 1 rather than swapping two rows.** Swapping assumes
+  the positions are already distinct, and in this database they are not: every employee row
+  predates this screen and nothing ever stopped two of them sharing a number.
+- **Changing the PIN sends the screen back to its own prompt, saying why.** The PIN it was holding
+  is the old one the moment the change lands, so every further request would be refused for a
+  reason nobody could guess from the screen.
 
 ## Alternatives rejected
 

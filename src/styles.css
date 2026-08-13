@@ -797,3 +797,203 @@ body {
   font-size: 0.85rem;
   color: var(--ink);
 }
+
+/* The settings screen. A page rather than a layer over the board: what happens here changes
+   which columns exist, and doing that on top of a half-visible board invites somebody to read
+   the board underneath as though it had already caught up. */
+.settings {
+  max-width: 44rem;
+}
+
+.settings__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--rule-hour);
+}
+
+.settings h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.settings h2 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+}
+
+.settings__section {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--rule-quarter);
+}
+
+.settings__hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.settings button {
+  padding: 0.3rem 0.7rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.3rem;
+  cursor: pointer;
+}
+
+.settings button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.settings input {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.3rem;
+}
+
+/* The PIN gate, laid out like the login screen it echoes - same shape, so it reads as the same
+   kind of moment rather than as a form that failed to load. */
+.settings__gate {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 20rem;
+  margin: 12vh auto 0;
+}
+
+.settings__gate input {
+  margin-bottom: 0.5rem;
+}
+
+.settings__gate button[type='submit'] {
+  padding: 0.5rem 0.9rem;
+  font-size: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #1f2937;
+  border-color: #1f2937;
+}
+
+.settings__link {
+  margin-top: 0.6rem;
+  padding: 0;
+  color: var(--muted);
+  text-decoration: underline;
+  background: none;
+  border: none;
+}
+
+.settings__staff {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.settings__staff li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--rule-quarter);
+}
+
+/* Still legible, not hidden: this is the list where somebody comes to bring them back. */
+.settings__row--inactive .settings__name {
+  color: var(--muted);
+}
+
+.settings__order {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.settings__order button {
+  padding: 0 0.35rem;
+  line-height: 1.1;
+}
+
+.settings__name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.settings__tag {
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.settings__rename {
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+}
+
+.settings__rename input {
+  flex: 1;
+}
+
+.settings__confirm {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--alert-ink);
+}
+
+.settings .settings__danger {
+  color: var(--alert-ink);
+  border-color: var(--alert-ink);
+}
+
+.settings__add {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.settings__add label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.settings__credential {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  max-width: 24rem;
+  margin-bottom: 1.2rem;
+}
+
+.settings__credential label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.settings__credential input {
+  width: 100%;
+}
+
+.settings__error {
+  margin: 0.5rem 0;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--alert-ink);
+  background: var(--alert-paper);
+  border-radius: 0.3rem;
+}
+
+.settings__notice {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
