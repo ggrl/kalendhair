@@ -22,9 +22,18 @@ deleted. It was not wrong. It was outranked.
 
 **A column exists for an active employee, on every day, and for nobody else.**
 
-**An entry belonging to an inactive employee does not leave the server.** `readDay` joins
+**An entry belonging to an inactive employee does not reach the board.** `readDay` joins
 appointments to the employee and requires `active`, so a hidden column cannot produce an
 entry with nowhere to sit.
+
+That is a statement about `GET /api/day` and nothing else, and the wording matters because the
+first draft of this ADR said "does not leave the server", which is false. `/api/suggestions`
+draws on a rolling year of entries with no reference to `employee.active`, so a customer only a
+leaver ever served is still offered in the booking form, and so is a treatment only they ever
+typed. That is deliberate and is the second half of this decision: **a customer belongs to the
+salon, not to the stylist who served them.** Dropping those names would make the salon forget
+real people because somebody resigned. What this ADR hides is the stylist and their day, not the
+salon's history of who has been in.
 
 **The write path is unchanged.** Nothing checks `active` before a create, a change or a
 delete, and nothing is being added. A booking left behind by a deactivation stays editable
@@ -58,6 +67,10 @@ ADR-0002 that stands unchanged.
 - `docs/PRODUCT_BRIEF.md` said under *Done when* that "a deactivated employee's existing
   appointments still render". That line is now false and was amended with this decision, as
   were the two awkward cases that read the same way.
+- **Hidden is not unreachable, and no later work may assume it is.** The board does not show
+  these rows; the database still holds them, the write path still accepts changes to them, and
+  `/api/suggestions` still draws customer names and treatments from them. Anything that needs
+  data actually withheld needs authentication - ADR-0004 - not this ruling.
 
 ## Alternatives rejected
 

@@ -207,9 +207,11 @@ with automated tests asserting specifically:
 
 - an overlapping save is refused by the server, not only by the browser
 - a save carrying a stale version stamp is refused
-- a deactivated employee gets no column on any day, and their existing appointments do not
-  reach the client at all. This line said the opposite until 2026-08-13; ADR-0012 reversed it
-  and records what that costs
+- a deactivated employee gets no column on any day, and none of their appointments come back
+  from `GET /api/day`. This line said the opposite until 2026-08-13; ADR-0012 reversed it and
+  records what that costs. It is a claim about the board and not about the database:
+  `/api/suggestions` still offers a customer only a leaver ever served, deliberately, because a
+  customer belongs to the salon rather than to the stylist
 - notes stay hidden until a box is clicked
 - an unauthenticated request for a day returns no customer data
 - the day on screen does not change when new data arrives

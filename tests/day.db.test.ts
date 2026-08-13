@@ -1,6 +1,7 @@
 import type { Pool } from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { readDay } from '../server/day.js'
+import { suggest } from '../server/suggestions.js'
 import { addAppointment, addBlock, addEmployee, empty, testPool } from './db-helper.js'
 
 const DAY = '2026-08-13'
@@ -106,6 +107,23 @@ describe('ADR-0012: a deactivated employee leaves the board entirely', () => {
 
     expect(day.entries.map((entry) => entry.customer)).toEqual(['bea'])
     expect(day.entries.map((entry) => entry.employeeId)).toEqual([marco])
+  })
+
+  it('still offers a customer only the leaver ever served, which is the rule\'s boundary', async () => {
+    // Deliberate, and the first draft of ADR-0012 claimed the opposite: hiding the stylist does
+    // not hide the salon's customers. A name only a departed colleague ever typed is still
+    // offered in the booking form, because the customer belongs to the salon.
+    //
+    // Here so that nobody later reads this as a leak and "fixes" it, and because the ADR's
+    // wording was wrong until a review pass ran the request.
+    const left = await addEmployee(pool, 'Left', 4, false)
+    await addAppointment(pool, left, DAY, '09:00', '10:00', 'Vera Lang', 'Dauerwelle')
+
+    const day = await readDay(pool, DAY, TZ, NOW)
+    expect(day.entries).toHaveLength(0)
+
+    expect(await suggest(pool, 'customer', 'ver', DAY)).toEqual(['Vera Lang'])
+    expect(await suggest(pool, 'treatment', 'dau', DAY)).toEqual(['Dauerwelle'])
   })
 
   it('brings the column and the appointment back when they are reactivated', async () => {
