@@ -2,6 +2,92 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-13, fifth session - the board goes behind a password
+
+ADR-0017 built and merged, after two review passes that between them returned one NO-SHIP and two
+findings blocking a deploy. The fixes are in the same pull request. **The next session builds
+ADR-0018, the settings screen**, which is also the thing that finally gives the PIN something to
+guard.
+
+### Where things stand
+
+- **`main` is at `d4e1574`** and is the only branch. PR #17 merged the two ADRs written in the
+  previous session; PR #18 merged this one. Nothing is in flight, working tree clean.
+- **Eighteen ADRs**, two of them changed today: ADR-0017 is now built rather than pending, and
+  ADR-0004 records that authentication closed the DNS-rebinding read its `Host` allowlist was
+  aimed at - so that allowlist is no longer due, and was never written.
+- **One of the two blockers on real customer names is gone.** The other stands and is untouched:
+  the brief's condition is a backup that leaves the machine on a schedule and one restore that has
+  actually been performed.
+
+### What was built, and where
+
+- **The credential row.** `migrations/004_salon_credential.sql` - one row, `CHECK (id = 1)`, an
+  scrypt hash of the password, an scrypt hash of the PIN, and a version.
+- **`server/credentials.ts`** owns hashing, constant-time comparison, the seed and what a usable
+  password is. Nothing else reads that table. **`server/session.ts`** owns the signed cookie:
+  `{version, expiresAt}`, HMAC-SHA256, base64url, thirty days, sliding on use.
+- **`server/app.ts`** gained `POST /api/login`, `POST /api/credentials/reset` and a guard mounted
+  on `/api` that every data route now sits behind. The static bundle stays public deliberately -
+  it holds no salon data, and locking it would leave a browser nowhere to type the password.
+- **`src/ui/Login.tsx`** is the screen, in German, with the master-password reset behind a link.
+  `src/ui/App.tsx` shows it when a day comes back 401, which means the browser keeps no opinion
+  about whether it is logged in: it asks for a day and believes the answer.
+- The environment gained four required names and one optional one, and the server refuses to
+  start without any of the four, naming the one it wants.
+
+### What was decided while building, and where it is recorded
+
+Five things the ADR left unsaid are now in ADR-0017 under "What building it settled", because
+they are exactly the kind of thing a later session would re-decide by accident. The session
+lifetime - thirty days, sliding - was **asked of the owner**, who chose it over a fixed month and
+over a working day. The other four are mine: `COOKIE_SECURE`, the password and PIN rules living
+in one place, the split attempt budgets, and hashing the master password.
+
+### What was verified, and how
+
+- `npm run verify` green: 115 unit tests. `npm run test:db` green: 93 against a real Postgres, 16
+  of them new and all about this. `npm run test:e2e` green: 74 in a browser, 5 of them new.
+- **Against a running server, not only the suite.** The seeds really are ignored after the first
+  start: a second start with a different `SALON_PASSWORD` refuses that password and accepts the
+  seeded one. An unauthenticated `GET /api/day` answers 401 with no customer name in the body.
+  Both `COOKIE_SECURE` settings produce the cookie they claim. After the merge, a browser logged
+  in through the real server and the board rendered, with `document.cookie` empty to the page.
+- **The new browser test was checked by breaking the fix.** Removing the 401 line in
+  `src/ui/api.ts` makes it fail, which is the only way to know a test proves anything.
+
+### What was NOT verified, and cannot be here
+
+- **Nobody has run this behind TLS.** `COOKIE_SECURE` is verified as far as the cookie it sets;
+  the deployment it exists for does not exist yet.
+- **The rate limiter behind a reverse proxy is reasoned, not observed.** There is no proxy here.
+  When one arrives, `trust proxy` must be set to the specific hop - `true` makes
+  `X-Forwarded-For` whatever the caller says and removes the limit entirely.
+- **The PIN is stored and can be reset, and nothing checks it.** Deliberate: there is no screen
+  behind it until ADR-0018.
+- Nobody has used any of this except me. No stylist has typed the password on their own machine.
+
+### Unfinished, and what comes next
+
+1. **ADR-0018, the settings screen.** Staff first, hours second. It brings the PIN check with it.
+2. Polling, and the remaining navigation aids.
+3. The container and the VPS, behind the brief's blocking backup gate - and that is also the
+   deploy that makes `COOKIE_SECURE` matter.
+
+### What surprised me
+
+- **Both review passes found things a fully green suite could not see, again.** The blocker was a
+  401 arriving at a *write*: the read path handled it and the write path turned it into a
+  field-validation error inside a dialogue whose own backdrop swallowed every click that could
+  escape it. Every test passed while that was true.
+- **My own comment was the wrong claim.** I wrote that deriving `Secure` from the bind address
+  "fails closed and visibly". It does, for a direct public bind - and not for the commonest
+  deployment there is, a proxy terminating TLS in front of a loopback bind, which from inside the
+  process is indistinguishable from stage one. The security pass named it in one paragraph.
+- **Hashing the master password was not obvious until it was measured.** A constant-time SHA-256
+  comparison is correct and looks careful, and it is 27,000 times cheaper to guess than the
+  credential it can overwrite.
+
 ## 2026-08-13, fourth session - an interview, and no code at all
 
 **Nothing was built. That is the point of this entry.** The owner asked for a settings screen,
