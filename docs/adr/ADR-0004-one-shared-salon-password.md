@@ -1,7 +1,11 @@
 # ADR-0004: One shared salon password, and what that costs
 
-- Status: accepted for the web board, and to be revisited before authentication is
-  written
+- Status: accepted for the web board. **The revisit below happened on 2026-08-13**, and
+  [ADR-0017](ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) supersedes the
+  environment-variable password: it becomes a hash in the database that the salon can change, with
+  a PIN in front of the settings screen and a master password in the environment. One shared
+  password for the salon, the session cookie, and the warning below about personal phones all
+  stand, and none of it is built yet.
 - Date: 2026-08-12
 
 ## Revisit before building

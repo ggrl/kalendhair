@@ -1,8 +1,11 @@
 # ADR-0015: Core hours shade the board and refuse nothing
 
-- Status: accepted, with the no-public-holidays paragraph superseded by
-  [ADR-0016](ADR-0016-hessen-holidays-are-a-list-in-the-code.md) later the same day: Hessen's
-  holidays are now a hardcoded list and shade a whole day. Everything else here stands.
+- Status: accepted, with two paragraphs superseded on 2026-08-13.
+  [ADR-0016](ADR-0016-hessen-holidays-are-a-list-in-the-code.md) took the no-public-holidays
+  paragraph: Hessen's holidays are a hardcoded list and shade a whole day.
+  [ADR-0018](ADR-0018-the-settings-screen-owns-staff-and-hours.md) takes the hours-as-a-constant
+  paragraph: they move into the database so a settings screen can change them, which is not built
+  yet. The rule that shading refuses nothing stands, and it is the important half.
 - Date: 2026-08-13
 
 ## Context
@@ -38,6 +41,11 @@ it is not.
 missing day meaning closed. Not configuration: there is one salon, and a constant that has to be
 edited and released is honest about that. It becomes configuration the day there is a second
 salon, or the day the hours change often enough that somebody wants it without a release.
+
+> Superseded by [ADR-0018](ADR-0018-the-settings-screen-owns-staff-and-hours.md) on 2026-08-13,
+> before a line of it was written: that day arrived when the owner asked for a settings screen. The
+> hours move into the database and `GET /api/day` sends them. The sentence above is kept because it
+> named the condition under which it would stop being true, and then that condition happened.
 
 **There is no calendar of public holidays.** 25 December reads as an ordinary Friday. Inventing
 one means a source of truth for holidays, a region, and a rule for the ones that move - and the

@@ -39,6 +39,16 @@ session cookie.
 
 Self-hosted containers, not a managed platform and not serverless. See ADR-0005.
 
+**A settings screen, interviewed 2026-08-13 and not built.** The salon manages itself: add,
+rename, reorder, deactivate and - only for somebody who has never held an appointment - delete a
+stylist; change the salon password; change the four-digit PIN that guards the screen; and edit the
+core hours, which move out of the code and into the database so the shading can change without a
+release. Behind it, three credentials with three jobs: a salon password hashed in the database
+that everybody gets and that logs everybody out when it changes, the PIN that the owner shares or
+does not, and a master password in the environment that can reset the other two and read nothing.
+No email of any kind - no reset links, no notifications. See ADR-0017 and ADR-0018, which record
+what was rejected on the way, including an email reset the owner proposed and withdrew.
+
 The board is a CSS grid of 15-minute rows from 06:00 to 20:00, one column per active
 employee, with absolutely positioned appointment boxes: drag to create, drag to move
 across time and columns, edge-drag to resize, a modal for customer, treatment and
