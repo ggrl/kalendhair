@@ -59,12 +59,17 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         type="button"
         className={`entry entry--appointment entry--block${dragClass}`}
         style={placement}
-        title={`${timeRange} gesperrt`}
+        // The reason replaces the word on the box, but never in here: the tooltip and the
+        // accessible name still say `gesperrt`, because the hatching is what tells a sighted
+        // person this is blocked time and nothing tells a screen reader at all otherwise.
+        title={entry.reason === null ? `${timeRange} gesperrt` : `${timeRange} gesperrt: ${entry.reason}`}
         data-entry-id={entry.id}
         onClick={onOpen}
       >
         <span className="entry__time">{timeRange}</span>
-        <span className="entry__label">Gesperrt</span>
+        {/* ADR-0014: `Urlaub` in place of `Gesperrt`, because a reason nobody can see without
+            clicking is worth less than the word it replaced. */}
+        <span className="entry__label">{entry.reason ?? 'Gesperrt'}</span>
         <Grips />
       </button>
     )

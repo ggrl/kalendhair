@@ -39,7 +39,22 @@ const ANNA: Day['entries'][number] = {
   customer: 'Anna Schmidt',
   treatment: 'Farbe',
   notes: 'Reagiert auf Ammoniak',
+  reason: null,
   colour: '#f4b8b8',
+}
+
+const HOLIDAY: Day['entries'][number] = {
+  id: 'b2',
+  version: 1,
+  employeeId: JANA,
+  kind: 'block',
+  startsAt: '14:00',
+  endsAt: '15:00',
+  customer: null,
+  treatment: null,
+  notes: null,
+  reason: 'Urlaub',
+  colour: null,
 }
 
 const BLOCK: Day['entries'][number] = {
@@ -52,6 +67,7 @@ const BLOCK: Day['entries'][number] = {
   customer: null,
   treatment: null,
   notes: null,
+  reason: null,
   colour: null,
 }
 
@@ -273,6 +289,55 @@ test('a block opens with its times and no customer fields', async ({ page }) => 
   await expect(page.getByLabel(/Sperrzeit/)).toBeChecked()
   await expect(page.getByLabel('Von')).toHaveValue('12:00')
   await expect(page.getByLabel('Kundin / Kunde')).toHaveCount(0)
+})
+
+test('a block with a reason says it on the box instead of Gesperrt', async ({ page }) => {
+  // ADR-0014: the reason replaces the word, because one nobody can see without clicking is worth
+  // less than the word it replaced. The tooltip still says gesperrt, and so does the button's
+  // accessible name - the hatching is the only other signal, and a screen reader cannot see it.
+  await stub(page, [HOLIDAY])
+  await page.goto(`/?date=${TODAY}`)
+
+  const box = page.locator('.entry[data-entry-id="b2"]')
+  await expect(box).toContainText('Urlaub')
+  await expect(box).not.toContainText('Gesperrt')
+  await expect(box).toHaveAttribute('title', '14:00–15:00 gesperrt: Urlaub')
+})
+
+test('a block with no reason still says Gesperrt', async ({ page }) => {
+  await stub(page, [BLOCK])
+  await page.goto(`/?date=${TODAY}`)
+
+  await expect(page.locator('.entry[data-entry-id="b1"]')).toContainText('Gesperrt')
+})
+
+test('the reason is editable in the form, and only for a block', async ({ page }) => {
+  const seen = await stub(page, [HOLIDAY], async (route) => {
+    await route.fulfill({ status: 200, json: { version: 2 } })
+  })
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.locator('.entry[data-entry-id="b2"]').click()
+  await expect(page.getByLabel('Grund')).toHaveValue('Urlaub')
+  // A block has none of the appointment fields, which is ADR-0008 and unchanged.
+  await expect(page.getByLabel('Kundin / Kunde')).toHaveCount(0)
+  await expect(page.getByLabel('Notizen')).toHaveCount(0)
+
+  await page.getByLabel('Grund').fill('Fortbildung')
+  await page.getByRole('button', { name: 'Speichern' }).click()
+
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(seen[0].method).toBe('PATCH')
+  expect(seen[0].body).toMatchObject({ kind: 'block', reason: 'Fortbildung', customer: null, version: 1 })
+})
+
+test('an appointment has no Grund field to fill in', async ({ page }) => {
+  await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await expect(page.getByLabel('Grund')).toHaveCount(0)
+  await expect(page.getByLabel('Notizen')).toHaveValue('Reagiert auf Ammoniak')
 })
 
 test('ticking Sperrzeit takes the customer fields away', async ({ page }) => {

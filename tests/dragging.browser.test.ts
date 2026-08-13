@@ -40,6 +40,7 @@ const ANNA: Day['entries'][number] = {
   customer: 'Anna Schmidt',
   treatment: 'Farbe',
   notes: 'Reagiert auf Ammoniak',
+  reason: null,
   colour: '#f4b8b8',
 }
 
@@ -54,6 +55,7 @@ const BEA: Day['entries'][number] = {
   customer: 'Bea Wolff',
   treatment: 'Schnitt',
   notes: null,
+  reason: null,
   colour: '#f8cfa0',
 }
 
@@ -67,6 +69,7 @@ const BLOCK: Day['entries'][number] = {
   customer: null,
   treatment: null,
   notes: null,
+  reason: 'Urlaub',
   colour: null,
 }
 
@@ -384,5 +387,8 @@ test('a block drags exactly like an appointment', async ({ page }) => {
     customer: null,
     treatment: null,
     notes: null,
+    // A move is a move: the reason travels with it, or dragging a block would quietly erase why
+    // the time was blocked. ADR-0014.
+    reason: 'Urlaub',
   })
 })

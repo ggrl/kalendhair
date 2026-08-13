@@ -25,6 +25,7 @@ function dayFor(date: string): Day {
             customer: 'Anna Schmidt',
             treatment: 'Farbe',
             notes: 'Reagiert auf Ammoniak',
+            reason: null,
             colour: '#f4b8b8',
           },
           {
@@ -37,6 +38,7 @@ function dayFor(date: string): Day {
             customer: 'Bea Wolff',
             treatment: 'Schnitt',
             notes: null,
+            reason: null,
             colour: '#f8cfa0',
           },
           {
@@ -49,6 +51,7 @@ function dayFor(date: string): Day {
             customer: 'anna schmidt',
             treatment: 'Schnitt und Styling',
             notes: null,
+            reason: null,
             colour: '#f4b8b8',
           },
           {
@@ -61,6 +64,7 @@ function dayFor(date: string): Day {
             customer: 'Felix Rau',
             treatment: 'Bart',
             notes: null,
+            reason: null,
             colour: '#c3aef0',
           },
           {
@@ -75,6 +79,7 @@ function dayFor(date: string): Day {
             customer: 'Eva Sommer',
             treatment: 'Strähnen',
             notes: 'Kommt mit Kinderwagen',
+            reason: null,
             colour: '#c2e6a8',
           },
           {
@@ -87,6 +92,7 @@ function dayFor(date: string): Day {
             customer: null,
             treatment: null,
             notes: null,
+            reason: null,
             colour: null,
           },
         ]
@@ -463,6 +469,7 @@ test('an entry whose column is missing is reported, not dropped', async ({ page 
             customer: 'Ida Bruns',
             treatment: 'Balayage',
             notes: null,
+            reason: null,
             colour: '#f4b8b8',
           },
         ],

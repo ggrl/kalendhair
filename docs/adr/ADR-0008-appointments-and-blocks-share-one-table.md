@@ -1,6 +1,8 @@
 # ADR-0008: Appointments and blocks share one table
 
-- Status: accepted
+- Status: accepted, with the no-text-on-a-block rule superseded by
+  [ADR-0014](ADR-0014-a-block-may-say-why.md) on 2026-08-13: a block may now carry an optional
+  reason, in its own column, drawn on the box. Everything else here stands.
 - Date: 2026-08-12
 
 ## Context

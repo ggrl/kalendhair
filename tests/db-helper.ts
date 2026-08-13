@@ -67,10 +67,17 @@ export async function addAppointment(
   )
 }
 
-export async function addBlock(pool: Pool, employeeId: string, day: string, from: string, to: string): Promise<void> {
+export async function addBlock(
+  pool: Pool,
+  employeeId: string,
+  day: string,
+  from: string,
+  to: string,
+  reason: string | null = null,
+): Promise<void> {
   await pool.query(
-    `INSERT INTO appointment (employee_id, kind, starts_at, ends_at)
-     VALUES ($1, 'block', $2::timestamp, $3::timestamp)`,
-    [employeeId, `${day} ${from}`, `${day} ${to}`],
+    `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, reason)
+     VALUES ($1, 'block', $2::timestamp, $3::timestamp, $4)`,
+    [employeeId, `${day} ${from}`, `${day} ${to}`, reason],
   )
 }

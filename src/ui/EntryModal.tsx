@@ -25,6 +25,7 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
   const [customer, setCustomer] = useState(editing?.customer ?? '')
   const [treatment, setTreatment] = useState(editing?.treatment ?? '')
   const [notes, setNotes] = useState(editing?.notes ?? '')
+  const [reason, setReason] = useState(editing?.reason ?? '')
 
   const [problem, setProblem] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -92,11 +93,14 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
       date,
       startsAt,
       endsAt,
-      // A block carries no text at all: ADR-0008. Sending what is in the fields would be
-      // refused by the server, which is correct but a worse message than not sending it.
+      // Each kind sends only its own fields: ADR-0008 for the appointment ones, ADR-0014 for the
+      // reason. Sending the others would be refused by the server, which is correct but a worse
+      // message than not sending them - and the fields are not on screen either, so what is sent
+      // is what somebody could see.
       customer: isBlock ? null : customer.trim() || null,
       treatment: isBlock ? null : treatment.trim() || null,
       notes: isBlock ? null : notes.trim() || null,
+      reason: isBlock ? reason.trim() || null : null,
     }
   }
 
@@ -188,6 +192,17 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
             <input type="time" step={900} value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
           </label>
         </div>
+
+        {isBlock && (
+          <label className="modal__row">
+            Grund
+            {/* Optional, and drawn on the box in place of the word `Gesperrt`: ADR-0014. No
+                autocomplete, unlike the customer and the treatment - the reasons a salon closes a
+                column are few and short, and a list of previous ones is machinery for a problem
+                nobody has reported. */}
+            <input value={reason} onChange={(event) => setReason(event.target.value)} autoComplete="off" />
+          </label>
+        )}
 
         {!isBlock && (
           <>

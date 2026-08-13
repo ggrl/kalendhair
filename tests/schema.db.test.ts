@@ -240,3 +240,40 @@ describe('two saves at once', () => {
     expect(survivors.rows.map((row) => row.customer)).toEqual(['first'])
   })
 })
+
+describe('ADR-0014: a block may say why, and only a block', () => {
+  it('accepts a block with a reason', async () => {
+    await expect(addBlock(pool, marco, DAY, '12:00', '13:00', 'Urlaub')).resolves.toBeUndefined()
+  })
+
+  it('accepts a block with no reason, which is the ordinary case', async () => {
+    await expect(addBlock(pool, marco, DAY, '14:00', '15:00')).resolves.toBeUndefined()
+  })
+
+  it('refuses a blank reason, because a box labelled with a space looks like a bug', async () => {
+    await expect(addBlock(pool, marco, DAY, '16:00', '17:00', '   ')).rejects.toThrow(
+      /appointment_fields_match_kind/,
+    )
+  })
+
+  it('refuses a reason on an appointment, which has a treatment for that', async () => {
+    await expect(
+      pool.query(
+        `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, customer, reason)
+         VALUES ($1, 'appointment', $2::timestamp, $3::timestamp, 'Anna Schmidt', 'Urlaub')`,
+        [marco, `${DAY} 09:00`, `${DAY} 10:00`],
+      ),
+    ).rejects.toThrow(/appointment_fields_match_kind/)
+  })
+
+  it('still refuses a customer on a block', async () => {
+    // ADR-0008's half of the rule, unchanged by ADR-0014.
+    await expect(
+      pool.query(
+        `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, customer)
+         VALUES ($1, 'block', $2::timestamp, $3::timestamp, 'Anna Schmidt')`,
+        [marco, `${DAY} 11:00`, `${DAY} 12:00`],
+      ),
+    ).rejects.toThrow(/appointment_fields_match_kind/)
+  })
+})

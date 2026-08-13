@@ -13,6 +13,7 @@ interface EntryRow {
   customer: string | null
   treatment: string | null
   notes: string | null
+  reason: string | null
 }
 
 /**
@@ -47,7 +48,8 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
             to_char(a.ends_at,   'HH24:MI') AS ends_at,
             a.customer,
             a.treatment,
-            a.notes
+            a.notes,
+            a.reason
        FROM appointment a
        JOIN employee e ON e.id = a.employee_id
       WHERE a.starts_at::date = $1::date
@@ -82,6 +84,7 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
       customer: row.customer,
       treatment: row.treatment,
       notes: row.notes,
+      reason: row.reason,
       colour: colours.get(row.id) ?? null,
     })),
   }

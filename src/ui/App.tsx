@@ -209,6 +209,7 @@ export function App() {
         customer: entry.customer,
         treatment: entry.treatment,
         notes: entry.notes,
+        reason: entry.reason,
       }).then(saved, (error: unknown) => {
         setNotice(error instanceof Error ? error.message : String(error))
         // Reload either way: a refusal means the board's copy is not what the database holds.
@@ -236,6 +237,9 @@ export function App() {
               customer: null,
               treatment: null,
               notes: null,
+              // The column tick makes a bare whole-day block. A reason is added by opening it,
+              // which is one click more than the tick and keeps the tick a single gesture.
+              reason: null,
             })
           : removeEntry(existing.id, existing.version)
 

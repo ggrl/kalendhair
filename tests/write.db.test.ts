@@ -27,6 +27,7 @@ interface Entry {
   customer: string | null
   treatment: string | null
   notes: string | null
+  reason: string | null
 }
 
 async function post(body: unknown): Promise<Response> {
@@ -110,6 +111,30 @@ describe('creating', () => {
     const entries = await entriesOn(DAY)
     expect(entries[0].kind).toBe('block')
     expect(entries[0].customer).toBeNull()
+  })
+
+  it('books a block with a reason, and gives it back on the day', async () => {
+    // ADR-0014. The reason is what the box shows in place of the word `Gesperrt`.
+    const response = await post({
+      employeeId: jana,
+      kind: 'block',
+      date: DAY,
+      startsAt: '12:00',
+      endsAt: '13:00',
+      reason: '  Urlaub  ',
+    })
+    expect(response.status).toBe(201)
+
+    const entries = await entriesOn(DAY)
+    expect(entries[0].kind).toBe('block')
+    expect(entries[0].reason).toBe('Urlaub')
+    expect(entries[0].customer).toBeNull()
+  })
+
+  it('refuses a reason on an appointment, which has a treatment for that', async () => {
+    const response = await post(appointment({ reason: 'Urlaub' }))
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(/Nur eine Sperrzeit hat einen Grund/)
   })
 
   it('trims a name rather than storing the spaces', async () => {

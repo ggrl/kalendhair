@@ -74,7 +74,9 @@ Landing on a day the salon is shut shows an empty board, exactly as flipping the
 a Sunday does. There is no concept of opening days and this keeps it that way.
 
 A checkbox in the same modal makes the row a grey block instead of an appointment:
-time nobody may be booked into, with no customer, no treatment and no label. A checkbox
+time nobody may be booked into, with no customer and no treatment. It may carry an optional
+reason - `Urlaub`, `Fortbildung` - which is drawn on the grey box in place of the word
+`Gesperrt`: ADR-0014, which reversed this line's original "no label". A checkbox
 beside a column heading blocks that employee's whole day, which is one block row from
 06:00 to 20:00 and nothing more. Blocks live in the same table as appointments, because
 that is the only way the verified overlap constraint can cover both. See ADR-0008.

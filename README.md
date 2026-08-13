@@ -112,7 +112,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Thirteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Fourteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -132,6 +132,7 @@ re-decide.
 | [0011](docs/adr/ADR-0011-the-screen-is-german-the-code-is-english.md) | The screen is German, the code is English |
 | [0012](docs/adr/ADR-0012-a-deactivated-employee-leaves-the-board-entirely.md) | A deactivated employee leaves the board entirely, appointments included |
 | [0013](docs/adr/ADR-0013-a-drag-is-the-edit-and-it-commits-on-release.md) | A drag is the edit, and it commits on release - with no undo |
+| [0014](docs/adr/ADR-0014-a-block-may-say-why.md) | A block may say why, in its own field, drawn on the box |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:
