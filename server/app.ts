@@ -8,7 +8,7 @@ import { isSuggestable, suggest } from './suggestions.js'
 import {
   currentVersion,
   replaceCredentials,
-  secretEquals,
+  secretMatches,
   versionForPassword,
   whyPasswordUnusable,
   whyPinUnusable,
@@ -17,7 +17,18 @@ import { SESSION_COOKIE, SESSION_LIFETIME_MS, issueSession, readSession, session
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 
 /** What the HTTP surface needs. The connection string and the bind address are startup's business. */
-export type AppConfig = Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'masterPassword' | 'cookieSecure'>
+export interface AppConfig extends Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'cookieSecure'> {
+  /**
+   * The master password as a scrypt hash, made once at startup rather than compared as plain
+   * text.
+   *
+   * Not for storage - it never leaves the process - but for cost. A security pass measured the
+   * plain comparison at 0.875 microseconds against 24ms for a salon password guess, on the
+   * endpoint that grants strictly more power: reset both credentials, log in, read the book,
+   * and lock the salon out of its own door. Both doors now cost the same to knock on.
+   */
+  masterPasswordHash: string
+}
 
 /**
  * The HTTP surface, separated from startup so it can be tested against a port rather than
@@ -51,11 +62,17 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    * costs 22ms of CPU, so twenty attempts occupy a core for most of half a second.
    *
    * Behind a reverse proxy that Express is not told to trust, every request carries the
-   * proxy's address, so the limit becomes one budget for everybody. That refuses logins rather
-   * than allowing them, which is the right direction to fail, but it is still an outage:
-   * stage two has to set `trust proxy` when the proxy arrives.
+   * proxy's address, so the limit becomes one budget for everybody - and a stranger can then
+   * hold the salon's door shut at four requests a minute. Stage two has to set `trust proxy`
+   * when the proxy arrives, and to the specific hop: `trust proxy: true` makes
+   * `X-Forwarded-For` whatever the caller says it is, which removes this entirely.
+   *
+   * Two limiters and not one. Sharing the budget meant the door built for a forgotten password
+   * was shut by somebody forgetting their password: twenty wrong guesses, then the correct
+   * master password refused for five minutes. A review pass demonstrated it.
    */
-  const attempts = attemptLimiter(20, 5 * 60 * 1000)
+  const loginAttempts = attemptLimiter(20, 5 * 60 * 1000)
+  const resetAttempts = attemptLimiter(20, 5 * 60 * 1000)
 
   /**
    * The salon password, exchanged for the signed session cookie. ADR-0004.
@@ -63,7 +80,7 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    * Answers nothing but a status. A login response that said whether the password was close,
    * or how many attempts were left, would be telling somebody how to spend their next guess.
    */
-  app.post('/api/login', attempts, body, async (request, response) => {
+  app.post('/api/login', loginAttempts, body, async (request, response) => {
     const password = stringField(request.body, 'password')
     const version = password === null ? null : await versionForPassword(pool, password)
 
@@ -86,18 +103,22 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    * Changing the password increments the credential version, so every session in the salon
    * ends here. That is the point: the reason a password gets changed is that somebody left.
    */
-  app.post('/api/credentials/reset', attempts, body, async (request, response) => {
-    const master = stringField(request.body, 'master')
-    if (master === null || !secretEquals(master, config.masterPassword)) {
-      response.status(401).json({ error: 'Das Hauptpasswort stimmt nicht.' })
-      return
-    }
-
+  app.post('/api/credentials/reset', resetAttempts, body, async (request, response) => {
     const password = stringField(request.body, 'password') ?? ''
     const pin = stringField(request.body, 'pin') ?? ''
+
+    // What was typed is checked before who is asking, so that a 400 never confirms a correct
+    // master password. The other order let somebody test a guess without changing anything:
+    // 401 meant wrong, 400 meant right and the new password was merely too short.
     const unusable = whyPasswordUnusable(password) ?? whyPinUnusable(pin)
     if (unusable !== null) {
       response.status(400).json({ error: unusable })
+      return
+    }
+
+    const master = stringField(request.body, 'master')
+    if (master === null || !(await secretMatches(master, config.masterPasswordHash))) {
+      response.status(401).json({ error: 'Das Hauptpasswort stimmt nicht.' })
       return
     }
 
@@ -263,17 +284,28 @@ function setSession(response: express.Response, config: AppConfig, version: numb
  */
 function attemptLimiter(limit: number, windowMs: number): RequestHandler {
   const seen = new Map<string, { count: number; until: number }>()
+  let sweptAt = 0
 
   return (request, response, next) => {
     const now = Date.now()
-    // Swept on every attempt rather than on a timer. The map only ever holds addresses that
-    // tried to log in inside the window, so this is a handful of entries and no timer to stop.
-    for (const [address, entry] of seen) {
-      if (entry.until <= now) seen.delete(address)
+
+    // Swept on a request rather than on a timer, so there is nothing to stop at shutdown - but
+    // at most once a second. Sweeping on every attempt was measured by a security pass at 21ms
+    // of blocked event loop with 300,000 addresses in the map, which one machine with a routed
+    // IPv6 range can produce in five minutes. Once a second, that cost is paid once a second.
+    if (now - sweptAt >= 1000) {
+      sweptAt = now
+      for (const [address, entry] of seen) {
+        if (entry.until <= now) seen.delete(address)
+      }
     }
 
     const address = request.ip ?? 'unknown'
-    const entry = seen.get(address) ?? { count: 0, until: now + windowMs }
+    // The window is checked here and not left to the sweep. With the sweep throttled, an
+    // address can be read back before its entry is collected, and taking that stale count
+    // would keep somebody locked out for as long as they kept trying.
+    const held = seen.get(address)
+    const entry = held === undefined || held.until <= now ? { count: 0, until: now + windowMs } : held
     entry.count += 1
     seen.set(address, entry)
 

@@ -85,6 +85,34 @@ test('says the password was wrong and stays on the form', async ({ page }) => {
   await expect(page.getByLabel('Salon-Passwort')).toBeVisible()
 })
 
+test('a save that meets an ended session lands on the login screen, not in the form', async ({ page }) => {
+  // The blocker a review pass found. A 401 arriving at a write used to become the form's own
+  // "fix this field" refusal: red text inside a dialogue whose backdrop swallows every click
+  // that could get out of it, over a board still showing every customer name.
+  await stubApi(page, 'test-salon-password')
+  await page.goto('/')
+  await page.getByLabel('Salon-Passwort').fill('test-salon-password')
+  await page.getByRole('button', { name: 'Anmelden' }).click()
+  await expect(page.getByRole('checkbox', { name: 'Ganzen Tag für Marco sperren' })).toBeVisible()
+
+  // Everybody is logged out - the master reset, or a session that ran out mid-shift.
+  await page.route('**/api/entries*', (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Bitte anmelden.' }) }),
+  )
+  await page.unroute('**/api/day*')
+  await page.route('**/api/day*', (route) =>
+    route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Bitte anmelden.' }) }),
+  )
+
+  await page.locator('.board__column').first().click({ position: { x: 40, y: 8 } })
+  await page.getByLabel('Kundin / Kunde').fill('Anna Schmidt')
+  await page.getByRole('button', { name: 'Speichern' }).click()
+
+  await expect(page.getByLabel('Salon-Passwort')).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByText('Anna Schmidt')).toHaveCount(0)
+})
+
 test('reaches the master reset and comes back to a login that says what happened', async ({ page }) => {
   await stubApi(page, 'test-salon-password')
   await page.goto('/')

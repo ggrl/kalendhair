@@ -72,13 +72,28 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...complete, SALON_PIN: 'zwei' })).toThrow(/SALON_PIN/)
   })
 
-  it('marks the session cookie Secure exactly when the bind address is not loopback', () => {
-    // Derived rather than configured, and this is the whole rule. Loopback is stage one over
-    // plain HTTP, where a Secure cookie would never come back and nobody could log in; any
-    // other address is a deploy, which the product brief says is a deploy behind HTTPS.
+  it('guesses the session cookie from the bind address when nothing says otherwise', () => {
+    // Loopback is stage one over plain HTTP, where a Secure cookie would never come back and
+    // nobody could log in; any other address is a deploy, which the brief says is behind HTTPS.
     expect(loadConfig(complete).cookieSecure).toBe(false)
     expect(loadConfig({ ...complete, HOST: 'localhost' }).cookieSecure).toBe(false)
     expect(loadConfig({ ...complete, HOST: '0.0.0.0' }).cookieSecure).toBe(true)
+  })
+
+  it('lets COOKIE_SECURE overrule that guess, because the guess has a wrong case', () => {
+    // The case a security pass named: TLS terminated by a proxy on the same machine, this
+    // process bound to loopback, the board served over HTTPS and the cookie set without Secure.
+    // From in here that deployment is indistinguishable from stage one, so it has to be said.
+    expect(loadConfig({ ...complete, COOKIE_SECURE: 'true' }).cookieSecure).toBe(true)
+    expect(loadConfig({ ...complete, HOST: '0.0.0.0', COOKIE_SECURE: 'false' }).cookieSecure).toBe(false)
+
+    // And an unset or empty value is not "false" - it is "nothing was said", which is the guess.
+    expect(loadConfig({ ...complete, COOKIE_SECURE: '  ' }).cookieSecure).toBe(false)
+    expect(loadConfig({ ...complete, HOST: '0.0.0.0', COOKIE_SECURE: '' }).cookieSecure).toBe(true)
+
+    // Anything else is a typo, and a typo that reads as false would be silent.
+    expect(() => loadConfig({ ...complete, COOKIE_SECURE: 'yes' })).toThrow(/COOKIE_SECURE/)
+    expect(() => loadConfig({ ...complete, COOKIE_SECURE: '1' })).toThrow(/COOKIE_SECURE/)
   })
 
   it('refuses a port that is not one', () => {

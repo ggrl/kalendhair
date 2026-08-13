@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   MINIMUM_PASSWORD_LENGTH,
   hashSecret,
-  secretEquals,
   secretMatches,
   whyPasswordUnusable,
   whyPinUnusable,
@@ -36,16 +35,6 @@ describe('hashSecret', () => {
     // hunting for a typo they did not make will not find it.
     await expect(secretMatches('anything', 'not-a-hash')).rejects.toThrow(/salt:key/)
     await expect(secretMatches('anything', 'aabb:ccdd')).rejects.toThrow(/expected length/)
-  })
-})
-
-describe('secretEquals', () => {
-  it('compares the master password without throwing on a different length', () => {
-    // timingSafeEqual refuses inputs of unequal length, which is exactly what a wrong guess
-    // usually is - so the naive version threw a 500 instead of refusing the login.
-    expect(secretEquals('hauptpasswort', 'hauptpasswort')).toBe(true)
-    expect(secretEquals('h', 'hauptpasswort')).toBe(false)
-    expect(secretEquals('', 'hauptpasswort')).toBe(false)
   })
 })
 

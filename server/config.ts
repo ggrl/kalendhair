@@ -74,18 +74,40 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     masterPassword,
     salonPassword,
     salonPin,
-    // Derived from the bind address rather than given a name of its own.
-    //
-    // A Secure cookie is dropped by the browser over plain HTTP, so marking it always would
-    // make stage one - loopback, no TLS - impossible to log in to. Marking it never would send
-    // the session cookie in clear text the day this reaches a VPS. The product brief says the
-    // move off loopback is the move behind HTTPS, so the bind address is the honest signal.
-    //
-    // What it costs if that stops being true: a server bound to a public address with no TLS
-    // in front refuses every login, because the browser accepts the cookie and never sends it
-    // back. That fails closed and visibly, which is the right direction to be wrong in.
-    cookieSecure: host !== '127.0.0.1' && host !== 'localhost' && host !== '::1',
+    cookieSecure: cookieSecureFrom(env, host),
   }
+}
+
+/**
+ * Whether the session cookie is marked `Secure`, which means "only ever send me over HTTPS".
+ *
+ * The bind address is the default answer and it is a guess, not a fact. It is right for the
+ * two shapes this repository has: loopback with no TLS, where a Secure cookie would never come
+ * back and nobody could log in, and a public bind, which the product brief says is a bind
+ * behind HTTPS.
+ *
+ * It is wrong for the most ordinary deployment there is, which a security pass named: nginx or
+ * Caddy terminating TLS on the same machine and proxying to `127.0.0.1:3000`, with `HOST` left
+ * at its default. The board is then served over HTTPS while this process sees loopback, and
+ * the guess sets no `Secure` - so the session cookie travels in clear text on any plain-HTTP
+ * request to the same hostname, which a café wifi can provoke with one `<img>` tag.
+ *
+ * Hence `COOKIE_SECURE`, which overrides the guess and is the thing to set the day a proxy
+ * appears. Not required, because requiring it would make stage one carry a fifth name for a
+ * setting it cannot get wrong; loud at startup either way, because a deploy is precisely when
+ * nobody re-reads this file.
+ */
+function cookieSecureFrom(env: NodeJS.ProcessEnv, host: string): boolean {
+  const given = env.COOKIE_SECURE?.trim().toLowerCase()
+
+  if (given !== undefined && given !== '') {
+    if (given !== 'true' && given !== 'false') {
+      throw new Error(`COOKIE_SECURE must be true or false, and was: ${String(env.COOKIE_SECURE)}`)
+    }
+    return given === 'true'
+  }
+
+  return host !== '127.0.0.1' && host !== 'localhost' && host !== '::1'
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {

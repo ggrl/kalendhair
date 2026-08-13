@@ -86,19 +86,30 @@ should not re-decide them by accident either.
 - **A session lasts thirty days and the expiry slides while the board is used.** Asked of the
   owner, who chose it over a fixed month and over a working day: revocation is the password
   change, which is immediate regardless, so a shorter session buys friction and nothing else.
-- **The session cookie is marked `Secure` exactly when the bind address is not loopback**, and
-  there is no environment variable for it - this ADR's own consequence says four new names, and
-  a fifth would be a setting nobody would remember to turn on. The product brief says the move
-  off loopback is the move behind HTTPS. If that stops being true, every login is refused,
-  because a browser accepts a `Secure` cookie over plain HTTP and never sends it back.
+- **The session cookie is marked `Secure` from the bind address, and `COOKIE_SECURE` overrules
+  that guess.** The guess alone was wrong, and the security pass named the deployment it is
+  wrong for: a proxy terminating TLS on the same machine and forwarding to `127.0.0.1`, which
+  from inside this process is indistinguishable from stage one. The board is then served over
+  HTTPS with a cookie that is not marked `Secure`, and one plain-HTTP request to the same
+  hostname - an `<img>` tag on any page - hands the session to anybody on the same wifi. So
+  there is a fifth name after all, optional rather than required, and the startup banner says
+  which way it went either way.
+- **The master password is hashed with scrypt once at startup and compared like the salon
+  password.** It was a SHA-256 comparison first, which is constant-time and correct and 27,000
+  times cheaper to guess than the credential it can overwrite - measured by the security pass at
+  0.875 microseconds against 24 milliseconds. Both doors now cost the same to knock on.
 - **A salon password is at least eight characters and a PIN is exactly four digits**, checked in
   one place that the startup seed, the reset screen and any later settings screen all ask. The
   alternative is an environment that can seed a password the screen would refuse to let anybody
   set again.
 - **Twenty login attempts per address per five minutes**, which is ADR-0004's rate limit. Twenty
-  rather than five because the whole salon is one address as far as the server is concerned.
-  Behind a reverse proxy that Express is not told to trust it becomes one budget for everybody,
-  which refuses logins rather than allowing them - stage two has to set `trust proxy`.
+  rather than five because the whole salon is one address as far as the server is concerned. The
+  login door and the reset door count separately: sharing one budget meant somebody who forgot
+  the password guessed until they were refused, and then found the master password refused too -
+  the door built for exactly that moment. Behind a reverse proxy that Express is not told to
+  trust it becomes one budget for everybody, and a stranger can hold the salon's door shut at
+  four requests a minute. Stage two has to set `trust proxy`, and to the specific hop:
+  `trust proxy: true` makes `X-Forwarded-For` whatever the caller says and removes the limit.
 
 ## Alternatives rejected
 

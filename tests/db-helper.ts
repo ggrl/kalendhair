@@ -1,6 +1,6 @@
 import { Pool } from 'pg'
 import type { AppConfig } from '../server/app.js'
-import { currentVersion, seedCredentials } from '../server/credentials.js'
+import { currentVersion, hashSecret, seedCredentials } from '../server/credentials.js'
 import { SESSION_COOKIE, issueSession } from '../server/session.js'
 import { migrate } from '../server/migrate.js'
 
@@ -49,17 +49,19 @@ export async function empty(pool: Pool): Promise<void> {
   await pool.query('TRUNCATE appointment, employee CASCADE')
 }
 
-/**
- * What `createApp` needs, for a test.
- *
- * None of these are secrets. The signing key is long enough to look like the real thing and is
- * written into a public repository on purpose - which is exactly why it may never be anything
- * a running salon uses. `rules/secrets.md`.
- */
+// None of the values below are secrets. They are long enough to look like the real thing and
+// are written into a public repository on purpose - which is exactly why they may never be
+// anything a running salon uses. `rules/secrets.md`.
+
+export const TEST_MASTER_PASSWORD = 'test-master-password'
+
+/** What `createApp` needs, for a test. */
 export const TEST_CONFIG: AppConfig = {
   salonTimeZone: 'Europe/Berlin',
   sessionSecret: 'not-a-secret-a-published-test-signing-key',
-  masterPassword: 'test-master-password',
+  // Hashed once here rather than per test: scrypt is the point of this field, and paying for
+  // it in every `beforeEach` would buy nothing the one derive does not already prove.
+  masterPasswordHash: await hashSecret(TEST_MASTER_PASSWORD),
   // Every test speaks plain HTTP to a loopback port, and a Secure cookie would be dropped.
   cookieSecure: false,
 }

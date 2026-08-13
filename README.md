@@ -72,6 +72,12 @@ gitignored.
 
 The server refuses to start if any of them is missing, and names the one it wants.
 
+One optional name, and the day it matters: `COOKIE_SECURE`. The session cookie follows `HOST`
+by default - loopback means not `Secure`, anything else means `Secure`. **Set it to `true` the
+day a proxy terminates TLS in front of this**, because that deployment leaves `HOST` on
+loopback and the guess would send the session cookie in clear text. The startup log says which
+way it went, every time.
+
 ```bash
 npm run db:up      # Postgres in a container, bound to 127.0.0.1 only
 npm run build

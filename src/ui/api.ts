@@ -69,7 +69,14 @@ export async function fetchDay(date: string | null): Promise<Day> {
  * day underneath it has moved on. Matching the German sentence instead would break the moment
  * somebody improves the wording.
  */
-async function refusalFrom(response: Response): Promise<Refused> {
+async function refusalFrom(response: Response): Promise<Error> {
+  // Before anything else, because a 401 is not a refusal to be shown in a form. The server
+  // sends it with no `code`, so it used to arrive as `invalid` - which the form treats as
+  // "fix this field and try again", over a board the server has stopped answering for. A
+  // review pass walked into it: save, get "Bitte anmelden." in red inside the dialogue, and
+  // no way out of it that reaches the login screen.
+  if (response.status === 401) return new Unauthenticated('Bitte anmelden.')
+
   let code: RefusalCode = 'invalid'
   let message = `Server antwortete mit Status ${response.status}`
 

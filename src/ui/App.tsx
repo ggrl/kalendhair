@@ -127,6 +127,11 @@ export function App() {
         // board that is simply locked sends somebody to look at the server.
         if (error instanceof Unauthenticated) {
           setNeedsLogin(true)
+          // The form goes with it. The login screen replaces the whole tree, so a form left
+          // open here comes back after the login with its typing gone and its captured date
+          // still pointing at the day that was on screen before - which then saves onto a day
+          // nobody is looking at. Found by a review pass, by pressing Back with a form open.
+          setEditor(null)
           return
         }
 

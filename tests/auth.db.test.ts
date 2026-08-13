@@ -5,6 +5,7 @@ import { createApp } from '../server/app.js'
 import { SESSION_COOKIE, SESSION_LIFETIME_MS, issueSession } from '../server/session.js'
 import {
   TEST_CONFIG,
+  TEST_MASTER_PASSWORD,
   TEST_PASSWORD,
   TEST_PIN,
   addAppointment,
@@ -192,13 +193,24 @@ describe('logging in', () => {
     // is what stops somebody spending the budget and then walking through.
     expect((await login(TEST_PASSWORD)).status).toBe(429)
   })
+
+  it('does not shut the reset door along with the login door', async () => {
+    // Found by a review pass, and it is the case the reset exists for: somebody forgets the
+    // password, guesses until they are refused, and then reaches for the master password. With
+    // one shared budget the way back in was refused for five minutes.
+    for (let attempt = 0; attempt < 25; attempt += 1) await login('wrong')
+    expect((await login('wrong')).status).toBe(429)
+
+    const response = await reset({ master: TEST_MASTER_PASSWORD, password: 'ein-neues-passwort', pin: '1357' })
+    expect(response.status).toBe(204)
+  })
 })
 
 describe('resetting with the master password', () => {
   const CHANGED = 'ein-neues-salon-passwort'
 
   it('sets a new password and a new PIN, and hands back no session', async () => {
-    const response = await reset({ master: TEST_CONFIG.masterPassword, password: CHANGED, pin: '1357' })
+    const response = await reset({ master: TEST_MASTER_PASSWORD, password: CHANGED, pin: '1357' })
 
     expect(response.status).toBe(204)
     // ADR-0017: the master password opens one screen and gets no board session. Whoever used
@@ -215,7 +227,7 @@ describe('resetting with the master password', () => {
     const before = cookieFrom(await login(TEST_PASSWORD))
     expect((await fetch(`${base}/api/day?date=${DAY}`, { headers: { cookie: before } })).status).toBe(200)
 
-    await reset({ master: TEST_CONFIG.masterPassword, password: CHANGED, pin: '1357' })
+    await reset({ master: TEST_MASTER_PASSWORD, password: CHANGED, pin: '1357' })
 
     expect((await fetch(`${base}/api/day?date=${DAY}`, { headers: { cookie: before } })).status).toBe(401)
   })
@@ -230,11 +242,11 @@ describe('resetting with the master password', () => {
   })
 
   it('refuses a password or a PIN the settings screen would also refuse', async () => {
-    const short = await reset({ master: TEST_CONFIG.masterPassword, password: 'kurz', pin: '1357' })
+    const short = await reset({ master: TEST_MASTER_PASSWORD, password: 'kurz', pin: '1357' })
     expect(short.status).toBe(400)
     expect((await short.json()).error).toMatch(/mindestens/)
 
-    const pin = await reset({ master: TEST_CONFIG.masterPassword, password: CHANGED, pin: '13' })
+    const pin = await reset({ master: TEST_MASTER_PASSWORD, password: CHANGED, pin: '13' })
     expect(pin.status).toBe(400)
     expect((await pin.json()).error).toMatch(/vier Ziffern/)
 
@@ -242,10 +254,22 @@ describe('resetting with the master password', () => {
     expect((await login(TEST_PASSWORD)).status).toBe(204)
   })
 
+  it('does not let a 400 tell somebody their master password guess was right', async () => {
+    // What was typed is checked before who is asking. The other order answered 401 for a wrong
+    // master and 400 for a right one with a short new password - so a guess could be confirmed
+    // silently, and used later. A security pass named it.
+    const right = await reset({ master: TEST_MASTER_PASSWORD, password: 'kurz', pin: '1357' })
+    const wrong = await reset({ master: 'not-the-master-password', password: 'kurz', pin: '1357' })
+
+    expect(right.status).toBe(400)
+    expect(wrong.status).toBe(400)
+    expect(await right.json()).toEqual(await wrong.json())
+  })
+
   it('leaves a session that was issued after the change alone', async () => {
     // The version is checked, not merely different from one: a change must not invalidate the
     // cookie the next person gets.
-    await reset({ master: TEST_CONFIG.masterPassword, password: CHANGED, pin: TEST_PIN })
+    await reset({ master: TEST_MASTER_PASSWORD, password: CHANGED, pin: TEST_PIN })
     const after = cookieFrom(await login(CHANGED))
 
     expect((await fetch(`${base}/api/day?date=${DAY}`, { headers: { cookie: after } })).status).toBe(200)

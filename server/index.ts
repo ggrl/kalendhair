@@ -1,7 +1,7 @@
 import { Pool } from 'pg'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
-import { seedCredentials } from './credentials.js'
+import { hashSecret, seedCredentials } from './credentials.js'
 import { migrate } from './migrate.js'
 
 const config = loadConfig(process.env)
@@ -35,19 +35,29 @@ if (await seedCredentials(pool, config.salonPassword, config.salonPin)) {
   console.log('salon password and PIN already set - SALON_PASSWORD and SALON_PIN are ignored')
 }
 
-const app = createApp(pool, config)
+const app = createApp(pool, {
+  salonTimeZone: config.salonTimeZone,
+  sessionSecret: config.sessionSecret,
+  // Hashed once here, with a salt that lives as long as this process and no longer. It is
+  // never stored: the point is that each guess at the master password costs a scrypt derive,
+  // exactly as a guess at the salon password does.
+  masterPasswordHash: await hashSecret(config.masterPassword),
+  cookieSecure: config.cookieSecure,
+})
 
 app.listen(config.port, config.host, () => {
   console.log(`salon calendar api on http://${config.host}:${config.port}`)
   console.log(`salon timezone: ${config.salonTimeZone}`)
 
-  // Loud on purpose, and now about the thing that is actually missing. ADR-0004's deadline
-  // was the first bind that is not loopback, and past that point the password travels in
-  // clear text unless something in front is terminating TLS.
+  // Loud on purpose, and stated as a decision this process made rather than as a fact about
+  // the network - because it cannot see the network. A reverse proxy terminating TLS in front
+  // of a loopback bind looks exactly like stage one from in here, and that is the deployment
+  // where being wrong sends the session cookie across a café wifi in clear text.
   if (config.cookieSecure) {
-    console.warn(`WARNING: bound to ${config.host}, so the session cookie is marked Secure`)
-    console.warn('WARNING: without HTTPS in front of this, no browser will send it back and nobody can log in')
+    console.log('session cookie: Secure - browsers will send it over HTTPS only')
+    console.warn('WARNING: if nothing in front of this terminates TLS, no login will work at all')
   } else {
-    console.log('reachable from this machine only - the session cookie is not marked Secure')
+    console.log('session cookie: not Secure - it will travel in clear text over plain HTTP')
+    console.warn('WARNING: set COOKIE_SECURE=true if anything in front of this serves the board over HTTPS')
   }
 })

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import type { Pool } from 'pg'
 
 /**
@@ -63,17 +63,6 @@ export async function secretMatches(secret: string, stored: string): Promise<boo
   }
 
   return timingSafeEqual(await derive(secret, Buffer.from(saltHex, 'hex')), expected)
-}
-
-/**
- * Constant-time comparison for the master password, which lives in the environment and so has
- * no hash to compare against.
- *
- * Hashed first because `timingSafeEqual` throws on inputs of different length, and comparing
- * the lengths beforehand would answer "wrong length" faster than "wrong password".
- */
-export function secretEquals(given: string, expected: string): boolean {
-  return timingSafeEqual(createHash('sha256').update(given).digest(), createHash('sha256').update(expected).digest())
 }
 
 /**

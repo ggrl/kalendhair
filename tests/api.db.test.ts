@@ -2,6 +2,7 @@ import type { Server } from 'node:http'
 import type { Pool } from 'pg'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../server/app.js'
+import { currentVersion } from '../server/credentials.js'
 import { TEST_CONFIG, addAppointment, addEmployee, empty, ensureCredentials, sessionHeader, testPool } from './db-helper.js'
 
 // The route had no test at all, and both blockers the first review found lived here: a
@@ -12,10 +13,13 @@ let server: Server
 let base: string
 /** Every request here carries a session. What a session is worth is proved in auth.db.test.ts. */
 let cookie: string
+/** The credential version that cookie carries, which a stubbed pool has to agree with. */
+let version: number
 
 beforeAll(async () => {
   pool = await testPool()
   await ensureCredentials(pool)
+  version = await currentVersion(pool)
   cookie = await sessionHeader(pool)
   await empty(pool)
   const marco = await addEmployee(pool, 'Marco', 1)
@@ -93,10 +97,26 @@ describe('GET /api/day', () => {
   })
 })
 
-// Since ADR-0017 the first query of any request is the session check, so with a pool that
-// rejects everything it is the session check that fails rather than the day query. That is the
-// same error reaching the same handler, which is what these two assert - but it is worth
-// knowing before reading a failure here as a fault in `readDay`.
+/**
+ * A pool that answers the session check and fails at everything else.
+ *
+ * Since ADR-0017 the first query of any request is the credential lookup, so a stub that
+ * rejects everything never reaches `readDay` - a review pass pointed out that these two tests
+ * had quietly stopped asserting anything about the day query at all. Letting the session
+ * through puts the failure back where the assertions say it is.
+ *
+ * It answers the version the real row holds rather than 1, because the guard compares them and
+ * an earlier test run that changed the password leaves the row above 1 for good.
+ */
+function brokenAfterTheSessionCheck(error: Error): Pool {
+  return {
+    query: (text: string) =>
+      text.includes('salon_credential')
+        ? Promise.resolve({ rows: [{ version }], rowCount: 1 })
+        : Promise.reject(error),
+  } as unknown as Pool
+}
+
 describe('when the database fails', () => {
   it('answers JSON without a stack trace', async () => {
     // Express writes err.stack into the body unless NODE_ENV is production, and `npm start`
@@ -105,9 +125,7 @@ describe('when the database fails', () => {
     //
     // A stub rather than a real outage: the point is what the client receives, and there is
     // no way to make a healthy pool fail on demand. Cast because only `query` is reached.
-    const broken = {
-      query: () => Promise.reject(new Error('relation "appointment" does not exist')),
-    } as unknown as Pool
+    const broken = brokenAfterTheSessionCheck(new Error('relation "appointment" does not exist'))
 
     const failing = createApp(broken, TEST_CONFIG).listen(0, '127.0.0.1')
     await new Promise<void>((resolve) => failing.once('listening', resolve))
@@ -142,7 +160,7 @@ describe('when the database fails', () => {
       detail: 'Failing row contains (id, employee, appointment, 2026-08-13 12:00:00, Anna Schmidt, Colour, allergic to ammonia).',
     })
 
-    const broken = { query: () => Promise.reject(violation) } as unknown as Pool
+    const broken = brokenAfterTheSessionCheck(violation)
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     const failing = createApp(broken, TEST_CONFIG).listen(0, '127.0.0.1')
