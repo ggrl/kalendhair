@@ -331,7 +331,12 @@ export function App() {
               painted behind the headings and dimmed to 45% itself - the one element saying why
               the board had gone faint. */}
           {loading && <p className="shell__loading">Termine werden geladen …</p>}
-          <div className={loading ? 'shell__fading' : undefined}>
+          {/* `inert` and not only the CSS `pointer-events: none` that was here first. That
+              stopped the mouse and left the keyboard: a review pass tabbed into the dimmed board
+              during a load, pressed Space on a column checkbox, and blocked the whole day that
+              was leaving - the exact bug the dimming was added to close. `inert` takes the whole
+              subtree out of the tab order and out of hit testing in one attribute. */}
+          <div className={loading ? 'shell__fading' : undefined} inert={loading}>
             <Board
               day={day}
               onOpenEntry={(entry) =>

@@ -17,6 +17,7 @@ test.use({ viewport: { width: 1280, height: 1200 } })
 const MARCO = '11111111-1111-1111-1111-111111111111'
 const JANA = '22222222-2222-2222-2222-222222222222'
 const TODAY = '2026-08-13'
+const YESTERDAY = '2026-08-12'
 
 interface Recorded {
   method: string
@@ -85,15 +86,23 @@ async function stub(
   page: Page,
   entries: Day['entries'],
   writeReply?: (route: Route) => Promise<void>,
+  /** Makes this numbered day request onwards slow, which is the window the board spends dimmed. */
+  slowFrom = Number.POSITIVE_INFINITY,
 ): Promise<Recorded[]> {
   const seen: Recorded[] = []
+  let asks = 0
 
   await page.route('**/api/suggestions*', async (route) => {
     await route.fulfill({ json: [] })
   })
 
   await page.route('**/api/day*', async (route) => {
-    await route.fulfill({ json: dayWith(entries) })
+    // Answers whichever date is asked for. Anna and the others exist on TODAY only, so a test can
+    // step to another day and see an empty board.
+    asks += 1
+    if (asks >= slowFrom) await new Promise((resolve) => setTimeout(resolve, 1500))
+    const asked = new URL(route.request().url()).searchParams.get('date') ?? TODAY
+    await route.fulfill({ json: { ...dayWith(asked === TODAY ? entries : []), date: asked } })
   })
 
   await page.route('**/api/entries**', async (route) => {
@@ -120,6 +129,19 @@ async function at(page: Page, column: number, wallClock: string): Promise<Point>
 
   const row = grid.height / SLOT_COUNT
   return { x: cell.x + cell.width / 2, y: grid.y + row * (slotFromWallClock(wallClock) + 0.5) }
+}
+
+/** How tall one 15-minute row is on screen, and where a row line sits. */
+async function rowHeight(page: Page): Promise<number> {
+  const grid = await page.locator('.board__grid').boundingBox()
+  if (grid === null) throw new Error('the board is not on screen')
+  return grid.height / SLOT_COUNT
+}
+
+async function rowLine(page: Page, wallClock: string): Promise<number> {
+  const grid = await page.locator('.board__grid').boundingBox()
+  if (grid === null) throw new Error('the board is not on screen')
+  return grid.y + (await rowHeight(page)) * slotFromWallClock(wallClock)
 }
 
 /** The middle of a box, which is the part that moves it rather than resizing it. */
@@ -187,17 +209,121 @@ test('a box dragged to another stylist and another time is saved at the version 
   })
 })
 
-test('a hand that moves a few pixels opens the form instead of moving the appointment', async ({ page }) => {
-  // Without a threshold every shaky click would be a silent move-and-save, and there is no undo.
+test('a hand that twitches across a row line still opens the form and saves nothing', async ({ page }) => {
+  // The threshold is pixels, not rows, and this is why. A row is 17.6px: comparing slots meant a
+  // three-pixel twitch across a row line wrote a fifteen-minute change with no dialogue and no
+  // undo, from about a third of every box. The test that was supposed to cover this passed only
+  // because the box centre it grabbed sat exactly on a row boundary - so these press deliberately
+  // beside a line, in both directions.
+  const seen = await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  const line = await rowLine(page, '09:30')
+  const body = await bodyOf(page, 'a1')
+
+  await dragFromTo(page, { x: body.x, y: line - 2 }, { x: body.x, y: line + 2 })
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
+  await expect(page.getByLabel('Von')).toHaveValue('09:00')
+  await page.keyboard.press('Escape')
+
+  await dragFromTo(page, { x: body.x, y: line + 2 }, { x: body.x, y: line - 2 })
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
+  await expect(page.getByLabel('Von')).toHaveValue('09:00')
+
+  expect(seen).toHaveLength(0)
+})
+
+test('past the threshold it is a drag, so it does not open the form either', async ({ page }) => {
+  // The other side of the threshold, and the only way to see it from outside: a twitch opens the
+  // form, while a real drag that happens to land back on the same quarter hour opens nothing and
+  // saves nothing. Two thirds of a row is past the threshold and still inside the row it started
+  // in, so there is nothing to write.
   const seen = await stub(page, [ANNA])
   await page.goto(`/?date=${TODAY}`)
 
   const body = await bodyOf(page, 'a1')
-  await dragFromTo(page, body, { x: body.x + 3, y: body.y + 3 })
+  await dragFromTo(page, body, { x: body.x, y: body.y + (await rowHeight(page)) * 0.6 })
 
-  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
-  await expect(page.getByLabel('Von')).toHaveValue('09:00')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   expect(seen).toHaveLength(0)
+})
+
+test('a drag that ends where it started writes nothing and opens nothing', async ({ page }) => {
+  // The brief's own awkward case. It travelled, so it is a drag and not a click - and it changed
+  // nothing, so there is nothing to save and no form to open.
+  const seen = await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  const body = await bodyOf(page, 'a1')
+  await page.mouse.move(body.x, body.y)
+  await page.mouse.down()
+  await page.mouse.move(body.x, body.y + (await rowHeight(page)) * 4, { steps: 6 })
+  await page.mouse.move(body.x, body.y, { steps: 6 })
+  await page.mouse.up()
+
+  await expect(page.locator('.entry[data-entry-id="a1"]')).toContainText('09:00')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(seen).toHaveLength(0)
+})
+
+test('a range dragged onto occupied time is refused instead of opening the form', async ({ page }) => {
+  // The proposal turns red while the pointer is there, so the release has to agree with it.
+  // Opening a form that Speichern would then refuse is exactly what saying it early prevents.
+  const seen = await stub(page, [BEA])
+  await page.goto(`/?date=${TODAY}`)
+
+  await dragFromTo(page, await at(page, 0, '10:30'), await at(page, 0, '11:30'))
+
+  await expect(page.getByRole('alert')).toContainText('schon belegt')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(seen).toHaveLength(0)
+})
+
+test('a day arriving under a held pointer abandons the drag', async ({ page }) => {
+  // Verified as a defect first: `popstate` needs no pointer event - a mouse's back side-button, or
+  // Alt and Left - and pointer capture keeps the gesture alive through the swap, so the release
+  // wrote to a day nobody was looking at. Neither stale nor a clash, so nothing refused it.
+  const seen = await stub(page, [ANNA])
+  await page.goto(`/?date=${YESTERDAY}`)
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.locator('.entry[data-entry-id="a1"]')).toBeVisible()
+
+  const body = await bodyOf(page, 'a1')
+  await page.mouse.move(body.x, body.y)
+  await page.mouse.down()
+  await page.mouse.move(body.x, body.y + (await rowHeight(page)) * 8, { steps: 8 })
+  await page.goBack()
+  // The new day has to be on screen before the release, or this test proves the other branch by
+  // accident - which is exactly what it did on the first run.
+  await expect(page.locator('.entry[data-entry-id="a1"]')).toHaveCount(0)
+  await page.mouse.up()
+
+  await expect(page.getByRole('alert')).toContainText('Tag hat sich geändert')
+  expect(seen).toHaveLength(0)
+})
+
+test('a release during a slow day change still writes to the day it started on', async ({ page }) => {
+  // The other branch, and the one the captured date exists for: the board has not arrived yet, so
+  // there is nothing to compare against on screen - and the write must still name the day the box
+  // was picked up on rather than the day being fetched.
+  // The third day request is the slow one: yesterday, today, then the step back. It has to be
+  // history rather than the day strip, because a captured pointer means a click on that button
+  // never reaches it - which is the capture doing its job.
+  const seen = await stub(page, [ANNA], undefined, 3)
+  await page.goto(`/?date=${YESTERDAY}`)
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.locator('.entry[data-entry-id="a1"]')).toBeVisible()
+
+  const body = await bodyOf(page, 'a1')
+  await page.mouse.move(body.x, body.y)
+  await page.mouse.down()
+  await page.mouse.move(body.x, body.y + (await rowHeight(page)) * 8, { steps: 8 })
+  await page.goBack()
+  await expect(page.locator('.shell__fading')).toBeVisible()
+  await page.mouse.up()
+
+  await writes(seen, 1)
+  expect(seen[0].body).toMatchObject({ date: TODAY, startsAt: '11:00', endsAt: '12:00' })
 })
 
 test('dragging the bottom edge changes the end and leaves the start alone', async ({ page }) => {

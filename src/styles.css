@@ -138,11 +138,10 @@ body {
    layout readable, which is the intended "provisional" reading. Do not dim harder. */
 .shell__fading {
   opacity: 0.45;
-  /* And it takes no clicks while it is being replaced. Dimmed but live, it accepted them against
-     the day that was leaving: a whole-day tick landed on the day on screen, the arriving day then
-     showed the box unticked, and the second tick blocked that day too - two days blocked, one of
-     them never chosen. Nothing here scrolls on its own, so the page still scrolls under it. */
-  pointer-events: none;
+  /* The board takes nothing at all while it is being replaced: `inert` in App.tsx does that, for
+     the keyboard as well as the pointer. This rule only dims. It said `pointer-events: none` at
+     first, which stopped the mouse and left Tab and Space working - a review pass blocked a whole
+     day that way, which is the bug the dimming exists to close. */
 }
 
 .shell__loading {

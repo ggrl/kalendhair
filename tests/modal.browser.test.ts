@@ -398,21 +398,68 @@ test('the board takes no clicks while the next day is on its way', async ({ page
   await expect(page.getByRole('dialog')).toHaveCount(0)
 })
 
-test('the keyboard is never handed the Sperrzeit box', async ({ page }) => {
-  // It is first in DOM order and it is the one control that destroys data: ADR-0008 leaves a block
-  // no room for a customer, a treatment or the notes, and there is no undo.
+test('the board takes no keys either while the next day is on its way', async ({ page }) => {
+  // `pointer-events: none` closed the mouse door and left the keyboard one open: a review pass
+  // tabbed into the dimmed board during a load, pressed Space on a column checkbox, and blocked
+  // the whole day that was leaving - the exact bug the dimming was added to stop. `inert` closes
+  // both, and the invariant it buys is that nothing in there can hold focus at all.
+  //
+  // Asserted by trying to focus the checkbox outright rather than by counting Tab presses: the tab
+  // order runs through the top bar and the day strips, so a fixed number of Tabs proves whatever
+  // the layout happens to be that week. The first version of this test passed with `inert` removed.
+  const seen = await stubDays(page, 2)
+  await page.goto(`/?date=${TODAY}`)
+
+  const wholeDay = page.getByRole('checkbox', { name: /Ganzen Tag für Marco/ })
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.locator('.shell__fading')).toBeVisible()
+
+  await wholeDay.evaluate((box: HTMLElement) => {
+    box.focus()
+  })
+  const focusInside = await page.evaluate(() => document.activeElement?.closest('.shell__fading') !== null)
+  expect(focusInside).toBe(false)
+
+  await page.keyboard.press('Space')
+  await page.keyboard.press('Enter')
+  expect(seen).toHaveLength(0)
+})
+
+test('the keyboard lands where a stray key does no harm', async ({ page }) => {
+  // Two defects deep, this one. Focus was the Sperrzeit box, first in DOM order and the one control
+  // that destroys data - one Space turned a booking into an unlabelled block. Skipping checkboxes
+  // then handed the keyboard the Person select, where on Windows and Linux one ArrowDown silently
+  // reassigns the stylist. So it is the customer field now: a stray key types a character somebody
+  // can see and delete, and it is where the hand is going anyway.
   await stub(page, [ANNA])
   await page.goto(`/?date=${TODAY}`)
 
   await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await expect(page.getByLabel('Kundin / Kunde')).toBeFocused()
   await expect(page.getByLabel(/Sperrzeit/)).not.toBeFocused()
+  await expect(page.getByLabel('Person')).not.toBeFocused()
 
   // Space, the ordinary key for scrolling a page, and the backdrop scrolls.
   await page.keyboard.press('Space')
 
   await expect(page.getByLabel(/Sperrzeit/)).not.toBeChecked()
-  await expect(page.getByLabel('Kundin / Kunde')).toHaveValue('Anna Schmidt')
+  // One visible character in a text field, rather than a booking becoming a grey block.
+  await expect(page.getByLabel('Kundin / Kunde')).toHaveValue('Anna Schmidt ')
   await expect(page.getByLabel('Notizen')).toHaveValue('Reagiert auf Ammoniak')
+})
+
+test('a Sperrzeit has no customer field, so the dialogue itself takes focus', async ({ page }) => {
+  // The fallback, and the reason the dialogue is focusable at all: nothing inside a block form can
+  // be pressed into changing what is about to be saved.
+  await stub(page, [BLOCK])
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('button', { name: /Gesperrt/ }).click()
+
+  await expect(page.getByRole('dialog')).toBeFocused()
+  await page.keyboard.press('Space')
+  await expect(page.getByLabel(/Sperrzeit/)).toBeChecked()
+  await expect(page.getByLabel('Von')).toHaveValue('12:00')
 })
 
 test('typing a name offers what has been typed before', async ({ page }) => {

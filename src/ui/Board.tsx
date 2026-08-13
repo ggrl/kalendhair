@@ -9,11 +9,12 @@ import {
   hourLabels,
   isPlaceable,
   rangeFromSlots,
-  slotFromWallClock,
-  whyNotBookable,
+  slotAt,
   whyNotFree,
 } from '../calendar/grid'
 import { EntryBox } from './EntryBox'
+import { previewOf } from './gesture'
+import type { Gesture, Preview } from './gesture'
 
 interface Props {
   day: Day
@@ -33,67 +34,6 @@ interface Props {
 interface Undrawn {
   entry: Entry
   reason: string
-}
-
-/**
- * A gesture in progress. Three kinds, because the release means three different things: propose a
- * range, move an entry, or change one of its ends.
- *
- * `slot` is where the pointer is now; nothing here is a pixel, so the board can only ever propose
- * a time it can also draw.
- */
-type Gesture =
-  | { kind: 'create'; employeeId: string; anchorSlot: number; slot: number }
-  | { kind: 'move'; entry: Entry; employeeId: string; anchorSlot: number; slot: number }
-  | { kind: 'resize'; entry: Entry; edge: 'top' | 'bottom'; slot: number }
-
-interface Preview {
-  employeeId: string
-  startSlot: number
-  endSlot: number
-  /**
-   * Whether this is a drag at all. A hand moving three pixels while clicking stays inside one row,
-   * which leaves this false and the gesture a click - without it, every shaky click on a box would
-   * be a silent move-and-save, and there is no undo to reach for.
-   */
-  moved: boolean
-}
-
-/** Where the gesture currently points, in rows and columns. Pure, so the maths is testable. */
-function previewOf(gesture: Gesture): Preview {
-  if (gesture.kind === 'create') {
-    const first = Math.min(gesture.anchorSlot, gesture.slot)
-    const last = Math.max(gesture.anchorSlot, gesture.slot)
-    return {
-      employeeId: gesture.employeeId,
-      startSlot: first,
-      endSlot: last + 1,
-      moved: gesture.slot !== gesture.anchorSlot,
-    }
-  }
-
-  const held = gesture.entry
-  const start = slotFromWallClock(held.startsAt)
-  const end = slotFromWallClock(held.endsAt)
-
-  if (gesture.kind === 'resize') {
-    // One slot is the floor. Dragging an edge past its opposite would otherwise ask for a
-    // zero-length or backwards entry, which the database refuses and the grid cannot draw.
-    const startSlot = gesture.edge === 'top' ? Math.max(Math.min(gesture.slot, end - 1), 0) : start
-    const endSlot = gesture.edge === 'bottom' ? Math.min(Math.max(gesture.slot + 1, start + 1), SLOT_COUNT) : end
-    return { employeeId: held.employeeId, startSlot, endSlot, moved: startSlot !== start || endSlot !== end }
-  }
-
-  // A move keeps its length and slides. Clamped so the whole box stays on the board: dragging
-  // towards 21:00 stops at 20:00 rather than proposing a time the server would refuse, and an
-  // hour-long appointment stays an hour long.
-  const shift = Math.min(Math.max(gesture.slot - gesture.anchorSlot, -start), SLOT_COUNT - end)
-  return {
-    employeeId: gesture.employeeId,
-    startSlot: start + shift,
-    endSlot: end + shift,
-    moved: shift !== 0 || gesture.employeeId !== held.employeeId,
-  }
 }
 
 /**
@@ -157,16 +97,17 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
   /**
    * Why the gesture cannot be dropped where it is, or null.
    *
-   * Both halves are the browser refusing what the server refuses anyway: `whyNotBookable` is the
-   * same function the server calls, and `whyNotFree` reads the day already on screen. Neither is
-   * the authority - ADR-0001 leaves that to the exclusion constraint, which decides again on
-   * every write.
+   * Only occupied time can refuse a gesture. The other half of "is this bookable" - inside the
+   * day, on a quarter hour, not zero length - cannot fail here, because `rangeFromSlots` clamps
+   * every gesture into the window by construction; calling `whyNotBookable` as well was a check
+   * that could only ever return null. The server calls it regardless, on every write.
+   *
+   * This is not the authority either. ADR-0001 leaves that to the exclusion constraint, which
+   * decides again on every write; this is the browser refusing what the server would refuse
+   * anyway, so a mis-drag costs no round trip.
    */
   function refusalFor(preview: Preview, range: { startsAt: string; endsAt: string }, held?: Entry): string | null {
-    return (
-      whyNotBookable(range.startsAt, range.endsAt) ??
-      whyNotFree(day.entries, { id: held?.id, employeeId: preview.employeeId, ...range })
-    )
+    return whyNotFree(day.entries, { id: held?.id, employeeId: preview.employeeId, ...range })
   }
 
   /** Which quarter hour a pointer is over, clamped to the board. */
@@ -197,6 +138,12 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
     return clientX < drawn[0].box.left ? drawn[0].id : drawn[drawn.length - 1].id
   }
 
+  /** Half a row. Less than this is a hand holding still, not somebody moving an appointment. */
+  function dragStartsAfter(): number {
+    const box = grid.current?.getBoundingClientRect()
+    return box === undefined ? SLOT_MINUTES : box.height / SLOT_COUNT / 2
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
     // Left button only. A right click belongs to the browser's own menu, and a middle click on a
     // board that saves on release is nobody's intention.
@@ -205,6 +152,7 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
     const target = event.target as HTMLElement
     const box = target.closest<HTMLElement>('[data-entry-id]')
     const slot = slotFrom(event.clientY)
+    const held = { date: day.date, fromY: event.clientY, travelled: false }
 
     if (box !== null) {
       const entry = drawable.find((candidate) => candidate.id === box.dataset.entryId)
@@ -212,13 +160,13 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
       const edge = target.dataset.edge
       setGesture(
         edge === 'top' || edge === 'bottom'
-          ? { kind: 'resize', entry, edge, slot }
-          : { kind: 'move', entry, employeeId: entry.employeeId, anchorSlot: slot, slot },
+          ? { ...held, kind: 'resize', entry, edge, slot }
+          : { ...held, kind: 'move', entry, employeeId: entry.employeeId, anchorSlot: slot, slot },
       )
     } else {
       const employeeId = employeeFrom(event.clientX)
       if (employeeId === null) return
-      setGesture({ kind: 'create', employeeId, anchorSlot: slot, slot })
+      setGesture({ ...held, kind: 'create', employeeId, anchorSlot: slot, slot })
     }
 
     // Capture, so a drag that leaves the grid - or the window - still ends up here rather than
@@ -229,52 +177,83 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
     if (gesture === null) return
     const slot = slotFrom(event.clientY)
+    const farEnough = gesture.travelled || Math.abs(event.clientY - gesture.fromY) >= dragStartsAfter()
 
     if (gesture.kind === 'move') {
       const employeeId = employeeFrom(event.clientX) ?? gesture.employeeId
-      if (slot !== gesture.slot || employeeId !== gesture.employeeId) setGesture({ ...gesture, slot, employeeId })
+      // Sideways counts on its own: crossing into another column is unmistakably deliberate, and a
+      // column is far wider than any twitch. Only a move can do it - a resize belongs to the
+      // entry's own column, and a range being dragged out stays in the column it started in,
+      // because reaching sideways while deciding how long something takes is not a change of
+      // stylist.
+      const travelled = farEnough || employeeId !== gesture.employeeId
+      if (slot !== gesture.slot || employeeId !== gesture.employeeId || travelled !== gesture.travelled) {
+        setGesture({ ...gesture, slot, employeeId, travelled })
+      }
       return
     }
 
-    // A range being dragged out stays in the column it started in. Reaching sideways while
-    // deciding how long something takes is not a change of stylist.
-    if (slot !== gesture.slot) setGesture({ ...gesture, slot })
+    if (slot !== gesture.slot || farEnough !== gesture.travelled) {
+      setGesture({ ...gesture, slot, travelled: farEnough })
+    }
   }
 
   function onPointerUp(): void {
     if (gesture === null) return
-    const preview = previewOf(gesture)
-    const range = rangeFromSlots(preview.startSlot, preview.endSlot)
+    const held = gesture
     setGesture(null)
 
-    if (gesture.kind === 'create') {
-      // Nothing is written here. The range is a proposal, and the form is where it becomes an
-      // appointment - which is also what a plain click on empty grid does, one row long.
-      onOpenSlot(preview.employeeId, range.startsAt, range.endsAt)
+    // The board went to another day while the pointer was down - a mouse's back button needs no
+    // pointer event to do it. Whatever this gesture was aiming at is no longer on screen, columns
+    // included, so it is abandoned rather than applied to a day nobody was looking at.
+    if (held.date !== day.date) {
+      onRefused('Der angezeigte Tag hat sich geändert. Es wurde nichts verschoben.')
       return
     }
 
-    // Under one row and in the same column: a click, so the form opens and nothing is saved.
+    // A press that never travelled is a click, whatever row line it happened to sit on. On a box
+    // that opens the form; on empty grid it proposes the quarter hour that was pressed.
     //
     // Opened from here rather than left to the box's own click handler, because capturing the
     // pointer retargets the click that follows to the capturing element - the grid - so a box
     // pressed with a mouse never sees one. The handler on the box stays for the keyboard, where
     // Enter produces a click and no pointer events at all.
-    if (!preview.moved) {
-      onOpenEntry(gesture.entry)
+    if (!held.travelled) {
+      if (held.kind === 'create') {
+        const one = slotAt(held.anchorSlot)
+        onOpenSlot(held.employeeId, one.startsAt, one.endsAt)
+      } else {
+        onOpenEntry(held.entry)
+      }
       return
     }
-    const reason = refusalFor(preview, range, gesture.entry)
+
+    const preview = previewOf(held)
+    const range = rangeFromSlots(preview.startSlot, preview.endSlot)
+    // Dragged out and back again: the brief's own awkward case. Nothing changed, so nothing is
+    // written and no form opens - the gesture was already answered by putting it back.
+    if (!preview.changed) return
+
+    const reason = refusalFor(preview, range, held.kind === 'create' ? undefined : held.entry)
     if (reason !== null) {
       // The box springs back by itself: clearing the gesture draws it at the time it still has.
+      // A proposal that was painted red is refused here too, rather than opening a form that
+      // would only be refused on Speichern - which is the whole point of saying so before the
+      // release.
       onRefused(reason)
       return
     }
 
-    onDragged(gesture.entry, { employeeId: preview.employeeId, startsAt: range.startsAt, endsAt: range.endsAt })
+    if (held.kind === 'create') {
+      // Still nothing written. The range is a proposal, and the form is where it becomes an entry.
+      onOpenSlot(preview.employeeId, range.startsAt, range.endsAt)
+      return
+    }
+
+    onDragged(held.entry, { employeeId: preview.employeeId, startsAt: range.startsAt, endsAt: range.endsAt })
   }
 
-  const preview = gesture === null ? null : previewOf(gesture)
+  const preview = gesture === null || !gesture.travelled ? null : previewOf(gesture)
   const previewRange = preview === null ? null : rangeFromSlots(preview.startSlot, preview.endSlot)
   const previewRefused =
     preview === null || previewRange === null
@@ -334,8 +313,17 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        // A cancelled pointer writes nothing. The box returns to the time it still has.
-        onPointerCancel={() => setGesture(null)}
+        // A cancelled pointer writes nothing, and says so if there was anything to write. The
+        // board going inert while a day loads is one way to get here - `inert` drops pointer
+        // capture, so a day arriving under a held pointer ends the gesture before the release
+        // does - and an operating system gesture is another. Either way the box goes back to the
+        // time it still has, and silence would leave somebody believing they had moved it.
+        onPointerCancel={() => {
+          if (gesture?.travelled === true) {
+            onRefused('Die Bewegung wurde abgebrochen. Es wurde nichts verschoben.')
+          }
+          setGesture(null)
+        }}
       >
         {labels.map((label, index) => {
           // The last label marks the end of the final row, not the start of one after it. Placing
