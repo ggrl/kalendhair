@@ -81,7 +81,10 @@ Run on `main` at `28cf485`:
 
 - **The fix commits went in unreviewed.** Roughly 500 lines written *after* the verdicts, and
   answering them, are in `main` with no independent reader. Each round so far found real
-  blockers in exactly that kind of code.
+  blockers in exactly that kind of code. **The owner accepted this on 2026-08-13** rather than
+  run the passes again: a decision, not an oversight, and it is not an open task. It stays
+  written down because it is worth knowing when something surfaces in `daabbbb..28cf485` -
+  those three merges are the code nobody but its author has read.
 - **Two of my own verifications proved nothing until caught.** A leftover Vite dev server on
   4173 served another working tree, so a "worktree" browser run tested the wrong code; and my
   first keyboard test for `inert` passed with `inert` removed, because a fixed number of Tab
@@ -98,15 +101,13 @@ Run on `main` at `28cf485`:
 
 ### Unfinished, and what comes next
 
-1. **Decide about the unreviewed fix commits**: run both passes over `daabbbb..28cf485`, or
-   accept them knowingly.
-2. **Authentication.** ADR-0004, still marked to be revisited before a line of it is written,
+1. **Authentication.** ADR-0004, still marked to be revisited before a line of it is written,
    and still blocking before any real customer name.
-3. **Polling**, with two warnings from this session's reviews: a client holding a day loaded
+2. **Polling**, with two warnings from this session's reviews: a client holding a day loaded
    before a deactivation keeps offering to edit entries the server no longer sends, and
    `updateEntry` will accept that write by id; and an update landing mid-drag is the case the
    brief already flags.
-4. The remaining navigation aids, then the application container and the VPS, with the
+3. The remaining navigation aids, then the application container and the VPS, with the
    blocking backup gate in the brief.
 
 ### What surprised me
