@@ -18,8 +18,9 @@ years rather than calling the API, which is the right instinct and is the decisi
 
 ## Decision
 
-**A list in `src/calendar/opening.ts`, not a request.** Fifty dates, 2026 to 2030, each with its
-name in a comment so a human can check it. A holiday makes `coreHoursOn` return null, which the
+**A list in `src/calendar/opening.ts`, not a request.** Fifty dates, 2026 to 2030, each paired
+with its German name - as data, because the top bar shows it, and a name beside the date is also
+what makes the list checkable by a human. A holiday makes `coreHoursOn` return null, which the
 board already draws as a full-day wash - the same thing it does for a Sunday, because to somebody
 looking at the board it means the same thing.
 
@@ -56,9 +57,14 @@ state's holidays.
   know what day it is.
 - A holiday in another state shows as an ordinary working day, correctly. This is a Hessen salon,
   and the ADR says so rather than leaving `HE` looking like a default somebody picked.
-- The board says nothing about *which* holiday it is. The names are in the source as comments,
-  not on screen. If the salon wants `Karfreitag` in the header, that is a small change and it
-  needs a decision about the top bar, not about this list.
+- **The top bar names the holiday**, next to the week number: `KW 14 · Karfreitag · Stand 16:43`.
+  Asked for immediately after this ADR was written, and the reason is worth keeping: a board
+  washed from 06:00 to 20:00 with nothing saying why is ambiguous between "the salon is shut" and
+  "the software has a fault", which is the shape of problem this project exists to remove. So the
+  names are data rather than comments, and they are shown in the same red the board is washed in -
+  not the alert red, because a holiday is information and not a fault.
+- The heading stays the date and nothing else. The week line already reads as a list of things
+  about the day, which is where `heute` and `Stand` live.
 
 ## Alternatives rejected
 

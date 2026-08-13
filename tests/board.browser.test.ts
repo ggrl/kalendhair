@@ -539,3 +539,18 @@ test('a public holiday is shaded like a Sunday, even on a working weekday', asyn
   await page.goto('/?date=2026-12-24')
   await expect(page.locator('.board__closed')).toHaveCount(2)
 })
+
+test('the top bar names the holiday, so the pink board is not a riddle', async ({ page }) => {
+  // ADR-0016. Without the name, a board washed from 06:00 to 20:00 is ambiguous between "the
+  // salon is shut" and "something is broken" - which is the shape of problem this project exists
+  // to remove, not to add.
+  await page.goto('/?date=2026-04-03')
+
+  await expect(page.getByRole('heading', { name: 'Freitag, 3. April 2026' })).toBeVisible()
+  await expect(page.locator('.topbar__week')).toContainText('Karfreitag')
+  await expect(page.locator('.topbar__week')).toContainText('KW 14')
+
+  // And an ordinary day says nothing extra.
+  await page.goto('/?date=2026-04-02')
+  await expect(page.locator('.topbar__holiday')).toHaveCount(0)
+})

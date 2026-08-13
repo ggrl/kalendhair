@@ -1,4 +1,5 @@
 import { isoWeek, longGermanDate } from '../calendar/dates'
+import { holidayName } from '../calendar/opening'
 
 interface Props {
   date: string
@@ -14,6 +15,7 @@ interface Props {
 
 export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onReload }: Props) {
   const { week } = isoWeek(date)
+  const holiday = holidayName(date)
 
   return (
     <header className="topbar">
@@ -30,6 +32,11 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onRelo
           KW {week}
           {/* Saying which day this is beats leaving it to a greyed-out button. */}
           {isToday && <span className="topbar__istoday"> · heute</span>}
+          {/* ADR-0016. The board is washed pink on a holiday, and without the name that is
+              ambiguous between "the salon is shut" and "the software has a fault". It sits here
+              rather than in the heading because the heading is the date and nothing else, and
+              because this line already reads as a list of things about the day. */}
+          {holiday !== null && <span className="topbar__holiday"> · {holiday}</span>}
           {/* The board loads once and nothing polls yet, so at 14:00 it looks exactly like a
               live board loaded at 09:00. The brief's whole premise is that nobody can tell how
               stale a photograph is; a screen that cannot say either has the same fault with

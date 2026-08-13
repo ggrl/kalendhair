@@ -3,6 +3,7 @@ import {
   HOLIDAYS_COVERED_THROUGH,
   HOLIDAY_SOURCE,
   coreHoursOn,
+  holidayName,
   isHoliday,
   weekdayOf,
 } from '../src/calendar/opening.js'
@@ -108,5 +109,18 @@ describe('the Hessen holiday list', () => {
         `Refresh it in src/calendar/opening.ts from ${HOLIDAY_SOURCE} (one request per year), check the ` +
         `dates against the Easter arithmetic, and move HOLIDAYS_COVERED_THROUGH.`,
     ).toBe(true)
+  })
+})
+
+describe('what the holiday is called', () => {
+  it('gives the German name, which is what the top bar shows', () => {
+    expect(holidayName('2026-04-03')).toBe('Karfreitag')
+    expect(holidayName('2026-06-04')).toBe('Fronleichnam')
+    expect(holidayName('2026-12-26')).toBe('2. Weihnachtstag')
+  })
+
+  it('gives null on an ordinary day, so nothing is drawn', () => {
+    expect(holidayName('2026-08-13')).toBeNull()
+    expect(holidayName('2026-12-24')).toBeNull()
   })
 })

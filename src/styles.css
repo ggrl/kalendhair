@@ -82,6 +82,13 @@ body {
   color: var(--ink);
 }
 
+/* Named in the same red the board is washed in, so the word and the colour answer each other.
+   Not the alert red: a holiday is information, not a fault. */
+.topbar__holiday {
+  font-weight: 600;
+  color: #b45252;
+}
+
 .topbar__step,
 .topbar__today {
   padding: 0.5rem 0.9rem;
