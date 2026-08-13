@@ -54,13 +54,18 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
   const dragClass = drag === undefined ? '' : drag.refused ? ' entry--dragging entry--refused' : ' entry--dragging'
 
   if (entry.kind === 'block') {
-    // The word `gesperrt` has to survive in the name whatever the reason says, and `title` alone
-    // does not do that: a button with text content takes its accessible name from the content, and
-    // `title` is only consulted when there is none. So a screen reader heard "14:00 bis 15:00
-    // Urlaub, Schaltfläche", which is indistinguishable from an appointment for a customer called
-    // Urlaub - the hatching is the only other signal and it cannot be heard. A review pass measured
-    // it after this comment claimed the opposite.
+    // `N/A` is the marker on screen, and it is not a word: it says nothing to a screen reader and
+    // less than `Gesperrt` did. So the accessible name is German prose and always carries
+    // `gesperrt`, whether or not a reason follows it.
+    //
+    // `title` cannot do this alone. A button with text content takes its accessible name from the
+    // content and `title` is only consulted when there is none - which a review pass measured after
+    // an earlier version of this comment claimed otherwise.
     const spoken = entry.reason === null ? `${timeRange} gesperrt` : `${timeRange} gesperrt: ${entry.reason}`
+
+    // `N/A` first, then the reason: `N/A Urlaub`. The owner's format, and it undoes ADR-0014's
+    // "the reason replaces the word" - the marker now always stands, and the reason qualifies it.
+    const label = entry.reason === null ? 'N/A' : `N/A ${entry.reason}`
 
     // A 15-minute block is 15.6px tall and its second line starts below the bottom edge, so a
     // reason on the shortest block the grid allows was drawn nowhere at all - which is the promise
@@ -74,24 +79,19 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         className={`entry entry--appointment entry--block${tight ? ' entry--compact' : ''}${dragClass}`}
         style={placement}
         title={spoken}
-        // Only when a reason has taken the word's place. With no reason the content already reads
-        // `Gesperrt`, and overriding it there would rename the box for no gain - it broke two
-        // tests that matched on the visible word, which was the right complaint.
-        aria-label={entry.reason === null ? undefined : spoken}
+        aria-label={spoken}
         data-entry-id={entry.id}
         onClick={onOpen}
       >
-        {/* ADR-0014: `Urlaub` in place of `Gesperrt`, because a reason nobody can see without
-            clicking is worth less than the word it replaced. */}
         {tight ? (
           <span className="entry__line">
             <span className="entry__time">{shown.startsAt}</span>
-            <span className="entry__label">{entry.reason ?? 'Gesperrt'}</span>
+            <span className="entry__label">{label}</span>
           </span>
         ) : (
           <>
             <span className="entry__time">{timeRange}</span>
-            <span className="entry__label">{entry.reason ?? 'Gesperrt'}</span>
+            <span className="entry__label">{label}</span>
           </>
         )}
         <Grips />

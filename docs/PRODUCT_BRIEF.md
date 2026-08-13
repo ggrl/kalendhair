@@ -50,7 +50,7 @@ two appointments - the dye sets while somebody else is cut - is visibly one pers
 places. The colour is computed by the server from the whole day, never stored, and grey
 is kept out of the palette. See ADR-0009.
 
-**The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Gesperrt`,
+**The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Notiz`,
 the date format - is German, because that is the language they work in and `KW` was asked
 for by name. Code, comments, commit messages and these documents stay English: they are for
 whoever maintains the thing, not for the salon. There is no translation mechanism and no
@@ -83,8 +83,8 @@ concept of opening days is therefore no longer true.
 
 A checkbox in the same modal makes the row a grey block instead of an appointment:
 time nobody may be booked into, with no customer and no treatment. It may carry an optional
-reason - `Urlaub`, `Fortbildung` - which is drawn on the grey box in place of the word
-`Gesperrt`: ADR-0014, which reversed this line's original "no label". A checkbox
+reason - `Urlaub`, `Fortbildung` - which is drawn on the grey box behind an `N/A` marker, as
+`N/A Urlaub`: ADR-0014, which reversed this line's original "no label". A checkbox
 beside a column heading blocks that employee's whole day, which is one block row from
 06:00 to 20:00 and nothing more. Blocks live in the same table as appointments, because
 that is the only way the verified overlap constraint can cover both. See ADR-0008.

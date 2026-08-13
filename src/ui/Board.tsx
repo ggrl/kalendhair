@@ -463,7 +463,10 @@ function Undrawable({ entries }: { entries: Undrawn[] }) {
       <ul>
         {entries.map(({ entry, reason }) => (
           <li key={entry.id}>
-            {entry.startsAt}–{entry.endsAt} {entry.customer ?? 'Gesperrt'} – {reason}
+            {/* A block has no customer, so it identifies itself by its reason if it has one and by
+                the board's own marker if it does not. Shorter than the box's `N/A Urlaub`, because
+                this line is a diagnostic and already says the time. */}
+            {entry.startsAt}–{entry.endsAt} {entry.customer ?? entry.reason ?? 'N/A'} – {reason}
           </li>
         ))}
       </ul>

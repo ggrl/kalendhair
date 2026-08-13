@@ -298,31 +298,33 @@ test('a block opens with its times and no customer fields', async ({ page }) => 
   await stub(page, [BLOCK])
   await page.goto(`/?date=${TODAY}`)
 
-  await page.getByRole('button', { name: /Gesperrt/ }).click()
+  await page.getByRole('button', { name: /gesperrt/ }).click()
 
   await expect(page.getByLabel(/Sperrzeit/)).toBeChecked()
   await expect(page.getByLabel('Von')).toHaveValue('12:00')
   await expect(page.getByLabel('Kundin / Kunde')).toHaveCount(0)
 })
 
-test('a block with a reason says it on the box instead of Gesperrt', async ({ page }) => {
-  // ADR-0014: the reason replaces the word, because one nobody can see without clicking is worth
-  // less than the word it replaced. The tooltip still says gesperrt, and so does the button's
-  // accessible name - the hatching is the only other signal, and a screen reader cannot see it.
+test('a block reads N/A with its reason behind it', async ({ page }) => {
+  // The owner's format: the marker always stands and the reason qualifies it. This asserted the
+  // reason *replacing* the word until 2026-08-13, which is what ADR-0014 originally decided.
   await stub(page, [HOLIDAY])
   await page.goto(`/?date=${TODAY}`)
 
   const box = page.locator('.entry[data-entry-id="b2"]')
-  await expect(box).toContainText('Urlaub')
-  await expect(box).not.toContainText('Gesperrt')
+  await expect(box.locator('.entry__label')).toHaveText('N/A Urlaub')
+  // The hover text and the accessible name stay German prose: `N/A` says nothing out loud.
   await expect(box).toHaveAttribute('title', '14:00–15:00 gesperrt: Urlaub')
 })
 
-test('a block with no reason still says Gesperrt', async ({ page }) => {
+test('a block with no reason reads just N/A', async ({ page }) => {
   await stub(page, [BLOCK])
   await page.goto(`/?date=${TODAY}`)
 
-  await expect(page.locator('.entry[data-entry-id="b1"]')).toContainText('Gesperrt')
+  await expect(page.locator('.entry[data-entry-id="b1"] .entry__label')).toHaveText('N/A')
+  await expect(page.locator('.entry[data-entry-id="b1"]')).not.toContainText('Gesperrt')
+  // Still says what it is to anybody who cannot see the hatching.
+  await expect(page.getByRole('button', { name: '12:00–13:00 gesperrt' })).toHaveCount(1)
 })
 
 test('the reason is editable in the form, and only for a block', async ({ page }) => {
@@ -533,7 +535,7 @@ test('a Sperrzeit has no customer field, so the dialogue itself takes focus', as
   await stub(page, [BLOCK])
   await page.goto(`/?date=${TODAY}`)
 
-  await page.getByRole('button', { name: /Gesperrt/ }).click()
+  await page.getByRole('button', { name: /gesperrt/ }).click()
 
   await expect(page.getByRole('dialog')).toBeFocused()
   await page.keyboard.press('Space')
@@ -560,8 +562,9 @@ test('a block still says gesperrt to a screen reader, whatever the reason says',
   await page.goto(`/?date=${TODAY}`)
 
   await expect(page.getByRole('button', { name: '14:00–15:00 gesperrt: Urlaub' })).toHaveCount(1)
-  // And the visible label is still the reason alone.
-  await expect(page.locator('.entry[data-entry-id="b2"] .entry__label')).toHaveText('Urlaub')
+  // The visible label is the marker and the reason; the German is only in the name and the tooltip,
+  // which is the whole reason the override exists now that `N/A` says nothing out loud.
+  await expect(page.locator('.entry[data-entry-id="b2"] .entry__label')).toHaveText('N/A Urlaub')
 })
 
 test('a 15-minute block still shows its reason somewhere', async ({ page }) => {
@@ -572,7 +575,7 @@ test('a 15-minute block still shows its reason somewhere', async ({ page }) => {
   await page.goto(`/?date=${TODAY}`)
 
   const label = page.locator('.entry[data-entry-id="b3"] .entry__label')
-  await expect(label).toHaveText('Zahnarzt')
+  await expect(label).toHaveText('N/A Zahnarzt')
 
   // Inside the box, not clipped away below it.
   const box = await page.locator('.entry[data-entry-id="b3"]').boundingBox()

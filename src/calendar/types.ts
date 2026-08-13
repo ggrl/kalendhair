@@ -37,7 +37,7 @@ export interface Entry {
   notes: string | null
   /**
    * Why this time is blocked, for a block only, and optional. ADR-0014: it is drawn on the box
-   * in place of the word `Gesperrt`, which is the opposite of what `notes` does - hence its own
+   * on the box after the `N/A` marker, which is the opposite of what `notes` does - hence its own
    * field rather than one column with two visibility rules.
    */
   reason: string | null

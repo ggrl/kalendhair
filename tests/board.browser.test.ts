@@ -217,10 +217,10 @@ test('a block says so and carries no customer', async ({ page }) => {
   await page.goto('/?date=2026-08-13')
 
   // Exact, because the column headings now also say "ganzer Tag gesperrt".
-  await expect(page.getByText('Gesperrt', { exact: true })).toBeVisible()
+  await expect(page.getByText('N/A', { exact: true })).toBeVisible()
   // It is a button now, because clicking one opens its times and a way to remove it. ADR-0008
   // gives a block no label, so that is all the form has to hold.
-  await expect(page.getByRole('button', { name: /Gesperrt/ })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: /gesperrt/ })).toHaveCount(1)
 })
 
 test('the day steps move one day and put it in the address bar', async ({ page }) => {

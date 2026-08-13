@@ -21,9 +21,19 @@ the box in place of `Gesperrt`**, not hidden behind a click.
 appointment may not carry one at all: a treatment is what an appointment is for, and two
 fields answering that question would drift apart.
 
-**The reason replaces the word `Gesperrt` on the box.** A block with no reason still reads
-`Gesperrt`. A reason nobody can see without opening the box is worth less than the word it
-replaced, which is why it is drawn rather than filed away.
+**The box reads `N/A`, and the reason goes behind it: `N/A Urlaub`.** A block with no reason reads
+`N/A` alone. A reason nobody can see without opening the box is worth less than the marker beside
+it, which is why it is drawn rather than filed away.
+
+Amended the same day, twice. This first said the reason *replaces* the word `Gesperrt` - the owner
+asked instead for a marker that always stands with the reason qualifying it, and for that marker to
+be `N/A` rather than a German word. So `Gesperrt` is gone from the board altogether.
+
+That leaves ADR-0011 with an exception, and it is deliberate: `N/A` is not German, and it is not
+prose either. It is a symbol on a grey box, chosen by the owner, and the German did not survive
+because there is no short German equivalent that reads as a marker rather than a sentence. The
+prose that a screen reader and a hover tooltip get is still German - see below - so the exception is
+to the label, not to the language.
 
 **It is its own column, not `notes`.** An appointment's notes are private and deliberately
 never drawn on the board: a customer's allergy note reached the screen once, and three review
@@ -34,16 +44,15 @@ would no longer be able to say which kind may carry what.
 **Blank is refused, in the database.** "Nothing said" is NULL, exactly as it is for a
 customer. A box labelled with a space would look like a fault nobody can find.
 
-**The tooltip and the accessible name still say `gesperrt`.** The hatched grey is the only
-other thing that says this is blocked time, and a screen reader cannot see it. So the visible
-label carries the reason, and the title and the accessible name carry both:
-`14:00-15:00 gesperrt: Urlaub`.
+**The tooltip and the accessible name are German prose and always say `gesperrt`:**
+`14:00-15:00 gesperrt: Urlaub`. The hatched grey is the only other thing that says this is blocked
+time, and a screen reader cannot see it - and `N/A` read aloud says even less than `Gesperrt` did.
+The `aria-label` is therefore set on every block, not only on labelled ones.
 
-This sentence was false when it was first written, and a review pass measured it: `title` is only
-consulted for an accessible name when the element has no text content, and this button has plenty.
-The name was `14:00-15:00 Urlaub`, which is what an appointment for a customer called Urlaub sounds
-like. It takes an explicit `aria-label`, and it is set only when a reason has replaced the word -
-with no reason the content already says `Gesperrt`.
+This was false when first written, and a review pass measured it: `title` supplies an accessible
+name only when an element has no text content, and this button has plenty. The name was
+`14:00-15:00 Urlaub`, which is what an appointment for a customer called Urlaub sounds like. It
+takes an explicit `aria-label`.
 
 ## Consequences
 

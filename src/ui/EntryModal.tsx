@@ -196,7 +196,7 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
         {isBlock && (
           <label className="modal__row">
             Grund
-            {/* Optional, and drawn on the box in place of the word `Gesperrt`: ADR-0014. No
+            {/* Optional, and drawn on the box after the `N/A` marker: ADR-0014. No
                 autocomplete, unlike the customer and the treatment - the reasons a salon closes a
                 column are few and short, and a list of previous ones is machinery for a problem
                 nobody has reported. */}

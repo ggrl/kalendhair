@@ -114,7 +114,7 @@ describe('creating', () => {
   })
 
   it('books a block with a reason, and gives it back on the day', async () => {
-    // ADR-0014. The reason is what the box shows in place of the word `Gesperrt`.
+    // ADR-0014. The reason is what the box shows behind its `N/A` marker.
     const response = await post({
       employeeId: jana,
       kind: 'block',
