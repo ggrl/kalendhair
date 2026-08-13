@@ -31,7 +31,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Navigation: date picker, month steps, arrow keys | not started |
 | Live updates, by polling the day on screen | not started |
 | Creating and editing appointments in a form, with autocomplete | done |
-| Moving and resizing by dragging | on a branch, not merged |
+| Moving and resizing by dragging, with a form for the details | done |
 | Authentication | not started, and blocking before real data |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
@@ -112,7 +112,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Twelve decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Thirteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -131,6 +131,7 @@ re-decide.
 | [0010](docs/adr/ADR-0010-date-arithmetic-iso-weeks-and-month-steps.md) | ISO week numbers and month-step arithmetic |
 | [0011](docs/adr/ADR-0011-the-screen-is-german-the-code-is-english.md) | The screen is German, the code is English |
 | [0012](docs/adr/ADR-0012-a-deactivated-employee-leaves-the-board-entirely.md) | A deactivated employee leaves the board entirely, appointments included |
+| [0013](docs/adr/ADR-0013-a-drag-is-the-edit-and-it-commits-on-release.md) | A drag is the edit, and it commits on release - with no undo |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:
