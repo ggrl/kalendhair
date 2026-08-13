@@ -349,6 +349,12 @@ export function App() {
         }}
         onSignedOut={() => {
           // Changing the salon password ends every session, this one included. ADR-0017.
+          //
+          // The address bar goes with it. Leaving `&settings` there meant logging back in showed
+          // the board and the next refresh showed the PIN prompt - the same state-and-URL
+          // divergence `urlFor` exists to prevent, running the other way. A review pass found it.
+          const date = day?.date ?? target.date
+          window.history.replaceState(null, '', date === null ? window.location.pathname : urlFor(date, false))
           setSettings(false)
           setNeedsLogin(true)
         }}

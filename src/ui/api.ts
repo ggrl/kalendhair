@@ -175,8 +175,9 @@ async function settings(pin: string, path: string, init: RequestInit = {}): Prom
     ...init,
     headers: {
       ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
-      [PIN_HEADER]: pin,
       ...init.headers,
+      // Last, so no future caller can drop the PIN by passing headers of its own.
+      [PIN_HEADER]: pin,
     },
   })
 

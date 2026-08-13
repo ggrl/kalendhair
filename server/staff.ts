@@ -11,6 +11,12 @@ import { Refused } from './write.js'
  */
 
 /**
+ * Arbitrary but fixed: every process reordering this list has to use the same number, or the
+ * lock guards nothing. Not the migration lock's number - two different things being serialised.
+ */
+const STAFF_ORDER_LOCK = 48202513
+
+/**
  * Everybody, active or not, in board order.
  *
  * The board's own query takes only the active ones; this is the list the salon manages, so it
@@ -24,7 +30,9 @@ export async function readStaff(pool: Pool): Promise<StaffMember[]> {
             e.active,
             NOT EXISTS (SELECT 1 FROM appointment a WHERE a.employee_id = e.id) AS deletable
        FROM employee e
-      ORDER BY e.position, e.name`,
+      -- Ties break on the id, never on the name: see the same note in day.ts. This list and
+      -- the board have to agree about the order, so they order by the same thing.
+      ORDER BY e.position, e.id`,
   )
   return result.rows
 }
@@ -61,14 +69,18 @@ export async function updateStaff(
   const name = change.name === undefined ? null : cleanName(change.name)
   const active = change.active ?? null
 
-  const result = await pool.query(
-    `UPDATE employee
-        SET name   = COALESCE($2, name),
-            active = COALESCE($3, active)
-      WHERE id = $1`,
-    [id, name, active],
-  )
-  if (result.rowCount !== 1) throw new Refused(404, 'gone', 'Diese Person gibt es nicht mehr.')
+  try {
+    const result = await pool.query(
+      `UPDATE employee
+          SET name   = COALESCE($2, name),
+              active = COALESCE($3, active)
+        WHERE id = $1`,
+      [id, name, active],
+    )
+    if (result.rowCount !== 1) throw new Refused(404, 'gone', 'Diese Person gibt es nicht mehr.')
+  } catch (error) {
+    throw notAnId(error)
+  }
 }
 
 /**
@@ -84,12 +96,20 @@ export async function moveStaff(pool: Pool, id: string, direction: 'up' | 'down'
   try {
     await client.query('BEGIN')
 
-    // Locked, because two people pressing the arrows at once would otherwise both read the same
-    // order, both renumber it, and the second one would write a list based on what it saw before
-    // the first one moved anything.
-    const ordered = await client.query<{ id: string }>(
-      'SELECT id FROM employee ORDER BY position, name FOR UPDATE',
-    )
+    // One mover at a time, and this is an advisory lock rather than `FOR UPDATE` on the rows.
+    //
+    // `FOR UPDATE` was here first and did not do what its comment claimed: under READ COMMITTED
+    // Postgres applies the ORDER BY to the snapshot taken before the lock is granted, so the
+    // second caller sorts the list as it was, waits, and then writes that stale order over the
+    // first caller's move. A review pass demonstrated it with a forced interleave - one of the
+    // two moves vanished. Taking the lock before reading anything is what actually serialises
+    // them, and it covers `addStaff` and `removeStaff` too, which take no row locks at all.
+    //
+    // Transaction-scoped, so it is released by the COMMIT or the ROLLBACK below and there is no
+    // unlock to forget. The number is arbitrary and fixed, exactly like the migration lock.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [STAFF_ORDER_LOCK])
+
+    const ordered = await client.query<{ id: string }>('SELECT id FROM employee ORDER BY position, id')
     const ids = ordered.rows.map((row) => row.id)
 
     const from = ids.indexOf(id)
@@ -141,8 +161,23 @@ export async function removeStaff(pool: Pool, id: string): Promise<void> {
         'Diese Person hat schon Termine im Kalender und kann deshalb nicht gelöscht werden. Stattdessen deaktivieren.',
       )
     }
-    throw error
+    throw notAnId(error)
   }
+}
+
+/**
+ * A id that is not a uuid, turned into "that person is gone" rather than a 500.
+ *
+ * `22P02` is Postgres refusing to parse the text as a uuid, which is what a hand-typed or stale
+ * id looks like from here. Both review passes found it answering 500 with a stack in the log for
+ * what is really a 404. Nothing in the screen can produce one - it sends back ids the server
+ * gave it - so this is about what the API says to its second consumer.
+ */
+function notAnId(error: unknown): unknown {
+  if ((error as { code?: string }).code === '22P02') {
+    return new Refused(404, 'gone', 'Diese Person gibt es nicht mehr.')
+  }
+  return error
 }
 
 /**
@@ -154,7 +189,9 @@ export async function removeStaff(pool: Pool, id: string): Promise<void> {
  */
 function cleanName(name: string): string {
   const trimmed = name.trim()
-  if (trimmed === '') throw new Refused(400, 'invalid', 'Ohne Namen lässt sich niemand anlegen.')
+  // Not "lässt sich niemand anlegen": a review pass cleared the rename field and was told that
+  // nobody can be created without a name, which is true and is about the wrong action.
+  if (trimmed === '') throw new Refused(400, 'invalid', 'Ohne Namen geht es nicht.')
   if (trimmed.length > 40) throw new Refused(400, 'invalid', 'Der Name ist zu lang für eine Spalte.')
   return trimmed
 }

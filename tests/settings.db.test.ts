@@ -48,6 +48,14 @@ async function names(): Promise<string[]> {
   return (await staff()).map((person) => person.name)
 }
 
+/** The columns the board would draw, in the order it would draw them. */
+async function boardColumns(): Promise<string[]> {
+  const day = (await (await fetch(`${base}/api/day?date=${DAY}`, { headers: { cookie } })).json()) as {
+    employees: { name: string }[]
+  }
+  return day.employees.map((employee) => employee.name)
+}
+
 beforeAll(async () => {
   pool = await testPool()
   await ensureCredentials(pool)
@@ -76,10 +84,17 @@ beforeEach(async () => {
 
 describe('the PIN guard', () => {
   it('refuses every settings route without the PIN', async () => {
+    // Every route, not a sample. They are all covered by one `app.use` today, which is exactly
+    // the kind of thing that stops being true when somebody adds a route in the wrong place.
+    const id = await addEmployee(pool, 'Marco', 1)
+
     for (const [path, init] of [
       ['/unlock', { method: 'POST' }],
       ['/staff', {}],
       ['/staff', { method: 'POST', body: JSON.stringify({ name: 'X' }) }],
+      [`/staff/${id}`, { method: 'PATCH', body: JSON.stringify({ name: 'X' }) }],
+      [`/staff/${id}/move`, { method: 'POST', body: JSON.stringify({ direction: 'up' }) }],
+      [`/staff/${id}`, { method: 'DELETE' }],
       ['/password', { method: 'POST', body: JSON.stringify({ password: 'lang-genug-hier' }) }],
       ['/pin', { method: 'POST', body: JSON.stringify({ pin: '1111' }) }],
     ] as const) {
@@ -158,15 +173,34 @@ describe('adding', () => {
 })
 
 describe('renaming and deactivating', () => {
-  it('renames without moving anybody', async () => {
-    // ADR-0002 chose `position` over the name for column order precisely so this is true, and
-    // this is the first thing that uses it.
-    await addEmployee(pool, 'Marco', 1)
-    const jana = await addEmployee(pool, 'Jana', 2)
+  it('renames without moving anybody, even where two positions are the same', async () => {
+    // ADR-0002 chose `position` over the name for column order precisely so this is true. The
+    // first version of this test used positions 1 and 2 and could not have failed: the ordering
+    // broke its tie on the name, so renaming the middle of three rows that share a position moved
+    // her column on every day of the board. A review pass found it against a real database.
+    await addEmployee(pool, 'Aaron', 1)
+    const bea = await addEmployee(pool, 'Bea', 1)
+    await addEmployee(pool, 'Carla', 1)
 
-    await settings(`/staff/${jana}`, { method: 'PATCH', body: JSON.stringify({ name: 'Aaron' }) })
+    // Where positions tie the order is decided by the id, so it is stable but not predictable
+    // from here - which is the point. What has to hold is that the rename does not disturb it.
+    const before = await names()
+    await settings(`/staff/${bea}`, { method: 'PATCH', body: JSON.stringify({ name: 'Zoe' }) })
 
-    expect(await names()).toEqual(['Marco', 'Aaron'])
+    expect(await names()).toEqual(before.map((name) => (name === 'Bea' ? 'Zoe' : name)))
+  })
+
+  it('does not move a column on the board either', async () => {
+    // The same claim, asked of the thing the salon actually looks at. These two queries order by
+    // the same columns and have to keep agreeing.
+    await addEmployee(pool, 'Aaron', 1)
+    const bea = await addEmployee(pool, 'Bea', 1)
+    await addEmployee(pool, 'Carla', 1)
+
+    const before = await boardColumns()
+    await settings(`/staff/${bea}`, { method: 'PATCH', body: JSON.stringify({ name: 'Zoe' }) })
+
+    expect(await boardColumns()).toEqual(before.map((name) => (name === 'Bea' ? 'Zoe' : name)))
   })
 
   it('takes somebody off the board and puts them back', async () => {
@@ -221,15 +255,33 @@ describe('reordering', () => {
     // nobody here; renumbering the whole list makes it correct instead of assuming it was.
     await addEmployee(pool, 'Aaron', 1)
     await addEmployee(pool, 'Bea', 1)
-    const carla = await addEmployee(pool, 'Carla', 1)
+    await addEmployee(pool, 'Carla', 1)
 
-    expect(await names()).toEqual(['Aaron', 'Bea', 'Carla'])
+    // Whatever order the ids put them in, moving the last one up swaps it with the second.
+    const before = await staff()
+    const last = before[2]
 
-    await move(carla, 'up')
-    expect(await names()).toEqual(['Aaron', 'Carla', 'Bea'])
+    await move(last.id, 'up')
+    expect(await names()).toEqual([before[0].name, last.name, before[1].name])
 
     const positions = await pool.query<{ position: number }>('SELECT position FROM employee ORDER BY position')
     expect(positions.rows.map((row) => row.position)).toEqual([1, 2, 3])
+  })
+
+  it('answers a made-up id with "gone" rather than a 500', async () => {
+    // Postgres refuses to parse it as a uuid, which reached the client as an internal error with
+    // a stack in the log. Both review passes found it. Nothing in the screen can produce one; the
+    // API has a second consumer coming, and this is what it will be told.
+    for (const path of ['/staff/not-a-uuid', '/staff/not-a-uuid/move']) {
+      const response = await settings(path, {
+        method: path.endsWith('move') ? 'POST' : 'DELETE',
+        body: path.endsWith('move') ? JSON.stringify({ direction: 'up' }) : undefined,
+      })
+      expect(response.status).toBe(404)
+    }
+
+    const patch = await settings('/staff/not-a-uuid', { method: 'PATCH', body: JSON.stringify({ name: 'X' }) })
+    expect(patch.status).toBe(404)
   })
 
   it('refuses a direction that is not one', async () => {

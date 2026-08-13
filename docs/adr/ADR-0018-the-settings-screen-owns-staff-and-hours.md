@@ -86,6 +86,26 @@ for their own change. Four things this ruling did not say, decided while writing
 - **Changing the PIN sends the screen back to its own prompt, saying why.** The PIN it was holding
   is the old one the moment the change lands, so every further request would be refused for a
   reason nobody could guess from the screen.
+- **Column order breaks ties on the id, never on the name.** It broke on the name first, which
+  made this ruling's own "renaming does not move anybody" false wherever two positions were equal -
+  and equal positions are the reason the reordering renumbers rather than swaps. A review pass
+  renamed the middle of three tied rows and watched her column move on every day of the board.
+- **The new salon password is typed twice**, and it is the only field in the application that is.
+  Both passes arrived at it: one masked field, one typo, and the salon is locked out of a board
+  whose password nobody knows, with the way back being the master password out of the environment.
+  The master-password screen keeps its single field, where a typo costs re-typing something you
+  are already holding.
+
+## Known, accepted, and not fixed here
+
+- **An appointment can still be booked against a deactivated stylist through the API.** Nothing in
+  `createEntry` checks `active`, so the row lands in the table, holds a slot in the exclusion
+  constraint and renders nowhere - ADR-0012. It predates this screen, but this screen turns
+  deactivation from an `UPDATE` by hand into a one-click button, which widens the window. Named by
+  the security pass, left alone deliberately: it belongs with the write path, not with a screen.
+- **The PIN travels in a header on every settings request.** Nothing here logs headers and the
+  usual proxy default does not either, but it becomes a leak the day somebody turns on header
+  logging while debugging. One line for the deploy notes, next to `trust proxy`.
 
 ## Alternatives rejected
 

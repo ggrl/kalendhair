@@ -171,11 +171,29 @@ test('changing the PIN asks for the new one straight away, and says why', async 
   await expect(page.getByLabel('PIN')).toBeVisible()
 })
 
+test('a mistyped repeat is caught here, because getting it wrong locks the salon out', async ({ page }) => {
+  // The one field in this application that is typed twice. One masked input, one typo, and the
+  // whole salon is logged out of a board whose password nobody knows - the way back is the master
+  // password out of the environment, which on a VPS means somebody with shell access.
+  const seen = await stubApi(page)
+  await openSettings(page)
+
+  await page.getByLabel('Neues Salon-Passwort', { exact: true }).fill('ein-neues-passwort')
+  await page.getByLabel('Neues Salon-Passwort wiederholen').fill('ein-neues-passwrot')
+  await page.getByRole('button', { name: 'Passwort ändern' }).click()
+
+  await expect(page.getByText('Die beiden Passwörter sind nicht gleich.')).toBeVisible()
+  expect(seen.filter((request) => request.url().endsWith('/password'))).toHaveLength(0)
+  // Still here, with what was typed, rather than thrown back to a login screen.
+  await expect(page.getByRole('heading', { name: 'Mitarbeiterinnen' })).toBeVisible()
+})
+
 test('changing the salon password lands on the login screen, because it logs everybody out', async ({ page }) => {
   await stubApi(page)
   await openSettings(page)
 
-  await page.getByLabel('Neues Salon-Passwort').fill('ein-neues-passwort')
+  await page.getByLabel('Neues Salon-Passwort', { exact: true }).fill('ein-neues-passwort')
+  await page.getByLabel('Neues Salon-Passwort wiederholen').fill('ein-neues-passwort')
   await page.getByRole('button', { name: 'Passwort ändern' }).click()
 
   // ADR-0017 makes this end every session including this one, and the screen warned before the

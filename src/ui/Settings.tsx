@@ -215,7 +215,7 @@ function SettingsScreen({
       )}
       {notice !== null && <p className="settings__notice">{notice}</p>}
 
-      <StaffSection staff={staff} busy={busy} pin={pin} run={run} />
+      <StaffSection staff={staff} busy={busy} pin={pin} run={run} problem={problem} onRetry={reload} />
       <CredentialsSection busy={busy} pin={pin} run={run} onPinChanged={onLocked} />
     </main>
   )
@@ -227,21 +227,41 @@ interface SectionProps {
   run: (work: Promise<void>, done?: () => void, reloadAfter?: boolean) => void
 }
 
-function StaffSection({ staff, busy, pin, run }: SectionProps & { staff: StaffMember[] | null }) {
+function StaffSection({
+  staff,
+  busy,
+  pin,
+  run,
+  problem,
+  onRetry,
+}: SectionProps & { staff: StaffMember[] | null; problem: string | null; onRetry: () => void }) {
   const [newName, setNewName] = useState('')
   /** Which row is being renamed, and to what. Null when nobody is. */
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null)
   /** Which row has asked "are you sure". Deleting is the one thing here that cannot be undone. */
   const [confirming, setConfirming] = useState<string | null>(null)
 
-  if (staff === null) return <p>Mitarbeiterinnen werden geladen …</p>
+  // Not "loading" forever: a review pass answered this fetch with a 500 and got the error and
+  // the loading line on screen together, with no way out but leaving and re-typing the PIN.
+  if (staff === null) {
+    return problem === null ? (
+      <p>Mitarbeiterinnen werden geladen …</p>
+    ) : (
+      <p>
+        <button type="button" onClick={onRetry}>
+          Erneut versuchen
+        </button>
+      </p>
+    )
+  }
 
   return (
     <section className="settings__section">
       <h2>Mitarbeiterinnen</h2>
       <p className="settings__hint">
         Die Reihenfolge ist die Reihenfolge der Spalten auf dem Kalender. Wer deaktiviert ist, erscheint dort
-        nicht mehr - auch nicht an vergangenen Tagen.
+        nicht mehr - und ihre Termine ebenfalls nicht, auch nicht an vergangenen Tagen. Nichts wird gelöscht:
+        beim Aktivieren ist alles wieder da.
       </p>
 
       <ul className="settings__staff">
@@ -278,6 +298,7 @@ function StaffSection({ staff, busy, pin, run }: SectionProps & { staff: StaffMe
                   aria-label={`Name von ${person.name}`}
                   value={editing.name}
                   autoFocus
+                  required
                   onChange={(event) => setEditing({ id: person.id, name: event.target.value })}
                 />
                 <button type="submit" disabled={busy}>
@@ -369,6 +390,17 @@ function CredentialsSection({
   onPinChanged,
 }: SectionProps & { onPinChanged: (why: string) => void }) {
   const [password, setPassword] = useState('')
+  /**
+   * Typed twice, and this is the only field in the application that is.
+   *
+   * Both review passes arrived at it from different directions. One masked field, one typo, and
+   * the salon is logged out of a board whose password nobody in the building knows - the way back
+   * is the master password out of `.env`, which on a VPS means somebody with shell access. The
+   * master-password screen has one field on purpose: a typo there costs re-typing a password you
+   * are holding. Here it costs an evening.
+   */
+  const [again, setAgain] = useState('')
+  const [mismatch, setMismatch] = useState(false)
   const [newPin, setNewPin] = useState('')
 
   return (
@@ -379,7 +411,15 @@ function CredentialsSection({
         className="settings__credential"
         onSubmit={(event) => {
           event.preventDefault()
-          run(changePassword(pin, password), () => setPassword(''))
+          if (password !== again) {
+            setMismatch(true)
+            return
+          }
+          setMismatch(false)
+          run(changePassword(pin, password), () => {
+            setPassword('')
+            setAgain('')
+          })
         }}
       >
         <label htmlFor="salon-password">Neues Salon-Passwort</label>
@@ -397,6 +437,23 @@ function CredentialsSection({
           onChange={(event) => setPassword(event.target.value)}
           required
         />
+
+        <label htmlFor="salon-password-again">Neues Salon-Passwort wiederholen</label>
+        <input
+          id="salon-password-again"
+          type="password"
+          autoComplete="new-password"
+          value={again}
+          onChange={(event) => setAgain(event.target.value)}
+          required
+        />
+
+        {mismatch && (
+          <p className="settings__error" role="alert">
+            Die beiden Passwörter sind nicht gleich.
+          </p>
+        )}
+
         <button type="submit" disabled={busy}>
           Passwort ändern
         </button>
