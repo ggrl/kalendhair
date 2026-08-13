@@ -2,20 +2,21 @@ import type { Server } from 'node:http'
 import type { Pool } from 'pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createApp } from '../server/app.js'
-import { addAppointment, addEmployee, empty, testPool } from './db-helper.js'
+import { TEST_CONFIG, addAppointment, addEmployee, empty, ensureCredentials, sessionHeader, testPool } from './db-helper.js'
 
 // The write path, over HTTP, against a real Postgres. The rules being tested are enforced by
 // the database and translated by the server, so both halves have to be real: a mock would only
 // prove the mock agrees with itself.
 
 const DAY = '2026-08-13'
-const TZ = 'Europe/Berlin'
 
 let pool: Pool
 let server: Server
 let base: string
 let marco: string
 let jana: string
+/** Every request here is a logged-in one. What being logged in means is proved in auth.db.test.ts. */
+let cookie: string
 
 interface Entry {
   id: string
@@ -33,7 +34,7 @@ interface Entry {
 async function post(body: unknown): Promise<Response> {
   return fetch(`${base}/api/entries`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify(body),
   })
 }
@@ -41,13 +42,13 @@ async function post(body: unknown): Promise<Response> {
 async function patch(id: string, body: unknown): Promise<Response> {
   return fetch(`${base}/api/entries/${id}`, {
     method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', cookie },
     body: JSON.stringify(body),
   })
 }
 
 async function entriesOn(date: string): Promise<Entry[]> {
-  const response = await fetch(`${base}/api/day?date=${date}`)
+  const response = await fetch(`${base}/api/day?date=${date}`, { headers: { cookie } })
   return (await response.json()).entries
 }
 
@@ -66,7 +67,9 @@ function appointment(overrides: Record<string, unknown> = {}): Record<string, un
 
 beforeAll(async () => {
   pool = await testPool()
-  server = createApp(pool, TZ).listen(0, '127.0.0.1')
+  await ensureCredentials(pool)
+  cookie = await sessionHeader(pool)
+  server = createApp(pool, TEST_CONFIG).listen(0, '127.0.0.1')
   await new Promise<void>((resolve) => server.once('listening', resolve))
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
@@ -283,7 +286,7 @@ describe('ADR-0003: a save against a stale version is refused', () => {
 
   it('says so differently when the entry is gone rather than changed', async () => {
     const { id } = await (await post(appointment())).json()
-    expect((await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE' })).status).toBe(204)
+    expect((await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE', headers: { cookie } })).status).toBe(204)
 
     const response = await patch(id, appointment({ version: 1 }))
     expect(response.status).toBe(409)
@@ -302,7 +305,7 @@ describe('ADR-0003: a save against a stale version is refused', () => {
 describe('removing', () => {
   it('deletes an entry', async () => {
     const { id } = await (await post(appointment())).json()
-    expect((await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE' })).status).toBe(204)
+    expect((await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE', headers: { cookie } })).status).toBe(204)
     expect(await entriesOn(DAY)).toHaveLength(0)
   })
 
@@ -310,7 +313,7 @@ describe('removing', () => {
     const { id } = await (await post(appointment())).json()
     await patch(id, appointment({ startsAt: '14:00', endsAt: '15:00', version: 1 }))
 
-    const response = await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE' })
+    const response = await fetch(`${base}/api/entries/${id}?version=1`, { method: 'DELETE', headers: { cookie } })
     expect(response.status).toBe(409)
     expect(await entriesOn(DAY)).toHaveLength(1)
   })

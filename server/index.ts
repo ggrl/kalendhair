@@ -1,6 +1,7 @@
 import { Pool } from 'pg'
 import { createApp } from './app.js'
 import { loadConfig } from './config.js'
+import { seedCredentials } from './credentials.js'
 import { migrate } from './migrate.js'
 
 const config = loadConfig(process.env)
@@ -24,17 +25,29 @@ await migrate(pool, (message) => {
   console.log(`migrate: ${message}`)
 })
 
-const app = createApp(pool, config.salonTimeZone)
+// ADR-0017: the environment supplies the salon password and the PIN once, and is ignored
+// afterwards. Said out loud either way, because "the password I set in .env does not work" and
+// "the password I set in the screen was undone by a restart" are the two questions this
+// answers, and the log is where somebody will look for them.
+if (await seedCredentials(pool, config.salonPassword, config.salonPin)) {
+  console.log('salon password and PIN seeded from the environment')
+} else {
+  console.log('salon password and PIN already set - SALON_PASSWORD and SALON_PIN are ignored')
+}
+
+const app = createApp(pool, config)
 
 app.listen(config.port, config.host, () => {
   console.log(`salon calendar api on http://${config.host}:${config.port}`)
   console.log(`salon timezone: ${config.salonTimeZone}`)
-  // Loud on purpose. ADR-0004 is marked to be revisited before authentication is
-  // written, so nothing here checks who is asking. The bind address is the only thing
-  // keeping this private, so it is printed above rather than described.
-  if (config.host !== '127.0.0.1' && config.host !== 'localhost') {
-    console.warn(`WARNING: bound to ${config.host}, which is not loopback, and there is no authentication`)
+
+  // Loud on purpose, and now about the thing that is actually missing. ADR-0004's deadline
+  // was the first bind that is not loopback, and past that point the password travels in
+  // clear text unless something in front is terminating TLS.
+  if (config.cookieSecure) {
+    console.warn(`WARNING: bound to ${config.host}, so the session cookie is marked Secure`)
+    console.warn('WARNING: without HTTPS in front of this, no browser will send it back and nobody can log in')
   } else {
-    console.log('no authentication yet - reachable from this machine only')
+    console.log('reachable from this machine only - the session cookie is not marked Secure')
   }
 })

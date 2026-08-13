@@ -1,4 +1,7 @@
 import { Pool } from 'pg'
+import type { AppConfig } from '../server/app.js'
+import { currentVersion, seedCredentials } from '../server/credentials.js'
+import { SESSION_COOKIE, issueSession } from '../server/session.js'
 import { migrate } from '../server/migrate.js'
 
 /**
@@ -40,7 +43,46 @@ export async function testPool(): Promise<Pool> {
 }
 
 export async function empty(pool: Pool): Promise<void> {
+  // `salon_credential` is deliberately not in here. It holds no test data, and re-seeding it
+  // means two scrypt derives - so the row is set up once per file by the helpers below and
+  // left alone, rather than rebuilt before every test in the files that call this.
   await pool.query('TRUNCATE appointment, employee CASCADE')
+}
+
+/**
+ * What `createApp` needs, for a test.
+ *
+ * None of these are secrets. The signing key is long enough to look like the real thing and is
+ * written into a public repository on purpose - which is exactly why it may never be anything
+ * a running salon uses. `rules/secrets.md`.
+ */
+export const TEST_CONFIG: AppConfig = {
+  salonTimeZone: 'Europe/Berlin',
+  sessionSecret: 'not-a-secret-a-published-test-signing-key',
+  masterPassword: 'test-master-password',
+  // Every test speaks plain HTTP to a loopback port, and a Secure cookie would be dropped.
+  cookieSecure: false,
+}
+
+export const TEST_PASSWORD = 'test-salon-password'
+export const TEST_PIN = '2468'
+
+/** The credential row, seeded once if it is not there. Existing hashes are left as they are. */
+export async function ensureCredentials(pool: Pool): Promise<void> {
+  await seedCredentials(pool, TEST_PASSWORD, TEST_PIN)
+}
+
+/**
+ * A Cookie header the app will accept, signed rather than earned through the login route.
+ *
+ * The version is read from the row instead of assumed to be 1, so a test file that ran after
+ * one which changed the password still gets a session that counts. What the login route does
+ * is proved in `auth.db.test.ts`; everywhere else, being logged in is a precondition and not
+ * the thing under test.
+ */
+export async function sessionHeader(pool: Pool): Promise<string> {
+  const version = await currentVersion(pool)
+  return `${SESSION_COOKIE}=${issueSession(TEST_CONFIG.sessionSecret, version, Date.now())}`
 }
 
 export async function addEmployee(pool: Pool, name: string, position: number, active = true): Promise<string> {

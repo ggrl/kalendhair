@@ -1,6 +1,6 @@
 # ADR-0017: A changeable salon password, a PIN, and a master key
 
-- Status: accepted, **not yet implemented**
+- Status: accepted, and **built on 2026-08-13** - with one part deliberately left out, below
 - Date: 2026-08-13
 - Supersedes: the "the password lives in an environment variable" half of
   [ADR-0004](ADR-0004-one-shared-salon-password.md)
@@ -73,6 +73,32 @@ changes.
 - ADR-0004's rejected alternatives still stand, and its own warning still stands: a shared
   password on personal phones is what the planned iOS app will put in the salon's hands, and
   nothing here changes that.
+
+## What building it settled, on 2026-08-13
+
+The decision above left five things unsaid that code cannot leave unsaid. They are recorded
+here rather than in a new ADR because none of them changes the ruling - but a later session
+should not re-decide them by accident either.
+
+- **The PIN is stored and can be reset, and nothing checks it yet.** There is no screen behind
+  it until ADR-0018 is built, and a verification endpoint guarding nothing is a door in a field.
+  The hash and the reset path exist, so the settings screen adds the check and not the storage.
+- **A session lasts thirty days and the expiry slides while the board is used.** Asked of the
+  owner, who chose it over a fixed month and over a working day: revocation is the password
+  change, which is immediate regardless, so a shorter session buys friction and nothing else.
+- **The session cookie is marked `Secure` exactly when the bind address is not loopback**, and
+  there is no environment variable for it - this ADR's own consequence says four new names, and
+  a fifth would be a setting nobody would remember to turn on. The product brief says the move
+  off loopback is the move behind HTTPS. If that stops being true, every login is refused,
+  because a browser accepts a `Secure` cookie over plain HTTP and never sends it back.
+- **A salon password is at least eight characters and a PIN is exactly four digits**, checked in
+  one place that the startup seed, the reset screen and any later settings screen all ask. The
+  alternative is an environment that can seed a password the screen would refuse to let anybody
+  set again.
+- **Twenty login attempts per address per five minutes**, which is ADR-0004's rate limit. Twenty
+  rather than five because the whole salon is one address as far as the server is concerned.
+  Behind a reverse proxy that Express is not told to trust it becomes one budget for everybody,
+  which refuses logins rather than allowing them - stage two has to set `trust proxy`.
 
 ## Alternatives rejected
 
