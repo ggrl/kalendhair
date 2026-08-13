@@ -54,17 +54,46 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
   const dragClass = drag === undefined ? '' : drag.refused ? ' entry--dragging entry--refused' : ' entry--dragging'
 
   if (entry.kind === 'block') {
+    // `N/A` is the marker on screen, and it is not a word: it says nothing to a screen reader and
+    // less than `Gesperrt` did. So the accessible name is German prose and always carries
+    // `gesperrt`, whether or not a reason follows it.
+    //
+    // `title` cannot do this alone. A button with text content takes its accessible name from the
+    // content and `title` is only consulted when there is none - which a review pass measured after
+    // an earlier version of this comment claimed otherwise.
+    const spoken = entry.reason === null ? `${timeRange} gesperrt` : `${timeRange} gesperrt: ${entry.reason}`
+
+    // `N/A` first, then the reason: `N/A Urlaub`. The owner's format, and it undoes ADR-0014's
+    // "the reason replaces the word" - the marker now always stands, and the reason qualifies it.
+    const label = entry.reason === null ? 'N/A' : `N/A ${entry.reason}`
+
+    // A 15-minute block is 15.6px tall and its second line starts below the bottom edge, so a
+    // reason on the shortest block the grid allows was drawn nowhere at all - which is the promise
+    // ADR-0014 makes, broken in the one case that needed it most. The appointment path already
+    // solved this by putting the time and the text on one line; this is the same answer.
+    const tight = slots <= 2
+
     return (
       <button
         type="button"
-        className={`entry entry--appointment entry--block${dragClass}`}
+        className={`entry entry--appointment entry--block${tight ? ' entry--compact' : ''}${dragClass}`}
         style={placement}
-        title={`${timeRange} gesperrt`}
+        title={spoken}
+        aria-label={spoken}
         data-entry-id={entry.id}
         onClick={onOpen}
       >
-        <span className="entry__time">{timeRange}</span>
-        <span className="entry__label">Gesperrt</span>
+        {tight ? (
+          <span className="entry__line">
+            <span className="entry__time">{shown.startsAt}</span>
+            <span className="entry__label">{label}</span>
+          </span>
+        ) : (
+          <>
+            <span className="entry__time">{timeRange}</span>
+            <span className="entry__label">{label}</span>
+          </>
+        )}
         <Grips />
       </button>
     )

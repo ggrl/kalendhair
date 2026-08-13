@@ -22,6 +22,7 @@ const ANNA: Entry = {
   customer: 'Anna Schmidt',
   treatment: 'Farbe',
   notes: null,
+  reason: null,
   colour: '#f4b8b8',
 }
 

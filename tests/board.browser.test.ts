@@ -25,6 +25,7 @@ function dayFor(date: string): Day {
             customer: 'Anna Schmidt',
             treatment: 'Farbe',
             notes: 'Reagiert auf Ammoniak',
+            reason: null,
             colour: '#f4b8b8',
           },
           {
@@ -37,6 +38,7 @@ function dayFor(date: string): Day {
             customer: 'Bea Wolff',
             treatment: 'Schnitt',
             notes: null,
+            reason: null,
             colour: '#f8cfa0',
           },
           {
@@ -49,6 +51,7 @@ function dayFor(date: string): Day {
             customer: 'anna schmidt',
             treatment: 'Schnitt und Styling',
             notes: null,
+            reason: null,
             colour: '#f4b8b8',
           },
           {
@@ -61,6 +64,7 @@ function dayFor(date: string): Day {
             customer: 'Felix Rau',
             treatment: 'Bart',
             notes: null,
+            reason: null,
             colour: '#c3aef0',
           },
           {
@@ -75,6 +79,7 @@ function dayFor(date: string): Day {
             customer: 'Eva Sommer',
             treatment: 'Strähnen',
             notes: 'Kommt mit Kinderwagen',
+            reason: null,
             colour: '#c2e6a8',
           },
           {
@@ -87,6 +92,7 @@ function dayFor(date: string): Day {
             customer: null,
             treatment: null,
             notes: null,
+            reason: null,
             colour: null,
           },
         ]
@@ -211,10 +217,10 @@ test('a block says so and carries no customer', async ({ page }) => {
   await page.goto('/?date=2026-08-13')
 
   // Exact, because the column headings now also say "ganzer Tag gesperrt".
-  await expect(page.getByText('Gesperrt', { exact: true })).toBeVisible()
+  await expect(page.getByText('N/A', { exact: true })).toBeVisible()
   // It is a button now, because clicking one opens its times and a way to remove it. ADR-0008
   // gives a block no label, so that is all the form has to hold.
-  await expect(page.getByRole('button', { name: /Gesperrt/ })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: /gesperrt/ })).toHaveCount(1)
 })
 
 test('the day steps move one day and put it in the address bar', async ({ page }) => {
@@ -463,6 +469,7 @@ test('an entry whose column is missing is reported, not dropped', async ({ page 
             customer: 'Ida Bruns',
             treatment: 'Balayage',
             notes: null,
+            reason: null,
             colour: '#f4b8b8',
           },
         ],
@@ -475,4 +482,75 @@ test('an entry whose column is missing is reported, not dropped', async ({ page 
   await expect(report).toContainText('1 Termin kann nicht angezeigt werden')
   await expect(report).toContainText('Ida Bruns')
   await expect(report).toContainText('keine Spalte')
+})
+
+test('the board shades the hours the salon does not normally work', async ({ page }) => {
+  // ADR-0015, and shading only: the bookable window is still 06:00-20:00 and nothing here refuses
+  // a booking. 2026-08-13 is a Thursday, so the white part runs 09:00 to 18:00.
+  await page.goto('/?date=2026-08-13')
+
+  const bands = page.locator('.board__closed')
+  await expect(bands).toHaveCount(2)
+
+  // Rows are 1-based in CSS grid, so 06:00 to 09:00 is rows 1 to 12 and 18:00 to 20:00 is 49 to 56.
+  await expect(bands.first()).toHaveCSS('grid-row-start', '1')
+  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 12')
+  await expect(bands.last()).toHaveCSS('grid-row-start', '49')
+  await expect(bands.last()).toHaveCSS('grid-row-end', 'span 8')
+})
+
+test('a Saturday closes at half past one, and a Sunday is shaded all day', async ({ page }) => {
+  await page.goto('/?date=2026-08-15')
+  const saturday = page.locator('.board__closed')
+  await expect(saturday).toHaveCount(2)
+  // 08:00 is row 9, and 13:30 is row 31 - a half hour that still lands on the quarter-hour grid.
+  await expect(saturday.first()).toHaveCSS('grid-row-end', 'span 8')
+  await expect(saturday.last()).toHaveCSS('grid-row-start', '31')
+
+  await page.goto('/?date=2026-08-16')
+  const sunday = page.locator('.board__closed')
+  await expect(sunday).toHaveCount(1)
+  await expect(sunday.first()).toHaveCSS('grid-row-start', '1')
+  await expect(sunday.first()).toHaveCSS('grid-row-end', 'span 56')
+})
+
+test('the shading takes no clicks, so closed hours still book', async ({ page }) => {
+  // The salon books outside its core hours and the paper page always allowed it. If the shading
+  // swallowed a click it would have quietly become a rule.
+  await page.goto('/?date=2026-08-16')
+
+  await page.locator('.board__column').first().click({ position: { x: 40, y: 8 } })
+
+  await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
+  await expect(page.getByLabel('Von')).toHaveValue('06:00')
+})
+
+test('a public holiday is shaded like a Sunday, even on a working weekday', async ({ page }) => {
+  // ADR-0016. 25 December 2026 is a Friday, so nothing about the weekday explains the shading -
+  // only the Hessen holiday list does.
+  await page.goto('/?date=2026-12-25')
+
+  const bands = page.locator('.board__closed')
+  await expect(bands).toHaveCount(1)
+  await expect(bands.first()).toHaveCSS('grid-row-start', '1')
+  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 56')
+
+  // And the day before is an ordinary Thursday with its two bands.
+  await page.goto('/?date=2026-12-24')
+  await expect(page.locator('.board__closed')).toHaveCount(2)
+})
+
+test('the top bar names the holiday, so the pink board is not a riddle', async ({ page }) => {
+  // ADR-0016. Without the name, a board washed from 06:00 to 20:00 is ambiguous between "the
+  // salon is shut" and "something is broken" - which is the shape of problem this project exists
+  // to remove, not to add.
+  await page.goto('/?date=2026-04-03')
+
+  await expect(page.getByRole('heading', { name: 'Freitag, 3. April 2026' })).toBeVisible()
+  await expect(page.locator('.topbar__week')).toContainText('Karfreitag')
+  await expect(page.locator('.topbar__week')).toContainText('KW 14')
+
+  // And an ordinary day says nothing extra.
+  await page.goto('/?date=2026-04-02')
+  await expect(page.locator('.topbar__holiday')).toHaveCount(0)
 })

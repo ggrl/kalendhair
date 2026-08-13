@@ -16,7 +16,7 @@ re-decided quietly one component at a time until the board is half translated.
 ## Decision
 
 **Everything the salon reads is German.** Weekdays and dates formatted the German way
-(`Donnerstag, 13. August 2026`), `Heute`, `Gesperrt`, `Notiz`, `Termine werden geladen …`,
+(`Donnerstag, 13. August 2026`), `Heute`, `Notiz`, `Termine werden geladen …`,
 and every error message that reaches the screen.
 
 **Everything a maintainer reads is English.** Code, identifiers, comments, commit messages,
@@ -33,6 +33,11 @@ second audience. The strings live inline in the components that show them.
 - A string table would be the obvious place to put these, and it is not worth having for one
   language. If a second language ever arrives, that is when to build one - and this ADR is
   what to supersede.
+- **One exception, added 2026-08-13:** a block's box reads `N/A`, not `Gesperrt`. The owner asked
+  for it, and ADR-0014 records why the German did not survive there - it is a marker on a grey box
+  rather than something to read, and there is no short German equivalent that reads as one. The
+  hover text and the accessible name for that same box are still German, so the exception is to a
+  symbol and not to the language.
 - Nobody on this project is a native speaker so far. The wording is a first draft and the
   owner corrects it; `Gesperrt` in particular was questioned by a UX review, which suggested
   `Nicht verfügbar`, and was kept because the owner had already approved that word.

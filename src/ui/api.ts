@@ -26,6 +26,8 @@ export interface EntryDraft {
   customer: string | null
   treatment: string | null
   notes: string | null
+  /** A block only, and optional: ADR-0014. */
+  reason: string | null
 }
 
 /**

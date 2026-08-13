@@ -16,8 +16,9 @@ export interface Employee {
 }
 
 /**
- * One box on the board. A block carries no customer, treatment or notes, and renders
- * grey; the kind is what the client switches on rather than guessing from null fields.
+ * One box on the board. The kind is what the client switches on rather than guessing from
+ * null fields: an appointment carries a customer, a treatment and notes; a block carries a
+ * reason and nothing else, and renders grey.
  */
 export interface Entry {
   id: string
@@ -34,6 +35,12 @@ export interface Entry {
   customer: string | null
   treatment: string | null
   notes: string | null
+  /**
+   * Why this time is blocked, for a block only, and optional. ADR-0014: it is drawn on the box
+   * on the box after the `N/A` marker, which is the opposite of what `notes` does - hence its own
+   * field rather than one column with two visibility rules.
+   */
+  reason: string | null
   /**
    * Assigned by the server from the whole day, never stored, and null for blocks.
    * ADR-0009: two boxes share a colour only if they are the same customer, so the

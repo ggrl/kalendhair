@@ -41,6 +41,8 @@ export interface EntryInput {
   customer: string | null
   treatment: string | null
   notes: string | null
+  /** ADR-0014: a block may say why it is blocked. An appointment may not carry one. */
+  reason: string | null
 }
 
 function text(value: unknown): string | null {
@@ -81,18 +83,22 @@ export function parseEntryInput(body: unknown): EntryInput {
   const customer = text(raw.customer)
   const treatment = text(raw.treatment)
   const notes = text(raw.notes)
+  const reason = text(raw.reason)
 
   if (kind === 'block') {
-    // ADR-0008: a block is a grey area with no text. Silently dropping the fields would be a
-    // silent fallback; saying so is one sentence.
+    // ADR-0008 and ADR-0014: a block carries a reason and nothing else. Silently dropping the
+    // other fields would be a silent fallback; saying so is one sentence.
     if (customer !== null || treatment !== null || notes !== null) {
       throw new Refused(400, 'invalid', 'Eine Sperrzeit hat keine Kundin, keine Behandlung und keine Notiz.')
     }
-  } else if (customer === null) {
-    throw new Refused(400, 'invalid', 'Ohne Namen lässt sich der Termin nicht speichern.')
+  } else {
+    if (customer === null) throw new Refused(400, 'invalid', 'Ohne Namen lässt sich der Termin nicht speichern.')
+    // The other direction, and it matters because the two fields answer the same question: a
+    // treatment is what an appointment is for, a reason is what a block is for.
+    if (reason !== null) throw new Refused(400, 'invalid', 'Nur eine Sperrzeit hat einen Grund.')
   }
 
-  return { employeeId, kind, date, startsAt, endsAt, customer, treatment, notes }
+  return { employeeId, kind, date, startsAt, endsAt, customer, treatment, notes, reason }
 }
 
 interface DatabaseError {
@@ -147,8 +153,8 @@ async function guarded<T>(work: () => Promise<T>): Promise<T> {
 export async function createEntry(pool: Pool, input: EntryInput): Promise<{ id: string }> {
   return guarded(async () => {
     const result = await pool.query<{ id: string }>(
-      `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, customer, treatment, notes)
-       VALUES ($1, $2, ($3 || ' ' || $4)::timestamp, ($3 || ' ' || $5)::timestamp, $6, $7, $8)
+      `INSERT INTO appointment (employee_id, kind, starts_at, ends_at, customer, treatment, notes, reason)
+       VALUES ($1, $2, ($3 || ' ' || $4)::timestamp, ($3 || ' ' || $5)::timestamp, $6, $7, $8, $9)
        RETURNING id`,
       [
         input.employeeId,
@@ -159,6 +165,7 @@ export async function createEntry(pool: Pool, input: EntryInput): Promise<{ id: 
         input.customer,
         input.treatment,
         input.notes,
+        input.reason,
       ],
     )
     return { id: result.rows[0].id }
@@ -186,6 +193,7 @@ export async function updateEntry(
               customer    = $8,
               treatment   = $9,
               notes       = $10,
+              reason      = $11,
               version     = version + 1
         WHERE id = $1 AND version = $2
       RETURNING version`,
@@ -200,6 +208,7 @@ export async function updateEntry(
         input.customer,
         input.treatment,
         input.notes,
+        input.reason,
       ],
     )
 

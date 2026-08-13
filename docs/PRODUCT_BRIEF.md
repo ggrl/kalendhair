@@ -50,7 +50,7 @@ two appointments - the dye sets while somebody else is cut - is visibly one pers
 places. The colour is computed by the server from the whole day, never stored, and grey
 is kept out of the palette. See ADR-0009.
 
-**The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Gesperrt`,
+**The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Notiz`,
 the date format - is German, because that is the language they work in and `KW` was asked
 for by name. Code, comments, commit messages and these documents stay English: they are for
 whoever maintains the thing, not for the salon. There is no translation mechanism and no
@@ -71,10 +71,20 @@ reversible. Week numbers are ISO 8601, whose year is not always the year in the 
 ADR-0010.
 
 Landing on a day the salon is shut shows an empty board, exactly as flipping the paper to
-a Sunday does. There is no concept of opening days and this keeps it that way.
+a Sunday does. Nothing about opening hours refuses a booking - the full 06:00-20:00 stays
+bookable every day of the week, which is the half of this line that still holds.
+
+What changed on 2026-08-13, by ADR-0015: the board now *draws* the salon's core hours. Tuesday
+to Friday 09:00-18:00 and Saturday 08:00-13:30 stay white; everything else, and all of Sunday
+and Monday, is shaded light red. ADR-0016 added Hessen's public holidays to that, as a hardcoded
+list of fifty dates through 2030 that expires with a failing test rather than in silence. It is
+all shading and not a rule, it takes no clicks, and the sentence that used to say there is no
+concept of opening days is therefore no longer true.
 
 A checkbox in the same modal makes the row a grey block instead of an appointment:
-time nobody may be booked into, with no customer, no treatment and no label. A checkbox
+time nobody may be booked into, with no customer and no treatment. It may carry an optional
+reason - `Urlaub`, `Fortbildung` - which is drawn on the grey box behind an `N/A` marker, as
+`N/A Urlaub`: ADR-0014, which reversed this line's original "no label". A checkbox
 beside a column heading blocks that employee's whole day, which is one block row from
 06:00 to 20:00 and nothing more. Blocks live in the same table as appointments, because
 that is the only way the verified overlap constraint can cover both. See ADR-0008.

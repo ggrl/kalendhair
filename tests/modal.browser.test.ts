@@ -39,7 +39,36 @@ const ANNA: Day['entries'][number] = {
   customer: 'Anna Schmidt',
   treatment: 'Farbe',
   notes: 'Reagiert auf Ammoniak',
+  reason: null,
   colour: '#f4b8b8',
+}
+
+const WHOLE_DAY: Day['entries'][number] = {
+  id: 'w1',
+  version: 1,
+  employeeId: MARCO,
+  kind: 'block',
+  startsAt: '06:00',
+  endsAt: '20:00',
+  customer: null,
+  treatment: null,
+  notes: null,
+  reason: 'Urlaub',
+  colour: null,
+}
+
+const HOLIDAY: Day['entries'][number] = {
+  id: 'b2',
+  version: 1,
+  employeeId: JANA,
+  kind: 'block',
+  startsAt: '14:00',
+  endsAt: '15:00',
+  customer: null,
+  treatment: null,
+  notes: null,
+  reason: 'Urlaub',
+  colour: null,
 }
 
 const BLOCK: Day['entries'][number] = {
@@ -52,6 +81,7 @@ const BLOCK: Day['entries'][number] = {
   customer: null,
   treatment: null,
   notes: null,
+  reason: null,
   colour: null,
 }
 
@@ -268,11 +298,62 @@ test('a block opens with its times and no customer fields', async ({ page }) => 
   await stub(page, [BLOCK])
   await page.goto(`/?date=${TODAY}`)
 
-  await page.getByRole('button', { name: /Gesperrt/ }).click()
+  await page.getByRole('button', { name: /gesperrt/ }).click()
 
   await expect(page.getByLabel(/Sperrzeit/)).toBeChecked()
   await expect(page.getByLabel('Von')).toHaveValue('12:00')
   await expect(page.getByLabel('Kundin / Kunde')).toHaveCount(0)
+})
+
+test('a block reads N/A with its reason behind it', async ({ page }) => {
+  // The owner's format: the marker always stands and the reason qualifies it. This asserted the
+  // reason *replacing* the word until 2026-08-13, which is what ADR-0014 originally decided.
+  await stub(page, [HOLIDAY])
+  await page.goto(`/?date=${TODAY}`)
+
+  const box = page.locator('.entry[data-entry-id="b2"]')
+  await expect(box.locator('.entry__label')).toHaveText('N/A Urlaub')
+  // The hover text and the accessible name stay German prose: `N/A` says nothing out loud.
+  await expect(box).toHaveAttribute('title', '14:00–15:00 gesperrt: Urlaub')
+})
+
+test('a block with no reason reads just N/A', async ({ page }) => {
+  await stub(page, [BLOCK])
+  await page.goto(`/?date=${TODAY}`)
+
+  await expect(page.locator('.entry[data-entry-id="b1"] .entry__label')).toHaveText('N/A')
+  await expect(page.locator('.entry[data-entry-id="b1"]')).not.toContainText('Gesperrt')
+  // Still says what it is to anybody who cannot see the hatching.
+  await expect(page.getByRole('button', { name: '12:00–13:00 gesperrt' })).toHaveCount(1)
+})
+
+test('the reason is editable in the form, and only for a block', async ({ page }) => {
+  const seen = await stub(page, [HOLIDAY], async (route) => {
+    await route.fulfill({ status: 200, json: { version: 2 } })
+  })
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.locator('.entry[data-entry-id="b2"]').click()
+  await expect(page.getByLabel('Grund')).toHaveValue('Urlaub')
+  // A block has none of the appointment fields, which is ADR-0008 and unchanged.
+  await expect(page.getByLabel('Kundin / Kunde')).toHaveCount(0)
+  await expect(page.getByLabel('Notizen')).toHaveCount(0)
+
+  await page.getByLabel('Grund').fill('Fortbildung')
+  await page.getByRole('button', { name: 'Speichern' }).click()
+
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(seen[0].method).toBe('PATCH')
+  expect(seen[0].body).toMatchObject({ kind: 'block', reason: 'Fortbildung', customer: null, version: 1 })
+})
+
+test('an appointment has no Grund field to fill in', async ({ page }) => {
+  await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await expect(page.getByLabel('Grund')).toHaveCount(0)
+  await expect(page.getByLabel('Notizen')).toHaveValue('Reagiert auf Ammoniak')
 })
 
 test('ticking Sperrzeit takes the customer fields away', async ({ page }) => {
@@ -454,7 +535,7 @@ test('a Sperrzeit has no customer field, so the dialogue itself takes focus', as
   await stub(page, [BLOCK])
   await page.goto(`/?date=${TODAY}`)
 
-  await page.getByRole('button', { name: /Gesperrt/ }).click()
+  await page.getByRole('button', { name: /gesperrt/ }).click()
 
   await expect(page.getByRole('dialog')).toBeFocused()
   await page.keyboard.press('Space')
@@ -471,4 +552,69 @@ test('typing a name offers what has been typed before', async ({ page }) => {
 
   // A datalist is native, so its options are in the DOM rather than on screen.
   await expect(page.locator('datalist option').first()).toHaveAttribute('value', 'Anna Schmidt')
+})
+
+test('a block still says gesperrt to a screen reader, whatever the reason says', async ({ page }) => {
+  // `title` alone does not do this: a button with text content takes its accessible name from the
+  // content, so the name was "14:00–15:00 Urlaub" - indistinguishable from an appointment for a
+  // customer called Urlaub, with only the hatching left to say otherwise, which cannot be heard.
+  await stub(page, [HOLIDAY])
+  await page.goto(`/?date=${TODAY}`)
+
+  await expect(page.getByRole('button', { name: '14:00–15:00 gesperrt: Urlaub' })).toHaveCount(1)
+  // The visible label is the marker and the reason; the German is only in the name and the tooltip,
+  // which is the whole reason the override exists now that `N/A` says nothing out loud.
+  await expect(page.locator('.entry[data-entry-id="b2"] .entry__label')).toHaveText('N/A Urlaub')
+})
+
+test('a 15-minute block still shows its reason somewhere', async ({ page }) => {
+  // The promise ADR-0014 makes, in the one case that broke it: the second line of a 15.6px box
+  // starts below its bottom edge, so the reason was drawn nowhere at all.
+  const short: Day['entries'][number] = { ...HOLIDAY, id: 'b3', startsAt: '16:00', endsAt: '16:15', reason: 'Zahnarzt' }
+  await stub(page, [short])
+  await page.goto(`/?date=${TODAY}`)
+
+  const label = page.locator('.entry[data-entry-id="b3"] .entry__label')
+  await expect(label).toHaveText('N/A Zahnarzt')
+
+  // Inside the box, not clipped away below it.
+  const box = await page.locator('.entry[data-entry-id="b3"]').boundingBox()
+  const text = await label.boundingBox()
+  if (box === null || text === null) throw new Error('the block is not on screen')
+  expect(text.y).toBeGreaterThanOrEqual(box.y)
+  expect(text.y + text.height).toBeLessThanOrEqual(box.y + box.height + 1)
+})
+
+test('unticking a labelled whole-day block opens it instead of deleting it', async ({ page }) => {
+  // One click used to send DELETE immediately. Until ADR-0014 that destroyed nothing the tick could
+  // not recreate identically; now it destroys typed text, and the modal is where deleting asks
+  // first.
+  const seen = await stub(page, [WHOLE_DAY])
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('checkbox', { name: /Ganzen Tag für Marco/ }).click()
+
+  expect(seen).toHaveLength(0)
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
+  await expect(page.getByLabel('Grund')).toHaveValue('Urlaub')
+
+  // From there, deleting asks first - which is the whole point of coming through here.
+  await page.getByRole('button', { name: 'Löschen' }).click()
+  await expect(page.getByText('Wirklich löschen?')).toBeVisible()
+  expect(seen).toHaveLength(0)
+})
+
+test('unticking a bare whole-day block still just removes it', async ({ page }) => {
+  // The guard is about losing text, not about adding a step to the ordinary gesture.
+  const bare: Day['entries'][number] = { ...WHOLE_DAY, id: 'w2', reason: null }
+  const seen = await stub(page, [bare], async (route) => {
+    await route.fulfill({ status: 204, body: '' })
+  })
+  await page.goto(`/?date=${TODAY}`)
+
+  await page.getByRole('checkbox', { name: /Ganzen Tag für Marco/ }).click()
+
+  await expect.poll(() => seen.length, { timeout: 2000 }).toBe(1)
+  expect(seen[0].method).toBe('DELETE')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 })

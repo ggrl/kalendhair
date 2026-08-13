@@ -209,6 +209,7 @@ export function App() {
         customer: entry.customer,
         treatment: entry.treatment,
         notes: entry.notes,
+        reason: entry.reason,
       }).then(saved, (error: unknown) => {
         setNotice(error instanceof Error ? error.message : String(error))
         // Reload either way: a refusal means the board's copy is not what the database holds.
@@ -225,6 +226,18 @@ export function App() {
    */
   const toggleWholeDay = useCallback(
     (employeeId: string, existing: Entry | undefined, date: string) => {
+      // Unticking used to be safe by construction: the tick destroyed nothing it could not recreate
+      // identically, so it needed no confirmation while the modal's own Löschen did. ADR-0014 broke
+      // that - a whole-day block can now carry typed text - and a review pass found one click
+      // deleting it with nothing asked and nothing on screen hinting there was anything to lose.
+      //
+      // So a labelled block opens instead of vanishing. The form is where deleting already asks
+      // first, which is the confirmation that exists rather than a second one invented here.
+      if (existing !== undefined && existing.reason !== null) {
+        setEditor({ date, editing: existing, draft: { employeeId, startsAt: existing.startsAt, endsAt: existing.endsAt } })
+        return
+      }
+
       const work =
         existing === undefined
           ? createEntry({
@@ -236,6 +249,9 @@ export function App() {
               customer: null,
               treatment: null,
               notes: null,
+              // The column tick makes a bare whole-day block. A reason is added by opening it,
+              // which is one click more than the tick and keeps the tick a single gesture.
+              reason: null,
             })
           : removeEntry(existing.id, existing.version)
 

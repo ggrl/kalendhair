@@ -82,6 +82,13 @@ body {
   color: var(--ink);
 }
 
+/* Named in the same red the board is washed in, so the word and the colour answer each other.
+   Not the alert red: a holiday is information, not a fault. */
+.topbar__holiday {
+  font-weight: 600;
+  color: #b45252;
+}
+
 .topbar__step,
 .topbar__today {
   padding: 0.5rem 0.9rem;
@@ -237,6 +244,18 @@ body {
   background-repeat: repeat-y;
 }
 
+/* The hours the salon does not normally work: ADR-0015. Translucent rather than a flat fill, so
+   the quarter-hour and hour rules still show through it - the grid has to stay readable at 07:00,
+   because appointments outside these hours are perfectly legal and do happen.
+
+   Below every box and behind the pointer. It says "unusual", not "forbidden": nothing here refuses
+   a booking, and the only thing that does is the exclusion constraint. */
+.board__closed {
+  z-index: 0;
+  background: rgb(220 38 38 / 7%);
+  pointer-events: none;
+}
+
 /* A box. Boxes never overlap, because ADR-0001 forbids it in the database, so grid rows are
    enough and nothing has to share horizontal space. */
 .entry {
@@ -377,9 +396,19 @@ body {
 }
 
 /* One row of grid is one line of text: the time and the name share it and the treatment does not
-   fit at all. */
-.entry--one-line {
+   fit at all. The same trim applies to a one-row block, whose reason shares the line with its
+   start time. */
+.entry--one-line,
+.entry--block.entry--compact {
   padding: 0 0.3rem;
+}
+
+/* A block's reason may be longer than the box. Ellipsis rather than a mid-letter cut, and the same
+   min-width note as the customer name: `nowrap` otherwise keeps the span at its full text width. */
+.entry--block .entry__line .entry__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .entry__line .entry__customer {
