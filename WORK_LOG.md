@@ -2,6 +2,103 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-13, third session - five small changes, all merged
+
+Written after everything landed. The entry below describes the same day up to the merges; this one
+carries the state.
+
+### Where things stand
+
+- **`main` is at `8912e78`**, and `main` is the only branch that exists. PR #15 merged block
+  reasons, core-hours shading, Hessen holidays, the holiday name in the top bar, the `N/A` marker,
+  and the previous entry.
+- **Sixteen ADRs.** ADR-0014 (a block may say why) supersedes part of ADR-0008; ADR-0015 (core
+  hours shade and refuse nothing); ADR-0016 (Hessen holidays as a list) supersedes ADR-0015's
+  refusal to have one. ADR-0011 gained its first exception, recorded in both places: the board says
+  `N/A`, not `Gesperrt`.
+- **Nothing is in flight.** No open pull request, no stale branch, working tree clean.
+
+### What was built, and where
+
+- **A block may carry an optional reason.** `migrations/003_block_reason.sql` adds the column and
+  replaces `appointment_fields_match_kind`; threaded through `server/write.ts`, `server/day.ts`,
+  `src/calendar/types.ts`, `src/ui/api.ts`; `Grund` field in `src/ui/EntryModal.tsx`; drawn by
+  `src/ui/EntryBox.tsx`; carried through a drag by `src/ui/App.tsx`.
+  - Its own column and not `notes`, because notes are private and never drawn - one column with two
+    visibility rules is how the hidden one gets shown by accident.
+  - The box reads `N/A Urlaub`, or `N/A` bare. The owner changed this twice: first the reason
+    replaced `Gesperrt`, then the marker became `N/A` with the reason behind it.
+- **The salon's core hours and Hessen's holidays shade the board.** `src/calendar/opening.ts` holds
+  both as constants; `closedBands` in `src/ui/Board.tsx` draws them; `.board__closed` in
+  `src/styles.css` is the wash; `src/ui/TopBar.tsx` names the holiday.
+  - Shading only. The bookable window is still 06:00-20:00 every day, and a browser test clicks a
+    closed hour and expects the form.
+  - Fifty holiday dates through 2030, from `feiertage-api.de` with `nur_land=HE`, cross-checked
+    against the Easter arithmetic before being written down.
+
+### What was verified, and how
+
+Run on `main` at `8912e78`, after the merge:
+
+- `npm run verify` green: 97 unit tests, lint, typecheck, build.
+- `npx playwright test`: 69 passed. `npm run test:db`: 75 passed against Postgres 17.
+- `npm audit --audit-level=high`: 0 vulnerabilities. CI green on the branch before merging.
+- **Driven on the running board** for a Thursday, a Saturday, a Sunday, Karfreitag and Fronleichnam:
+  the bands land where the hours say, and the top bar reads `KW 14 · Karfreitag · Stand 17:38`.
+- **A labelled block dragged on real data:** `16:00` to `16:30`, and Postgres shows
+  `16:30 | 16:45 | Zahnarzt | version 2`. The reason survived the write.
+- **Every new guard was mutation-tested**: the shading's `pointer-events`, the `aria-label`, the
+  short-box label, the untick guard, the drag carrying a reason, the holiday wiring, and the expiry
+  tripwire faked forward to 2026.
+- **The owner checked the wash and the `N/A` label on their own screen** and accepted both, saying a
+  too-bright colour is an easy fix afterwards.
+
+### What was NOT verified
+
+- **Two commits merged unread.** Both review passes read `28cf485..8e95cc0`; `c5c0425` and
+  `b4df011` answer them and nobody else has read those. The pull request said so with the box
+  unticked, and the owner merged anyway - a decision, not an oversight.
+- **No screen reader has heard the `aria-label`.** It is asserted by a test and judged by nobody.
+  The owner's check was visual.
+- **`CORE_HOURS` is a constant**, so the shading is wrong the day the salon's hours change and
+  nobody edits it. There is no mechanism that would notice.
+- **The holiday list was checked against the Easter arithmetic and its own internal consistency, not
+  against a second source.** It ends on 2030-12-31 and a unit test fails from 2029-12-31 onward with
+  the refresh recipe in its message.
+- **Changing an entry's kind drops the other kind's text on save**, with nothing on screen at that
+  moment showing what is about to go. Accepted and recorded in ADR-0014.
+- **A lost `pointerup` would leave a box glued to the pointer.** `Board.tsx` does not check
+  `event.buttons`; a reviewer inferred it and could not reproduce it, and nothing defends against it.
+- **Nothing has run from a clean `docker compose up` on a machine that has never run this**, which
+  is in the brief's "done when". The compose file still has no application service.
+- The wash is 2 to 15 RGB units of difference and has not been seen on a bright salon monitor.
+
+### Unfinished, and what comes next
+
+1. **Authentication.** ADR-0004, marked to be revisited before a line of it is written, and the gate
+   before any real customer name.
+2. **Polling**, carrying two warnings from earlier reviews: a client holding a day loaded before a
+   deactivation keeps offering to edit entries the server no longer sends and `updateEntry` will
+   accept that write by id; and an update landing mid-drag is the brief's own awkward case.
+3. The remaining navigation aids: date picker, month steps, arrow keys.
+4. The application container and the VPS, with the blocking backup gate in the brief.
+5. Housekeeping: the dev database carries two block reasons and one 15-minute block from testing,
+   and the owner has been editing that data too, so its contents are nobody's record of anything.
+
+### What surprised me
+
+- **Both review blockers were sentences I had written in bold, in ADRs, an hour earlier.** The code
+  was right more often than the prose about it, which is the opposite of what I would have guessed
+  and an argument for reviewing documents as code.
+- **A gesture that was safe by construction stopped being safe because a neighbouring feature gave
+  blocks text.** Nothing about the whole-day tick changed; the reason it needed no confirmation
+  simply stopped being true, and only a review pass noticed.
+- **The first live drag I tried after merging was refused** by the clash guard, because I dropped it
+  onto a real booking. Accidental proof on real data, and a reminder that a check reads better when
+  you did not arrange for it to fire.
+- **A hardcoded list expires invisibly**, so the expiry test reads the clock on purpose - the only
+  test in the project that does, and the only mechanism that will notice.
+
 ## 2026-08-13, second session - four review passes, dragging, a reversed ruling, four small changes
 
 Everything below still applies except where this entry contradicts it - and it contradicts the
