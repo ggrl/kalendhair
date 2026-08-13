@@ -55,11 +55,14 @@ Run on `main` at `f6ec955`, after the merge:
 
 **Read this section before believing anything above.**
 
-- **No human has looked at this application.** Every screenshot was read by an agent. The
-  wording, the legibility and whether the day steps are where a hand expects them are
-  unjudged by anybody who will use it.
-- **Six columns on a 1280px laptop has never been rendered.** Every screenshot had four. The
-  brief lists it as an awkward case.
+- **The owner has now seen the board** on a 1280x720 screen with six columns and called it
+  good. That closes "nobody has looked at it" for the read-only board, and closes nothing
+  else: the wording, and whether the gestures land where a hand expects them, are still
+  unjudged, and there are no gestures yet to judge.
+- ~~Six columns on a 1280px laptop has never been rendered.~~ **Closed.** Seeded with six
+  stylists and 25 entries and looked at by the owner on a 1280x720 screen: the layout holds,
+  and the extra scrolling was expected. This was the brief's own awkward case and it is no
+  longer open.
 - **ADR-0007's daylight-saving reasoning is still unread.** It claims EU transitions fall at
   01:00 UTC, outside the 06:00-20:00 window, so no bookable time is ambiguous. Nobody has
   checked that against the salon's actual timezone.
