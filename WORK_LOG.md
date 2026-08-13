@@ -2,21 +2,61 @@
 
 Newest first. Read the top entry before doing anything.
 
-## 2026-08-13, second session - four review passes, dragging, a reversed ruling
+## 2026-08-13, second session - four review passes, dragging, a reversed ruling, four small changes
 
 Everything below still applies except where this entry contradicts it - and it contradicts the
 next entry's opening claims, because that session's asks have now been done.
 
 ### Where things stand
 
-- **`main` is at `28cf485`.** Three pull requests merged this session, in this order: #12 (the
-  write-path fixes), #14 (dragging), #13 (ADR-0012). All three branches are deleted.
-- **Thirteen ADRs.** ADR-0012 supersedes the visibility half of ADR-0002; ADR-0013 records what
-  a drag means, written during this `/save` because it existed only in code comments.
-- **Nothing is open.** This file and ADR-0013 are on `docs/save-2026-08-13` and need a pull
-  request.
+- **`main` is at `28cf485`.** Three pull requests merged during this session, in this order: #12
+  (the write-path fixes), #14 (dragging), #13 (ADR-0012). All three branches are deleted.
+- **Four more changes are on `feat/block-reason`, unmerged and unpushed**, on top of the three
+  documentation commits that produced this entry: block reasons (`e619817`), core-hours shading
+  (`d2662b9`), Hessen holidays (`d4662fe`), the holiday name in the top bar (`8e95cc0`), and the
+  fixes answering the review of all four. The branch name stopped describing its contents after the
+  first one.
+- **Sixteen ADRs.** ADR-0012 supersedes the visibility half of ADR-0002; ADR-0013 records what a
+  drag means; ADR-0014 lets a block say why and supersedes part of ADR-0008; ADR-0015 shades the
+  salon's core hours and refuses nothing; ADR-0016 makes Hessen's holidays a hardcoded list and
+  supersedes ADR-0015's refusal to have one.
+- **Nothing is on a pull request.** Everything above needs one, and this file is on the same
+  branch as the code it describes.
 - **The write path was finally read by somebody who did not write it** - the previous entry's
   one blocking ask. Both passes ran over `620164c`, and what they found is below.
+
+### The four small changes, and what the review of them found
+
+Asked for one at a time after the merges, each interviewed only as far as it needed:
+
+- **A block may carry a reason** (`ADR-0014`), drawn on the grey box in place of `Gesperrt`. Its own
+  column rather than `notes`, because notes are private and deliberately never drawn - one column
+  with two visibility rules is how the hidden one gets shown by accident.
+- **The salon's core hours shade the board** (`ADR-0015`): Tue-Fri 09:00-18:00 and Sat 08:00-13:30
+  stay white, everything else and all of Sunday and Monday is washed light red. Shading only. The
+  bookable window is still 06:00-20:00 every day, and a test clicks a closed hour to prove it.
+- **Hessen's public holidays** (`ADR-0016`), fifty dates through 2030 hardcoded from
+  `feiertage-api.de` and checked against the Easter arithmetic, with the name in the top bar. The
+  list expires with a failing test a year before it runs out, which is the only mechanism that
+  would notice.
+
+Both passes read `28cf485..8e95cc0`. Security said SHIP after running an `<img onerror>` and a
+`DROP TABLE` through the new field, proving the migration holds an exclusive lock so its
+drop-and-recreate has no window, and grepping the built bundle to confirm the holiday URL is
+tree-shaken out. Logic said NO-SHIP for two, and both were mine:
+
+1. **The accessible name did not say `gesperrt`** once a reason replaced the word - `title` is only
+   consulted when an element has no text content, and this button has plenty. A screen reader heard
+   "14:00 bis 15:00 Urlaub", indistinguishable from an appointment for a customer called Urlaub. I
+   had claimed the opposite in a code comment and in bold in ADR-0014. Fixed with an `aria-label`.
+2. **This entry contradicted its own branch**, saying thirteen ADRs and nothing open while the
+   branch carried sixteen and four unreviewed features. Fixed above.
+
+Three more, all fixed rather than argued: unticking a labelled whole-day block deleted typed text
+on one click with no confirmation, so it now opens the form instead; a 15-minute block drew its
+reason nowhere at all, so it shares one line with the start time; and changing an entry's kind
+drops the other kind's text on save, which is accepted and now recorded in ADR-0014 rather than
+left to be rediscovered.
 
 ### What was built, and where
 

@@ -36,7 +36,14 @@ customer. A box labelled with a space would look like a fault nobody can find.
 
 **The tooltip and the accessible name still say `gesperrt`.** The hatched grey is the only
 other thing that says this is blocked time, and a screen reader cannot see it. So the visible
-label carries the reason and the title carries both: `14:00-15:00 gesperrt: Urlaub`.
+label carries the reason, and the title and the accessible name carry both:
+`14:00-15:00 gesperrt: Urlaub`.
+
+This sentence was false when it was first written, and a review pass measured it: `title` is only
+consulted for an accessible name when the element has no text content, and this button has plenty.
+The name was `14:00-15:00 Urlaub`, which is what an appointment for a customer called Urlaub sounds
+like. It takes an explicit `aria-label`, and it is set only when a reason has replaced the word -
+with no reason the content already says `Gesperrt`.
 
 ## Consequences
 
@@ -49,6 +56,23 @@ label carries the reason and the title carries both: `14:00-15:00 gesperrt: Urla
 - The whole-day column checkbox still creates a bare block with no reason. Adding one is a
   second gesture - open the box, type it - which keeps the tick a single click that either
   works or is refused.
+- **Unticking a whole-day block that carries a reason opens it instead of deleting it.** Until this
+  ADR the tick destroyed nothing it could not recreate identically, so it needed no confirmation
+  while the modal's `Löschen` did; a review pass found one click deleting typed text with nothing
+  asked and nothing on screen hinting there was anything to lose. A labelled block now opens in the
+  form, where deleting already asks first. A bare one still just goes.
+- **Changing an entry's kind drops the other kind's text, on save, with no warning.** Ticking
+  `Sperrzeit` on an appointment sends `notes: null`; unticking it on a block sends `reason: null`.
+  The fields leave the screen the moment the box is ticked, so what is about to be lost is not
+  visible at the moment `Speichern` is pressed. Accepted rather than fixed: the state survives in
+  the dialogue, so re-ticking within the same form restores it, and the alternative is a warning on
+  a gesture that is nearly always deliberate. Written down here because a review pass had to
+  discover it, which is the wrong way to learn it.
+- **A short block puts its reason on one line with the start time.** A 15-minute box is 15.6px
+  tall and a second line starts below its bottom edge, so `Zahnarzt` on the shortest block the grid
+  allows was drawn nowhere at all - the promise above, broken in the case that needed it most. Same
+  answer the appointment path already used, and a long reason ends in an ellipsis rather than a
+  mid-letter cut.
 - **No autocomplete for reasons.** Customer and treatment draw on a rolling year because the
   salon has hundreds of each; the reasons a column is closed are few and short. If somebody
   asks for it, `server/suggestions.ts` is where it goes, and it would need a third field name

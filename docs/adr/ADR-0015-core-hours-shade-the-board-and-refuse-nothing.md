@@ -27,8 +27,8 @@ Sunday is accepted without a murmur, because the salon does book outside its hou
 page always allowed it.
 
 **Outside those hours the board is shaded.** A closed day is shaded from top to bottom. The
-shading is translucent, so the quarter-hour and hour rules still read through it, and it stops
-at the first employee column so the hour scale stays plain.
+shading is translucent, so the quarter-hour and hour rules still read through it, and it starts at
+the first employee column and spans them all, so the hour scale stays plain.
 
 **It takes no clicks.** `pointer-events: none`, with a browser test that a closed hour still
 opens the form. Shading that swallowed a click would have quietly become the rule this ADR says

@@ -396,9 +396,19 @@ body {
 }
 
 /* One row of grid is one line of text: the time and the name share it and the treatment does not
-   fit at all. */
-.entry--one-line {
+   fit at all. The same trim applies to a one-row block, whose reason shares the line with its
+   start time. */
+.entry--one-line,
+.entry--block.entry--compact {
   padding: 0 0.3rem;
+}
+
+/* A block's reason may be longer than the box. Ellipsis rather than a mid-letter cut, and the same
+   min-width note as the customer name: `nowrap` otherwise keeps the span at its full text width. */
+.entry--block .entry__line .entry__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .entry__line .entry__customer {

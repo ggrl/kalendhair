@@ -226,6 +226,18 @@ export function App() {
    */
   const toggleWholeDay = useCallback(
     (employeeId: string, existing: Entry | undefined, date: string) => {
+      // Unticking used to be safe by construction: the tick destroyed nothing it could not recreate
+      // identically, so it needed no confirmation while the modal's own Löschen did. ADR-0014 broke
+      // that - a whole-day block can now carry typed text - and a review pass found one click
+      // deleting it with nothing asked and nothing on screen hinting there was anything to lose.
+      //
+      // So a labelled block opens instead of vanishing. The form is where deleting already asks
+      // first, which is the confirmation that exists rather than a second one invented here.
+      if (existing !== undefined && existing.reason !== null) {
+        setEditor({ date, editing: existing, draft: { employeeId, startsAt: existing.startsAt, endsAt: existing.endsAt } })
+        return
+      }
+
       const work =
         existing === undefined
           ? createEntry({
