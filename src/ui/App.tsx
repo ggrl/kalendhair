@@ -56,8 +56,18 @@ export function App() {
    */
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
 
-  /** The entry being edited, or a proposed slot for a new one. Null when nothing is open. */
+  /**
+   * The entry being edited, or a proposed slot for a new one. Null when nothing is open.
+   *
+   * `date` is captured when the form opens, and is the day that was on screen at that moment.
+   * The form used to read the loaded day at save time instead, which is a different day whenever
+   * one arrives while it is open: a step during a slow load booked the clicked slot on the day
+   * that landed, and pressing Back with an appointment open moved that appointment to the
+   * previous day. An `Entry` carries no date of its own, so nothing else remembered it. Neither
+   * write is stale and neither clashes, so no refusal catches either one.
+   */
   const [editor, setEditor] = useState<{
+    date: string
     editing: Entry | null
     draft: { employeeId: string; startsAt: string; endsAt: string }
   } | null>(null)
@@ -290,12 +300,13 @@ export function App() {
               day={day}
               onOpenEntry={(entry) =>
                 setEditor({
+                  date: day.date,
                   editing: entry,
                   draft: { employeeId: entry.employeeId, startsAt: entry.startsAt, endsAt: entry.endsAt },
                 })
               }
               onOpenSlot={(employeeId, startsAt, endsAt) =>
-                setEditor({ editing: null, draft: { employeeId, startsAt, endsAt } })
+                setEditor({ date: day.date, editing: null, draft: { employeeId, startsAt, endsAt } })
               }
               onToggleWholeDay={(employeeId, existing) => toggleWholeDay(employeeId, existing, day.date)}
             />
@@ -315,7 +326,7 @@ export function App() {
 
       {editor !== null && (
         <EntryModal
-          date={day.date}
+          date={editor.date}
           employees={day.employees}
           editing={editor.editing}
           draft={editor.draft}

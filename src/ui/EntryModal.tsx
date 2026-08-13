@@ -47,8 +47,13 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
   }, [onClose])
 
   useEffect(() => {
-    // Focus lands inside the dialogue, or a keyboard user is left on the board behind it.
-    dialog.current?.querySelector<HTMLElement>('input, select, textarea')?.focus()
+    // Focus lands inside the dialogue, or a keyboard user is left on the board behind it - and on
+    // a field, never on the Sperrzeit box. That box is first in DOM order, so the dialogue used to
+    // hand the keyboard the one control that destroys data: a single Space, the ordinary key for
+    // scrolling, turned an open booking into an unlabelled grey block, and ADR-0008 leaves a block
+    // no room for the customer, the treatment or the notes that were there. Löschen asks before it
+    // does less than that.
+    dialog.current?.querySelector<HTMLElement>('input:not([type="checkbox"]), select, textarea')?.focus()
   }, [])
 
   useEffect(() => {
