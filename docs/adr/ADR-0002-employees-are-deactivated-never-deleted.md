@@ -1,7 +1,14 @@
 # ADR-0002: Employees are deactivated, never deleted
 
-- Status: accepted
+- Status: accepted, with the visibility rule superseded by
+  [ADR-0012](ADR-0012-a-deactivated-employee-leaves-the-board-entirely.md) on 2026-08-13
 - Date: 2026-08-12
+
+**Read ADR-0012 before this one.** Deactivate-never-delete stands, and so does everything
+here about not destroying a booking as a side effect of an administrative action. What no
+longer holds is the visibility rule: an inactive employee keeps no column on a day they have
+entries, and those entries no longer reach the board at all. The paragraphs below that say
+otherwise are kept as written, because they record why it was decided that way first.
 
 ## Context
 

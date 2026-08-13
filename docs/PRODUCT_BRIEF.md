@@ -137,7 +137,8 @@ Awkward, each needing an answer in code:
 - the same appointment edited from two machines
 - an update arriving mid-drag, which must not yank the box out from under the cursor
 - an appointment deleted elsewhere while its modal is open here
-- a deactivated stylist's past day
+- a deactivated stylist's past day, which now shows neither their column nor the customers
+  they served: ADR-0012 reversed this, and the appointments stay in the database unseen
 - autocomplete on the very first appointment, when there is no history to draw on
 - a day with more distinct customers than the palette has colours, where two strangers
   will share one and look like a pair
@@ -147,7 +148,8 @@ Awkward, each needing an answer in code:
   and has to say what is in the way
 - a block dragged over an appointment, and an appointment dragged over a block
 - unticking the whole-day box
-- a block on a deactivated employee's column
+- a block on a deactivated employee's column, which the board can no longer reach at all
+  since ADR-0012 took that column away
 - text staying readable on a coloured 15-minute box
 - 1 January 2027, which is in ISO week 53 of 2026, so the header must read KW 53 on a date
   that says 2027
@@ -205,7 +207,11 @@ with automated tests asserting specifically:
 
 - an overlapping save is refused by the server, not only by the browser
 - a save carrying a stale version stamp is refused
-- a deactivated employee's existing appointments still render
+- a deactivated employee gets no column on any day, and none of their appointments come back
+  from `GET /api/day`. This line said the opposite until 2026-08-13; ADR-0012 reversed it and
+  records what that costs. It is a claim about the board and not about the database:
+  `/api/suggestions` still offers a customer only a leaver ever served, deliberately, because a
+  customer belongs to the salon rather than to the stylist
 - notes stay hidden until a box is clicked
 - an unauthenticated request for a day returns no customer data
 - the day on screen does not change when new data arrives
@@ -231,6 +237,9 @@ staff, refuse-the-stale-save, shared-password authentication, self-hosted contai
 rather than a managed platform, the API as the only door to the database, salon-local
 wall clock time, one table for appointments and blocks, per-day colour assignment, and
 ISO week and month-step arithmetic.
+
+One has since been half overruled: ADR-0002's visibility rule, by ADR-0012 on 2026-08-13. A
+deactivated stylist now leaves the board entirely. Deactivate-never-delete itself stands.
 
 Two carry unfinished business, flagged in the ADRs themselves rather than left to be
 rediscovered:

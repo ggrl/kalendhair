@@ -16,7 +16,12 @@ CREATE TABLE employee (
   -- Column order on the board. Not the name, so renaming somebody does not move them.
   position   integer NOT NULL,
   -- ADR-0002: staff are deactivated, never deleted. An inactive employee keeps every
-  -- appointment ever booked against them, and past days still render correctly.
+  -- appointment ever booked against them, in this table, for as long as the row lives.
+  --
+  -- ADR-0012 changed what that means on screen: an inactive employee gets no column on any day
+  -- and `readDay` sends none of their entries, so a past day no longer renders the way it
+  -- happened. Nothing is deleted and reactivating brings all of it back - which is why the
+  -- keeping half of ADR-0002 is still the reason this column exists rather than a DELETE.
   active     boolean NOT NULL DEFAULT true
 );
 
