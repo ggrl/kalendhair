@@ -27,7 +27,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Database schema, with the no-overlap rule enforced by Postgres | done |
 | `GET /api/day` - one day of columns and boxes, with colours assigned | done |
 | The board: 06:00-20:00 grid, a column per employee, coloured boxes, grey blocks, notes on click | done |
-| The salon's core hours shaded on the board, refusing nothing | done |
+| The salon's core hours and Hessen's holidays shaded on the board, refusing nothing | done |
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
 | Navigation: date picker, month steps, arrow keys | not started |
 | Live updates, by polling the day on screen | not started |
@@ -113,7 +113,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Fifteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Sixteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -135,6 +135,7 @@ re-decide.
 | [0013](docs/adr/ADR-0013-a-drag-is-the-edit-and-it-commits-on-release.md) | A drag is the edit, and it commits on release - with no undo |
 | [0014](docs/adr/ADR-0014-a-block-may-say-why.md) | A block may say why, in its own field, drawn on the box |
 | [0015](docs/adr/ADR-0015-core-hours-shade-the-board-and-refuse-nothing.md) | Core hours shade the board and refuse nothing |
+| [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

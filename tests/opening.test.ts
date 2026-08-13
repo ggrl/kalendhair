@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { coreHoursOn, weekdayOf } from '../src/calendar/opening.js'
+import {
+  HOLIDAYS_COVERED_THROUGH,
+  HOLIDAY_SOURCE,
+  coreHoursOn,
+  isHoliday,
+  weekdayOf,
+} from '../src/calendar/opening.js'
 
 // The salon's core hours, which shade the board and refuse nothing. Fixed dates rather than
 // anything derived from today: a weekday table tested on a Wednesday passes for the wrong reason.
@@ -39,9 +45,68 @@ describe('the salon core hours', () => {
     expect(coreHoursOn('2026-08-10')).toBeNull()
   })
 
-  it('knows nothing about public holidays, deliberately', () => {
-    // 25 December 2026 is a Friday and reads as an ordinary working day. There is no calendar of
-    // holidays and this does not invent one - the paper page did not have one either.
-    expect(coreHoursOn('2026-12-25')).toEqual({ from: '09:00', to: '18:00' })
+  it('is closed on a Hessen public holiday that falls on a working day', () => {
+    // This asserted the opposite until ADR-0016 added the list: 25 December 2026 is a Friday, and
+    // it read as an ordinary working day. Reversed deliberately, so the test was rewritten.
+    expect(weekdayOf('2026-12-25')).toBe(5)
+    expect(coreHoursOn('2026-12-25')).toBeNull()
+  })
+
+  it('leaves the working day next to a holiday alone', () => {
+    // The day after Christmas is also a holiday; the 24th is not, whatever the salon chooses to do
+    // about it. Heiligabend is not a public holiday in Hessen and the list does not invent one.
+    expect(coreHoursOn('2026-12-24')).toEqual({ from: '09:00', to: '18:00' })
+  })
+})
+
+describe('the Hessen holiday list', () => {
+  it('knows the fixed dates', () => {
+    for (const date of ['2026-01-01', '2026-05-01', '2026-10-03', '2026-12-25', '2026-12-26']) {
+      expect(isHoliday(date)).toBe(true)
+    }
+  })
+
+  it('knows the moving ones, which is what a list is for', () => {
+    // Easter 2026 is 5 April: Karfreitag is two days before, Himmelfahrt is Easter plus 39,
+    // Pfingstmontag plus 50, Fronleichnam plus 60. Checked against the arithmetic before the
+    // dates were written down, because a wrong holiday is a wrong colour nobody would question.
+    for (const date of ['2026-04-03', '2026-04-06', '2026-05-14', '2026-05-25', '2026-06-04']) {
+      expect(isHoliday(date)).toBe(true)
+    }
+    // 2027 moves: Easter is 28 March.
+    for (const date of ['2027-03-26', '2027-03-29', '2027-05-06', '2027-05-17', '2027-05-27']) {
+      expect(isHoliday(date)).toBe(true)
+    }
+  })
+
+  it('has none of the holidays Hessen does not keep', () => {
+    // Reformationstag and Allerheiligen are holidays in other states. A list copied from the wrong
+    // one would close the salon on a day it is working, which is the more expensive mistake.
+    expect(isHoliday('2026-10-31')).toBe(false)
+    expect(isHoliday('2026-11-01')).toBe(false)
+    // Buß- und Bettag is Saxony only.
+    expect(isHoliday('2026-11-18')).toBe(false)
+  })
+
+  it('says nothing about dates past the end of the list', () => {
+    expect(isHoliday('2031-01-01')).toBe(false)
+  })
+
+  it('still has at least a year left to run', () => {
+    // A deliberate time bomb, and the only mechanism that will notice. The list is hardcoded, so
+    // it expires quietly: the board simply stops marking holidays and looks exactly as correct as
+    // it did the day before. This fails a year ahead of that, in CI, with the URL in the message.
+    //
+    // It is the one test here that reads the clock. Everything else uses fixed dates on purpose.
+    const oneYearOut = new Date()
+    oneYearOut.setUTCFullYear(oneYearOut.getUTCFullYear() + 1)
+    const deadline = oneYearOut.toISOString().slice(0, 10)
+
+    expect(
+      HOLIDAYS_COVERED_THROUGH >= deadline,
+      `The Hessen holiday list ends on ${HOLIDAYS_COVERED_THROUGH}, which is less than a year away. ` +
+        `Refresh it in src/calendar/opening.ts from ${HOLIDAY_SOURCE} (one request per year), check the ` +
+        `dates against the Easter arithmetic, and move HOLIDAYS_COVERED_THROUGH.`,
+    ).toBe(true)
   })
 })

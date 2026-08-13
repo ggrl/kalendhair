@@ -1,6 +1,8 @@
 # ADR-0015: Core hours shade the board and refuse nothing
 
-- Status: accepted
+- Status: accepted, with the no-public-holidays paragraph superseded by
+  [ADR-0016](ADR-0016-hessen-holidays-are-a-list-in-the-code.md) later the same day: Hessen's
+  holidays are now a hardcoded list and shade a whole day. Everything else here stands.
 - Date: 2026-08-13
 
 ## Context
@@ -40,6 +42,9 @@ salon, or the day the hours change often enough that somebody wants it without a
 **There is no calendar of public holidays.** 25 December reads as an ordinary Friday. Inventing
 one means a source of truth for holidays, a region, and a rule for the ones that move - and the
 paper page did not have one either.
+
+> Superseded the same day by ADR-0016. The owner answered all three: `feiertage-api.de`, Hessen,
+> and a list rather than a rule. Kept as written because the reasoning was the reason to ask.
 
 ## Consequences
 

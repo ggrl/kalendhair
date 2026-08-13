@@ -524,3 +524,18 @@ test('the shading takes no clicks, so closed hours still book', async ({ page })
   await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
   await expect(page.getByLabel('Von')).toHaveValue('06:00')
 })
+
+test('a public holiday is shaded like a Sunday, even on a working weekday', async ({ page }) => {
+  // ADR-0016. 25 December 2026 is a Friday, so nothing about the weekday explains the shading -
+  // only the Hessen holiday list does.
+  await page.goto('/?date=2026-12-25')
+
+  const bands = page.locator('.board__closed')
+  await expect(bands).toHaveCount(1)
+  await expect(bands.first()).toHaveCSS('grid-row-start', '1')
+  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 56')
+
+  // And the day before is an ordinary Thursday with its two bands.
+  await page.goto('/?date=2026-12-24')
+  await expect(page.locator('.board__closed')).toHaveCount(2)
+})
