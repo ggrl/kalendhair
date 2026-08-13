@@ -33,7 +33,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Live updates, by polling the day on screen | not started |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
-| Authentication | not started, and blocking before real data |
+| Authentication, and a settings screen for staff, hours and credentials | not started - designed in ADR-0017 and ADR-0018, and blocking before real data |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
@@ -113,7 +113,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Sixteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Eighteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -136,6 +136,8 @@ re-decide.
 | [0014](docs/adr/ADR-0014-a-block-may-say-why.md) | A block may say why, in its own field, drawn on the box |
 | [0015](docs/adr/ADR-0015-core-hours-shade-the-board-and-refuse-nothing.md) | Core hours shade the board and refuse nothing |
 | [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
+| [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - **not yet built** |
+| [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - **not yet built** |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

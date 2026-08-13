@@ -2,6 +2,86 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-13, fourth session - an interview, and no code at all
+
+**Nothing was built. That is the point of this entry.** The owner asked for a settings screen,
+the interview turned it over four times, and the result is two ADRs and a brief. The next
+session builds it, and should read ADR-0017 and ADR-0018 before anything else.
+
+### Where things stand
+
+- **`main` is at `3f72097`** and this branch, `docs/settings-and-auth-brief`, adds documentation
+  only: `ADR-0017`, `ADR-0018`, pointers on `ADR-0004` and `ADR-0015`, a paragraph in the product
+  brief, the README table, and this entry.
+- **Eighteen ADRs.** The two new ones are marked **not yet implemented**, which is a status this
+  log has not had before - read them as instructions, not as descriptions.
+- No code changed, so nothing to verify beyond the checks still being green.
+
+### What was decided, in the order it was asked
+
+The owner brought two open questions - does the admin screen need its own password, and does it
+come before or after authentication - and the interview answered both, then rewrote itself twice:
+
+1. **Authentication first**, and the salon password moves out of the environment into the
+   database as a hash so the screen can change it. That supersedes half of ADR-0004, which had
+   marked itself to be revisited before authentication was written. This is that revisit.
+2. **An email reset was proposed and withdrawn.** The owner's first answer was a reset by email
+   plus confirmation mails; when the cost was laid out - a provider, an API key, a from-domain, an
+   unauthenticated endpoint to rate-limit, and a reset link that in stage one points at
+   `127.0.0.1` - they replaced it with a master password in the environment. That exchange is the
+   most valuable thing in the interview and it is recorded in ADR-0017's rejected alternatives.
+3. **A four-digit PIN guards the settings screen**, not a re-entered password, and with no
+   lockout. Ten thousand guesses from a logged-in console is minutes, the owner was told so
+   plainly, and accepted it: everybody who can reach the prompt already sees every customer name.
+   The PIN separates using the board from changing it, nothing more.
+4. **Changing the password logs everybody out.** The owner corrected my assumption here, and the
+   reason is the reason passwords get changed: somebody left. It needs a credential version in the
+   session, not just a signed cookie.
+5. **Delete a stylist only if they never held an appointment**, which the foreign key already
+   enforces; everybody else is deactivated. A narrow amendment to ADR-0002 for the case it did not
+   have in mind - a name typed wrong.
+6. **Core hours move into the database**, superseding ADR-0015's own "not configuration"
+   paragraph, which had named the condition under which it would stop being true. The hours get no
+   history: editing Saturday re-shades every Saturday, and the owner accepted that because the
+   colour is for recognising where appointments normally go, not for keeping a record.
+
+### What was verified, and how
+
+- `npm run verify` on this branch: green, 97 unit tests, and `main` is unchanged underneath.
+- Nothing else. **There is no code in this branch**, so any claim about behaviour would be a
+  claim about something that does not exist yet.
+
+### What was NOT verified, and cannot be
+
+- **Every word of ADR-0017 and ADR-0018 is a design, not an observation.** `scrypt` from
+  `node:crypto` is named as the hash because it needs no dependency; nobody has run it here. The
+  credential-version mechanism for logging everybody out is one sentence of prose, not a schema.
+- **The interview's own assumptions are untested**: that four digits is enough friction for a
+  six-person salon, that nobody will need per-person accounts, and that a master password in an
+  environment variable will actually be findable on the day it is needed.
+
+### Unfinished, and what comes next
+
+1. **Build ADR-0017**: the credential row, the seeds, the startup refusal, the session with a
+   credential version, the login screen, the master-password reset screen. Authentication is the
+   gate before any real customer name, and ADR-0004's deadline has not moved.
+2. **Then ADR-0018**: the settings screen. Staff first, hours second - the hours drag `opening.ts`
+   half into the database and `GET /api/day` grows a field, so it is the part most likely to want
+   its own interview once the staff half is real.
+3. Polling and the remaining navigation aids still sit behind both.
+4. The container and the VPS, with the blocking backup gate in the brief.
+
+### What surprised me
+
+- **The email reset died of its own cost estimate, not of an argument.** Laying out what it needed
+  was enough; nobody had to be talked out of anything, and the design that replaced it is smaller
+  than the one that started the conversation.
+- **The PIN arrived in round three and changed the shape of round four.** An interview that had
+  settled "re-enter the password" produced a better answer once the owner said what they actually
+  wanted, which is that it should be *convenient*. Convenience was never in any of my options.
+- **ADR-0015 predicted its own supersession by two hours.** It said the hours become configuration
+  the day somebody wants to change them without a release; that day was the same afternoon.
+
 ## 2026-08-13, third session - five small changes, all merged
 
 Written after everything landed. The entry below describes the same day up to the merges; this one
