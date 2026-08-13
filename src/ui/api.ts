@@ -17,6 +17,16 @@ export class Refused extends Error {
   }
 }
 
+/**
+ * Nobody is logged in, or the session ended - because it ran out, or because the salon
+ * password changed and ADR-0017 says that logs everybody out.
+ *
+ * Its own type rather than a status code the caller has to remember, because the board's
+ * answer to it is the one thing it must not confuse with a failed load: a login screen, not
+ * "Laden fehlgeschlagen".
+ */
+export class Unauthenticated extends Error {}
+
 export interface EntryDraft {
   employeeId: string
   kind: EntryKind
@@ -40,6 +50,8 @@ export async function fetchDay(date: string | null): Promise<Day> {
   const query = date === null ? '' : `?date=${encodeURIComponent(date)}`
   const response = await fetch(`/api/day${query}`)
 
+  if (response.status === 401) throw new Unauthenticated('Bitte anmelden.')
+
   if (!response.ok) {
     // Fail loudly, and in the language on the screen. A board that silently shows an empty day
     // when the request failed is indistinguishable from a day with nothing booked, and one of
@@ -57,7 +69,14 @@ export async function fetchDay(date: string | null): Promise<Day> {
  * day underneath it has moved on. Matching the German sentence instead would break the moment
  * somebody improves the wording.
  */
-async function refusalFrom(response: Response): Promise<Refused> {
+async function refusalFrom(response: Response): Promise<Error> {
+  // Before anything else, because a 401 is not a refusal to be shown in a form. The server
+  // sends it with no `code`, so it used to arrive as `invalid` - which the form treats as
+  // "fix this field and try again", over a board the server has stopped answering for. A
+  // review pass walked into it: save, get "Bitte anmelden." in red inside the dialogue, and
+  // no way out of it that reaches the login screen.
+  if (response.status === 401) return new Unauthenticated('Bitte anmelden.')
+
   let code: RefusalCode = 'invalid'
   let message = `Server antwortete mit Status ${response.status}`
 
@@ -95,6 +114,43 @@ export async function updateEntry(id: string, version: number, draft: EntryDraft
 export async function removeEntry(id: string, version: number): Promise<void> {
   const response = await fetch(`/api/entries/${id}?version=${version}`, { method: 'DELETE' })
   if (!response.ok) throw await refusalFrom(response)
+}
+
+/**
+ * The salon password, exchanged for the session cookie the server sets. ADR-0004.
+ *
+ * Nothing is stored here: the cookie is httpOnly, so this code cannot read it and neither can
+ * anything else that ends up on the page. Whether somebody is logged in is answered by asking
+ * the server for a day, which is the only question that matters.
+ */
+export async function login(password: string): Promise<void> {
+  const response = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+  })
+  if (!response.ok) throw new Error(await messageFrom(response))
+}
+
+/** ADR-0017: the master password sets a new salon password and a new PIN, and gets no session. */
+export async function resetCredentials(master: string, password: string, pin: string): Promise<void> {
+  const response = await fetch('/api/credentials/reset', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ master, password, pin }),
+  })
+  if (!response.ok) throw new Error(await messageFrom(response))
+}
+
+/** The server's German sentence, or the status if it did not send one. */
+async function messageFrom(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: string }
+    if (typeof body.error === 'string') return body.error
+  } catch {
+    // Not JSON. The status is still the truth about what happened.
+  }
+  return `Server antwortete mit Status ${response.status}`
 }
 
 /**

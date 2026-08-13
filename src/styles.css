@@ -708,3 +708,92 @@ body {
   font-weight: 600;
   color: var(--alert-ink);
 }
+
+/* The login screen. One narrow column in the middle of an otherwise empty page: there is
+   exactly one thing to do here, and the board behind it is not drawn at all - a dimmed board
+   under a password box would be showing customer names to somebody who has not logged in. */
+.login {
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.login__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 22rem;
+}
+
+.login__form h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.login__hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.login__form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.login__form input {
+  padding: 0.45rem 0.55rem;
+  margin-bottom: 0.5rem;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.35rem;
+}
+
+.login__form button[type='submit'] {
+  padding: 0.5rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: #1f2937;
+  border: 1px solid #1f2937;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+
+.login__form button[type='submit']:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* A button and not an anchor: it changes what this screen shows and navigates nowhere, and an
+   anchor with no href is not reachable by keyboard. Styled flat so it does not read as the
+   second half of a pair of equal choices. */
+.login__link {
+  margin-top: 0.6rem;
+  padding: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.login__error {
+  margin: 0 0 0.3rem;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--alert-ink);
+  background: var(--alert-paper);
+  border-radius: 0.3rem;
+}
+
+.login__notice {
+  margin: 0 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+}

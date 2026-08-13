@@ -1,10 +1,34 @@
 import express from 'express'
-import type { ErrorRequestHandler, Express } from 'express'
+import type { ErrorRequestHandler, Express, RequestHandler } from 'express'
 import type { Pool } from 'pg'
+import type { Config } from './config.js'
 import { readDay } from './day.js'
 import { Refused, createEntry, parseEntryInput, removeEntry, updateEntry } from './write.js'
 import { isSuggestable, suggest } from './suggestions.js'
+import {
+  currentVersion,
+  replaceCredentials,
+  secretMatches,
+  versionForPassword,
+  whyPasswordUnusable,
+  whyPinUnusable,
+} from './credentials.js'
+import { SESSION_COOKIE, SESSION_LIFETIME_MS, issueSession, readSession, sessionCookieFrom, shouldRefresh } from './session.js'
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
+
+/** What the HTTP surface needs. The connection string and the bind address are startup's business. */
+export interface AppConfig extends Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'cookieSecure'> {
+  /**
+   * The master password as a scrypt hash, made once at startup rather than compared as plain
+   * text.
+   *
+   * Not for storage - it never leaves the process - but for cost. A security pass measured the
+   * plain comparison at 0.875 microseconds against 24ms for a salon password guess, on the
+   * endpoint that grants strictly more power: reset both credentials, log in, read the book,
+   * and lock the salon out of its own door. Both doors now cost the same to knock on.
+   */
+  masterPasswordHash: string
+}
 
 /**
  * The HTTP surface, separated from startup so it can be tested against a port rather than
@@ -12,8 +36,9 @@ import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
  * and a stack trace in the response - were invisible to the test suite because there was
  * nothing to point a request at.
  */
-export function createApp(pool: Pool, salonTimeZone: string): Express {
+export function createApp(pool: Pool, config: AppConfig): Express {
   const app = express()
+  const salonTimeZone = config.salonTimeZone
 
   // Nothing here needs to announce the framework and its presence in a header.
   app.disable('x-powered-by')
@@ -21,6 +46,95 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   // No CORS header is set anywhere, and that absence is load-bearing now that the board and
   // the API share an origin: it is what stops a page on another site reading a customer list.
   // A future "just add CORS so the app can call it" would undo it. ADR-0006.
+
+  // A day of one salon's entries is a small object. The default 100kb would let somebody post
+  // a megabyte of notes for no reason.
+  const body = express.json({ limit: '16kb' })
+
+  /**
+   * Twenty attempts from one address in five minutes, which ADR-0004 asks for by name: a
+   * single shared password is one guessable secret protecting everything.
+   *
+   * Twenty rather than five because the salon is one address as far as this server is
+   * concerned - six people all typing a new password on the morning it changed is a burst of
+   * legitimate attempts from what looks like one machine. The number is not what makes
+   * guessing expensive; scrypt is. Measured on the machine this was written on, one derive
+   * costs 22ms of CPU, so twenty attempts occupy a core for most of half a second.
+   *
+   * Behind a reverse proxy that Express is not told to trust, every request carries the
+   * proxy's address, so the limit becomes one budget for everybody - and a stranger can then
+   * hold the salon's door shut at four requests a minute. Stage two has to set `trust proxy`
+   * when the proxy arrives, and to the specific hop: `trust proxy: true` makes
+   * `X-Forwarded-For` whatever the caller says it is, which removes this entirely.
+   *
+   * Two limiters and not one. Sharing the budget meant the door built for a forgotten password
+   * was shut by somebody forgetting their password: twenty wrong guesses, then the correct
+   * master password refused for five minutes. A review pass demonstrated it.
+   */
+  const loginAttempts = attemptLimiter(20, 5 * 60 * 1000)
+  const resetAttempts = attemptLimiter(20, 5 * 60 * 1000)
+
+  /**
+   * The salon password, exchanged for the signed session cookie. ADR-0004.
+   *
+   * Answers nothing but a status. A login response that said whether the password was close,
+   * or how many attempts were left, would be telling somebody how to spend their next guess.
+   */
+  app.post('/api/login', loginAttempts, body, async (request, response) => {
+    const password = stringField(request.body, 'password')
+    const version = password === null ? null : await versionForPassword(pool, password)
+
+    if (version === null) {
+      response.status(401).json({ error: 'Das Passwort stimmt nicht.' })
+      return
+    }
+
+    setSession(response, config, version)
+    response.status(204).end()
+  })
+
+  /**
+   * The master password's one screen: a new salon password and a new PIN. ADR-0017.
+   *
+   * It hands back no session. Whoever resets the credentials then logs in with the password
+   * they just set, like everybody else - the master password is the way back in, not a second
+   * permanent login that never rotates.
+   *
+   * Changing the password increments the credential version, so every session in the salon
+   * ends here. That is the point: the reason a password gets changed is that somebody left.
+   */
+  app.post('/api/credentials/reset', resetAttempts, body, async (request, response) => {
+    const password = stringField(request.body, 'password') ?? ''
+    const pin = stringField(request.body, 'pin') ?? ''
+
+    // What was typed is checked before who is asking, so that a 400 never confirms a correct
+    // master password. The other order let somebody test a guess without changing anything:
+    // 401 meant wrong, 400 meant right and the new password was merely too short.
+    const unusable = whyPasswordUnusable(password) ?? whyPinUnusable(pin)
+    if (unusable !== null) {
+      response.status(400).json({ error: unusable })
+      return
+    }
+
+    const master = stringField(request.body, 'master')
+    if (master === null || !(await secretMatches(master, config.masterPasswordHash))) {
+      response.status(401).json({ error: 'Das Hauptpasswort stimmt nicht.' })
+      return
+    }
+
+    await replaceCredentials(pool, password, pin)
+    response.status(204).end()
+  })
+
+  /**
+   * Everything below this line needs a valid session. ADR-0004: an unauthenticated request
+   * returns no customer data - not a filtered day, not an empty shell that leaks names in an
+   * error, nothing.
+   *
+   * Mounted on `/api` only. The built board underneath is HTML and JavaScript with no salon
+   * data in it, and it has to load for anybody to reach the login screen at all.
+   */
+  app.use('/api', requireSession(pool, config))
 
   /**
    * The board, for one day. Without a date it answers today in the salon's timezone, so a
@@ -45,10 +159,6 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
 
     response.json(await readDay(pool, date, salonTimeZone, new Date()))
   })
-
-  // A day of one salon's entries is a small object. The default 100kb would let somebody post
-  // a megabyte of notes for no reason.
-  const body = express.json({ limit: '16kb' })
 
   /**
    * A new appointment or block.
@@ -120,6 +230,99 @@ export function createApp(pool: Pool, salonTimeZone: string): Express {
   app.use(jsonErrors)
 
   return app
+}
+
+/**
+ * Refuses every request that does not carry a session this server issued and still honours.
+ *
+ * The credential version is read from the database on each request rather than cached, which
+ * is what makes "changing the password logs everybody out" true within one request instead of
+ * within one restart. It is a single-row primary-key lookup next to a query that reads a whole
+ * day; if it ever shows up in a profile, the cache it wants has to survive two instances.
+ */
+function requireSession(pool: Pool, config: AppConfig): RequestHandler {
+  return async (request, response, next) => {
+    const cookie = sessionCookieFrom(request.headers.cookie)
+    const session = cookie === null ? null : readSession(config.sessionSecret, cookie, Date.now())
+
+    if (session === null || session.version !== (await currentVersion(pool))) {
+      // One answer for no cookie, a forged cookie, an expired cookie and a cookie from before
+      // the password changed. The client's move is the same in every case, and naming which it
+      // was would tell somebody probing whether their forgery was well formed.
+      response.status(401).json({ error: 'Bitte anmelden.' })
+      return
+    }
+
+    // Use keeps the session alive, so nobody is asked for the password mid-shift.
+    if (shouldRefresh(session, Date.now())) setSession(response, config, session.version)
+
+    next()
+  }
+}
+
+/** The one place a session cookie is written, so its attributes cannot drift apart. */
+function setSession(response: express.Response, config: AppConfig, version: number): void {
+  response.cookie(SESSION_COOKIE, issueSession(config.sessionSecret, version, Date.now()), {
+    httpOnly: true,
+    // Lax rather than Strict. Strict would drop the cookie on the first click of a link to the
+    // board sent in a chat - the board would show the login screen, and work on a refresh,
+    // which reads as broken. Lax still refuses to send it on a cross-site POST, which is the
+    // request that would matter.
+    sameSite: 'lax',
+    secure: config.cookieSecure,
+    maxAge: SESSION_LIFETIME_MS,
+    path: '/',
+  })
+}
+
+/**
+ * A fixed number of requests per address per window, for the two doors that take a secret.
+ *
+ * In memory and per process on purpose: it is a speed bump on guessing, not an account
+ * lockout, and it resets on restart. Anything more - shared state, a durable counter - is a
+ * second system to run for a salon with one password.
+ */
+function attemptLimiter(limit: number, windowMs: number): RequestHandler {
+  const seen = new Map<string, { count: number; until: number }>()
+  let sweptAt = 0
+
+  return (request, response, next) => {
+    const now = Date.now()
+
+    // Swept on a request rather than on a timer, so there is nothing to stop at shutdown - but
+    // at most once a second. Sweeping on every attempt was measured by a security pass at 21ms
+    // of blocked event loop with 300,000 addresses in the map, which one machine with a routed
+    // IPv6 range can produce in five minutes. Once a second, that cost is paid once a second.
+    if (now - sweptAt >= 1000) {
+      sweptAt = now
+      for (const [address, entry] of seen) {
+        if (entry.until <= now) seen.delete(address)
+      }
+    }
+
+    const address = request.ip ?? 'unknown'
+    // The window is checked here and not left to the sweep. With the sweep throttled, an
+    // address can be read back before its entry is collected, and taking that stale count
+    // would keep somebody locked out for as long as they kept trying.
+    const held = seen.get(address)
+    const entry = held === undefined || held.until <= now ? { count: 0, until: now + windowMs } : held
+    entry.count += 1
+    seen.set(address, entry)
+
+    if (entry.count > limit) {
+      response.status(429).json({ error: 'Zu viele Versuche. Bitte in einigen Minuten erneut versuchen.' })
+      return
+    }
+
+    next()
+  }
+}
+
+/** One string field out of a parsed JSON body, or null. A missing field is not an empty one. */
+function stringField(body: unknown, name: string): string | null {
+  if (typeof body !== 'object' || body === null) return null
+  const value = (body as Record<string, unknown>)[name]
+  return typeof value === 'string' ? value : null
 }
 
 /** A version from a request body or query string, or a refusal. Never a guess. */

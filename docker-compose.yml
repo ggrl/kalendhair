@@ -1,9 +1,10 @@
 # ADR-0005: the same file runs on a laptop now and on a VPS later, which is the whole
 # reason for containers here - it closes the gap between the two.
 #
-# The application service is not here yet. There is no front end to serve and no
-# authentication, so a container would only wrap an API that must not be reachable.
-# It joins when the board exists.
+# The application service is not here yet. The board exists and is behind a password as of
+# 2026-08-13, so the reason is no longer that it must not be reachable - it is that the brief
+# makes a tested restore the condition for stage two, and this file is what stage two deploys.
+# It joins when that gate is met.
 
 services:
   db:

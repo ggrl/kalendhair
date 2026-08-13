@@ -3,9 +3,10 @@ import type { Day, Entry } from '../calendar/types'
 import { DAY_ENDS_AT, DAY_STARTS_AT } from '../calendar/grid'
 import { addDays, addWeeks, shortGermanDate } from '../calendar/dates'
 import { isSalonDate } from '../calendar/salon-date'
-import { Refused, createEntry, fetchDay, removeEntry, updateEntry } from './api'
+import { Refused, Unauthenticated, createEntry, fetchDay, removeEntry, updateEntry } from './api'
 import { Board } from './Board'
 import { EntryModal } from './EntryModal'
+import { Login } from './Login'
 import { TopBar } from './TopBar'
 
 /**
@@ -55,6 +56,15 @@ export function App() {
    * screen making a claim it cannot support.
    */
   const [loadedAt, setLoadedAt] = useState<string | null>(null)
+  /**
+   * Whether the last request for a day came back with "no session".
+   *
+   * Not a copy of who is logged in - the browser cannot read the httpOnly cookie and must not
+   * try to keep score. This is one fact about one answer, and asking for a day again is what
+   * changes it. So a session that runs out, or a password change that ends everybody's,
+   * surfaces as the login screen at the next load rather than at the next refresh.
+   */
+  const [needsLogin, setNeedsLogin] = useState(false)
 
   /**
    * The entry being edited, or a proposed slot for a new one. Null when nothing is open.
@@ -90,6 +100,7 @@ export function App() {
     fetchDay(target.date)
       .then((loaded) => {
         if (!current) return
+        setNeedsLogin(false)
         setDay(loaded)
         setLoadedAt(CLOCK.format(new Date()))
         setLoading(false)
@@ -111,6 +122,19 @@ export function App() {
       .catch((error: unknown) => {
         if (!current) return
         setLoading(false)
+
+        // Not a failed load, and it must not be shown as one: "Laden fehlgeschlagen" over a
+        // board that is simply locked sends somebody to look at the server.
+        if (error instanceof Unauthenticated) {
+          setNeedsLogin(true)
+          // The form goes with it. The login screen replaces the whole tree, so a form left
+          // open here comes back after the login with its typing gone and its captured date
+          // still pointing at the day that was on screen before - which then saves onto a day
+          // nobody is looking at. Found by a review pass, by pressing Back with a form open.
+          setEditor(null)
+          return
+        }
+
         setFailure({
           date: target.date ?? 'Heute',
           message: error instanceof Error ? error.message : String(error),
@@ -266,6 +290,22 @@ export function App() {
     },
     [reload, saved],
   )
+
+  // Before the board, and before anything that reads `day`: a session can end while a day is
+  // on screen, and what is on screen then is a day the server would no longer answer for.
+  if (needsLogin) {
+    // Dropped here rather than when the day arrives, so a successful login is answered by the
+    // board loading instead of by the same empty form appearing again, which reads as a
+    // refusal. If the load turns out to be unauthenticated after all, this comes straight back.
+    return (
+      <Login
+        onSignedIn={() => {
+          setNeedsLogin(false)
+          reload()
+        }}
+      />
+    )
+  }
 
   if (day === null) {
     return (

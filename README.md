@@ -33,15 +33,17 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Live updates, by polling the day on screen | not started |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
-| Authentication, and a settings screen for staff, hours and credentials | not started - designed in ADR-0017 and ADR-0018, and blocking before real data |
+| Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
+| A settings screen for staff, hours and credentials, behind the PIN | not started - designed in ADR-0018 |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
 
-**Nothing here is ready for a real customer name.** There is no authentication yet, so the
-server binds to loopback and says so at startup. See
-[ADR-0004](docs/adr/ADR-0004-one-shared-salon-password.md), which is marked to be revisited
-before any authentication is written.
+**Still not ready for a real customer name, and now for a different reason.** The board is
+behind a password as of 2026-08-13, which was one of the two blockers. The other stands: there
+are no backups, and `docs/PRODUCT_BRIEF.md` makes one tested restore the condition for putting
+real data in. The server still binds to loopback and there is still no TLS, so stage one runs
+on fake names only.
 
 ## Requirements
 
@@ -56,10 +58,25 @@ npm ci
 cp .env.example .env
 ```
 
-Open `.env` and set `POSTGRES_PASSWORD` to anything you like, then put the same value into
-`DATABASE_URL` and `TEST_DATABASE_URL`. There is no default: a committed placeholder is the
-thing people forget to change, and `rules/secrets.md` forbids one anyway. `.env` is
+Open `.env` and fill in every empty value. There are no defaults: a committed placeholder is
+the thing people forget to change, and `rules/secrets.md` forbids one anyway. `.env` is
 gitignored.
+
+- `POSTGRES_PASSWORD`, then the same value inside `DATABASE_URL` and `TEST_DATABASE_URL`.
+- `SESSION_SECRET`, at least 32 characters and never typed by a person -
+  `openssl rand -base64 24` is the whole job.
+- `MASTER_PASSWORD`, the way back in when the salon password and the PIN are both lost.
+- `SALON_PASSWORD` and `SALON_PIN`, which seed the database the first time the server starts
+  and are **ignored afterwards**. Changing them later changes nothing; the master-password
+  screen does. See [ADR-0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md).
+
+The server refuses to start if any of them is missing, and names the one it wants.
+
+One optional name, and the day it matters: `COOKIE_SECURE`. The session cookie follows `HOST`
+by default - loopback means not `Secure`, anything else means `Secure`. **Set it to `true` the
+day a proxy terminates TLS in front of this**, because that deployment leaves `HOST` on
+loopback and the guess would send the session cookie in clear text. The startup log says which
+way it went, every time.
 
 ```bash
 npm run db:up      # Postgres in a container, bound to 127.0.0.1 only
@@ -71,6 +88,16 @@ npm start          # migrates on startup, then serves the API
 curl 'http://127.0.0.1:3000/api/day?date=2026-08-13'
 ```
 
+That answers `{"error":"Bitte anmelden."}` with status 401, which is the point of ADR-0004: an
+unauthenticated request gets no day at all, not a filtered one. To see a day from the command
+line, trade the password for the session cookie first:
+
+```bash
+curl -c cookies.txt -X POST 'http://127.0.0.1:3000/api/login' \
+  -H 'content-type: application/json' -d '{"password":"THE_ONE_YOU_PUT_IN_ENV"}'
+curl -b cookies.txt 'http://127.0.0.1:3000/api/day?date=2026-08-13'
+```
+
 On a fresh database that answers `{"date":"2026-08-13","today":"...","employees":[],"entries":[]}`.
 An empty day is the correct answer, not a broken one: there is no seed data, and staff are the
 one thing the application still cannot create. The board needs at least one employee row before
@@ -78,8 +105,9 @@ it can show anything, and today that is an `INSERT` by hand; appointments themse
 in the form as soon as a column exists. The database tests exercise entries and colours without
 any of that.
 
-The board itself is served from the same address, so `http://127.0.0.1:3000` shows it. On a
-fresh database it will say `Für diesen Tag ist niemand eingeteilt.` until an employee exists.
+The board itself is served from the same address, so `http://127.0.0.1:3000` shows it: the
+login screen first, then, on a fresh database, `Für diesen Tag ist niemand eingeteilt.` until an
+employee exists.
 While working on the front end, `npm run dev` gives Vite on
 [127.0.0.1:4173](http://127.0.0.1:4173) with hot reload, proxying `/api` to the server above.
 
@@ -136,7 +164,7 @@ re-decide.
 | [0014](docs/adr/ADR-0014-a-block-may-say-why.md) | A block may say why, in its own field, drawn on the box |
 | [0015](docs/adr/ADR-0015-core-hours-shade-the-board-and-refuse-nothing.md) | Core hours shade the board and refuse nothing |
 | [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
-| [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - **not yet built** |
+| [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - built, except the PIN check, which has nothing to guard yet |
 | [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - **not yet built** |
 
 Two of them are worth knowing before reading any code, because they explain why it looks

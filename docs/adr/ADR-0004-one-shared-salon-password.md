@@ -1,11 +1,11 @@
 # ADR-0004: One shared salon password, and what that costs
 
-- Status: accepted for the web board. **The revisit below happened on 2026-08-13**, and
-  [ADR-0017](ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) supersedes the
-  environment-variable password: it becomes a hash in the database that the salon can change, with
-  a PIN in front of the settings screen and a master password in the environment. One shared
-  password for the salon, the session cookie, and the warning below about personal phones all
-  stand, and none of it is built yet.
+- Status: accepted for the web board, and **built on 2026-08-13**. The revisit below happened
+  first, and [ADR-0017](ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md)
+  supersedes the environment-variable password: it is a hash in the database that the salon can
+  change, with a PIN reserved for the settings screen and a master password in the environment.
+  One shared password for the salon, the session cookie, and the warning below about personal
+  phones all stand.
 - Date: 2026-08-12
 
 ## Revisit before building
@@ -64,13 +64,18 @@ in a tracked file, a log line, or a client bundle.
 - **A `Host` header allowlist now covers both doors with one check.** Since the built board
   is served from the same origin as the API, one guard on the way in protects the JSON and
   the HTML together. That was not true before the front end existed.
-- Noted here by the security review of the first code so it is not rediscovered. Until authentication exists, the
-  server is protected only by binding to loopback, and loopback does not stop DNS
-  rebinding: a page the salon's own browser visits can point a hostname at `127.0.0.1` and
-  read the API same-origin. No CORS header is set, which is what stops a plain cross-origin
-  `fetch`, so rebinding is the remaining path. The allowlist is the cheap half of the fix
-  and authentication is the real one. Both are due before the first real customer name is
-  entered.
+- Noted here by the security review of the first code so it is not rediscovered. Until
+  authentication existed, the server was protected only by binding to loopback, and loopback
+  does not stop DNS rebinding: a page the salon's own browser visits can point a hostname at
+  `127.0.0.1` and read the API same-origin. No CORS header is set, which is what stops a plain
+  cross-origin `fetch`, so rebinding was the remaining path. The allowlist was the cheap half
+  of the fix and authentication was the real one.
+  - **Authentication is built as of 2026-08-13, and it closes the read.** A rebound page is
+    same-origin with the server but carries the hostname the attacker chose, and the session
+    cookie is set with no `Domain`, so it is host-only for the address the salon actually
+    typed. The rebound request arrives without it and is answered with 401.
+  - **The `Host` allowlist was never written, and is no longer due before a real customer
+    name.** It would now defend against somebody who already has the salon password.
 
 ## Alternatives rejected
 

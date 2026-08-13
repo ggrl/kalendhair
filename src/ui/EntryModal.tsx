@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Employee, Entry } from '../calendar/types'
 import { whyNotBookable } from '../calendar/grid'
-import { Refused, createEntry, fetchSuggestions, removeEntry, updateEntry } from './api'
+import { Refused, Unauthenticated, createEntry, fetchSuggestions, removeEntry, updateEntry } from './api'
 import type { EntryDraft } from './api'
 
 interface Props {
@@ -143,6 +143,14 @@ export function EntryModal({ date, employees, editing, draft, onClose, onSaved, 
   }
 
   function handle(error: unknown): void {
+    if (error instanceof Unauthenticated) {
+      // Same answer as a moved-on day, for the same reason: nothing in this form can be
+      // trusted against a server that has stopped answering for it. Closing and reloading is
+      // what puts the login screen up, because the reload asks for the day and is refused too.
+      onOutOfDate('Die Sitzung ist abgelaufen. Bitte erneut anmelden.')
+      return
+    }
+
     if (error instanceof Refused && (error.code === 'stale' || error.code === 'gone')) {
       // The day underneath has moved on, so nothing in this form can be trusted against it.
       // ADR-0003's own answer, chosen deliberately over keeping the typing: reload and look.
