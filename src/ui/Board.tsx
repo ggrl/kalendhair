@@ -79,10 +79,13 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
 
   if (day.employees.length === 0) {
     // A day can legitimately have no columns: nobody active. Since ADR-0012, `readDay` sends an
-    // entry only when its employee is active, so entries cannot outnumber the columns - but the
-    // report is rendered here too rather than relying on that, because a silent drop is the one
-    // outcome worth engineering against, and the server is now the only thing standing between
-    // an orphaned entry and nothing at all.
+    // entry only when its employee is active - but it does that in two separate queries with no
+    // transaction around them, so a deactivation committed between the two returns entries beside
+    // an employee list that no longer holds their column. A review pass demonstrated it with an
+    // interleaved UPDATE, which is why this says "does not" and not "cannot".
+    //
+    // So the report below stays, and is now the only thing standing between an orphaned entry and
+    // a silent drop - the one outcome worth engineering against.
     return (
       <div className="board">
         <Undrawable entries={undrawn} />

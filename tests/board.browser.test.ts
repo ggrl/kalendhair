@@ -438,3 +438,41 @@ test('a failed load says so rather than showing an empty day', async ({ page }) 
 
   await expect(page.getByRole('alert')).toContainText('Laden fehlgeschlagen')
 })
+
+test('an entry whose column is missing is reported, not dropped', async ({ page }) => {
+  // The last line of defence, and until now the only part of the board with no test at all.
+  //
+  // ADR-0012 makes the server the thing that keeps entries and columns in step, and it does that
+  // in two queries with no transaction: a deactivation committed between them returns an entry
+  // whose employee is no longer in the list. That is rare and it is not impossible, and the one
+  // outcome that must never happen is the appointment quietly not being drawn.
+  await page.route('**/api/day*', async (route) => {
+    await route.fulfill({
+      json: {
+        date: '2026-08-13',
+        today: '2026-08-13',
+        employees: [{ id: MARCO, name: 'Marco' }],
+        entries: [
+          {
+            id: 'orphan',
+            version: 1,
+            employeeId: '99999999-9999-9999-9999-999999999999',
+            kind: 'appointment',
+            startsAt: '09:00',
+            endsAt: '10:00',
+            customer: 'Ida Bruns',
+            treatment: 'Balayage',
+            notes: null,
+            colour: '#f4b8b8',
+          },
+        ],
+      },
+    })
+  })
+  await page.goto('/?date=2026-08-13')
+
+  const report = page.getByRole('alert')
+  await expect(report).toContainText('1 Termin kann nicht angezeigt werden')
+  await expect(report).toContainText('Ida Bruns')
+  await expect(report).toContainText('keine Spalte')
+})

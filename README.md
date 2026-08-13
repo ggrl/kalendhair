@@ -30,7 +30,8 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
 | Navigation: date picker, month steps, arrow keys | not started |
 | Live updates, by polling the day on screen | not started |
-| Creating, moving and editing appointments | not started |
+| Creating and editing appointments in a form, with autocomplete | done |
+| Moving and resizing by dragging | on a branch, not merged |
 | Authentication | not started, and blocking before real data |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
@@ -70,9 +71,11 @@ curl 'http://127.0.0.1:3000/api/day?date=2026-08-13'
 ```
 
 On a fresh database that answers `{"date":"2026-08-13","today":"...","employees":[],"entries":[]}`.
-An empty day is the correct answer, not a broken one: there is no seed data and no way to
-add any yet, because the write path does not exist. The database tests are where entries
-and colours are exercised.
+An empty day is the correct answer, not a broken one: there is no seed data, and staff are the
+one thing the application still cannot create. The board needs at least one employee row before
+it can show anything, and today that is an `INSERT` by hand; appointments themselves can be made
+in the form as soon as a column exists. The database tests exercise entries and colours without
+any of that.
 
 The board itself is served from the same address, so `http://127.0.0.1:3000` shows it. On a
 fresh database it will say `Für diesen Tag ist niemand eingeteilt.` until an employee exists.

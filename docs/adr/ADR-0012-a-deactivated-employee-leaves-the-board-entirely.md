@@ -36,13 +36,24 @@ real people because somebody resigned. What this ADR hides is the stylist and th
 salon's history of who has been in.
 
 **The write path is unchanged.** Nothing checks `active` before a create, a change or a
-delete, and nothing is being added. A booking left behind by a deactivation stays editable
-by anything holding its id: the planned iOS app, a curl, a later admin screen. The board is
-the surface that hides it, not the database.
+delete, and nothing is being added. A row hidden this way is still writable by anything that
+holds its id, and the board is the surface that hides it rather than the database.
 
-Reactivating an employee brings the column and every one of their entries back, untouched.
-Deactivating is still reversible, because nothing was deleted - which is the half of
-ADR-0002 that stands unchanged.
+Be precise about what that is worth, because the first draft of this ADR was not. **Nothing in
+this system can come to hold that id.** `readDay` no longer sends it, `/api/suggestions` returns
+bare strings, there is no endpoint that lists appointments, and ADR-0006 binds the planned iOS
+app to this same API. So "a curl can still fix it" was wrong: the only way to learn the id is a
+query against the live database, which is the exact cost this ADR uses below to reject refusing
+those writes. The accepted option pays it too.
+
+The recovery that works entirely through the application is: reactivate the employee, cancel the
+booking in the form where it is now visible again, deactivate them once more. Today those two
+flips are also SQL, because no employee write path exists yet - the day one does, this becomes
+an ordinary sequence with no database access in it.
+
+Reactivating brings the column and every one of their entries back, untouched. Deactivating is
+still reversible, because nothing was deleted - which is the half of ADR-0002 that stands
+unchanged.
 
 ## Consequences
 
@@ -57,6 +68,12 @@ ADR-0002 that stands unchanged.
 - **The column count is now a plain function of the staff list.** Every query that builds a
   day gets simpler, and the count no longer depends on what is booked. This is the half of
   the change with no cost attached.
+- **It makes an older promise true.** ADR-0002 said an inactive employee "can no longer be
+  assigned new ones", and under the `OR EXISTS` clause that was not enforced anywhere: their
+  column was drawn and clickable on any day they held an entry, and the form's *Person* select
+  listed them, so a new booking could be made onto somebody who had left. Both lists come from
+  `day.employees`, which is now active-only, so the sentence ADR-0002 wrote in 2026 finally
+  describes the code. Found by a review pass, not by me.
 - **Colours shift.** ADR-0009 assigns one colour per customer per day, from the whole day.
   The whole day is now the visible day, so a hidden entry no longer consumes a colour a
   visible customer could have had. Every client still agrees, because the server still
