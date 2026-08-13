@@ -25,37 +25,40 @@ interface EntryRow {
  * strings from end to end, so no timezone can touch them.
  */
 export async function readDay(pool: Pool, date: string, salonTimeZone: string, now: Date): Promise<Day> {
-  // ADR-0002: a deactivated employee keeps their column on any day they have entries, so
-  // past days still read correctly. Active staff always get one.
+  // ADR-0012: a column per active employee, and nothing else. A deactivated employee is off
+  // the board on every day, including the days they worked.
   const employees = await pool.query<Employee>(
     `SELECT e.id, e.name
        FROM employee e
       WHERE e.active
-         OR EXISTS (
-              SELECT 1 FROM appointment a
-               WHERE a.employee_id = e.id AND a.starts_at::date = $1::date
-            )
       ORDER BY e.position, e.name`,
-    [date],
   )
 
+  // Joined to the same condition, not filtered afterwards, because an entry whose column is not
+  // being drawn must not leave the server at all. ADR-0012 accepts that this hides an
+  // appointment that still exists; what it will not have is an appointment arriving at a client
+  // with nowhere to put it.
   const entries = await pool.query<EntryRow>(
-    `SELECT id,
-            version,
-            employee_id,
-            kind,
-            to_char(starts_at, 'HH24:MI') AS starts_at,
-            to_char(ends_at,   'HH24:MI') AS ends_at,
-            customer,
-            treatment,
-            notes
-       FROM appointment
-      WHERE starts_at::date = $1::date
-      ORDER BY starts_at, id`,
+    `SELECT a.id,
+            a.version,
+            a.employee_id,
+            a.kind,
+            to_char(a.starts_at, 'HH24:MI') AS starts_at,
+            to_char(a.ends_at,   'HH24:MI') AS ends_at,
+            a.customer,
+            a.treatment,
+            a.notes
+       FROM appointment a
+       JOIN employee e ON e.id = a.employee_id
+      WHERE a.starts_at::date = $1::date
+        AND e.active
+      ORDER BY a.starts_at, a.id`,
     [date],
   )
 
-  // ADR-0009: computed from the whole day, on the server, so every client agrees.
+  // ADR-0009: computed from the whole day, on the server, so every client agrees. "The whole day"
+  // is now the day the board shows: a deactivated employee's entries are not in it, so they no
+  // longer take a colour out of the palette that a visible customer could have had.
   const colours = assignColours(
     entries.rows.map((row) => ({
       id: row.id,

@@ -78,10 +78,11 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
   }
 
   if (day.employees.length === 0) {
-    // ADR-0002 means a day can legitimately have no columns: everybody inactive and nothing
-    // booked. `readDay` returns a column for anyone holding an entry that day, so entries imply
-    // employees - but the report is rendered here too rather than relying on that, because a
-    // silent drop is the one outcome worth engineering against.
+    // A day can legitimately have no columns: nobody active. Since ADR-0012, `readDay` sends an
+    // entry only when its employee is active, so entries cannot outnumber the columns - but the
+    // report is rendered here too rather than relying on that, because a silent drop is the one
+    // outcome worth engineering against, and the server is now the only thing standing between
+    // an orphaned entry and nothing at all.
     return (
       <div className="board">
         <Undrawable entries={undrawn} />

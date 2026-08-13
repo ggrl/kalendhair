@@ -74,7 +74,7 @@ describe('reading one day', () => {
   })
 })
 
-describe('ADR-0002: a deactivated employee keeps their history', () => {
+describe('ADR-0012: a deactivated employee leaves the board entirely', () => {
   it('drops an inactive employee with nothing booked', async () => {
     await addEmployee(pool, 'Left', 4, false)
 
@@ -83,14 +83,41 @@ describe('ADR-0002: a deactivated employee keeps their history', () => {
     expect(day.employees.map((employee) => employee.name)).not.toContain('Left')
   })
 
-  it('keeps the column on a day the inactive employee has an appointment', async () => {
+  it('drops the column on a day the inactive employee has an appointment, and the appointment with it', async () => {
+    // This asserted the opposite until 2026-08-13, because ADR-0002 ruled the opposite. The
+    // behaviour was reversed deliberately, so the test was rewritten rather than deleted.
     const left = await addEmployee(pool, 'Left', 4, false)
     await addAppointment(pool, left, DAY, '09:00', '10:00', 'anna')
 
     const day = await readDay(pool, DAY, TZ, NOW)
 
+    expect(day.employees.map((employee) => employee.name)).not.toContain('Left')
+    // The row is still there, and no client is told about it: ADR-0012's accepted cost.
+    expect(day.entries).toHaveLength(0)
+  })
+
+  it('leaves an active colleague\'s appointments on the same day alone', async () => {
+    // The join must narrow the day to the hidden employee, not empty it.
+    const left = await addEmployee(pool, 'Left', 4, false)
+    await addAppointment(pool, left, DAY, '09:00', '10:00', 'anna')
+    await addAppointment(pool, marco, DAY, '11:00', '12:00', 'bea')
+
+    const day = await readDay(pool, DAY, TZ, NOW)
+
+    expect(day.entries.map((entry) => entry.customer)).toEqual(['bea'])
+    expect(day.entries.map((entry) => entry.employeeId)).toEqual([marco])
+  })
+
+  it('brings the column and the appointment back when they are reactivated', async () => {
+    // Deactivating hides; it still destroys nothing, which is the half of ADR-0002 that stands.
+    const left = await addEmployee(pool, 'Left', 4, false)
+    await addAppointment(pool, left, DAY, '09:00', '10:00', 'anna')
+
+    await pool.query('UPDATE employee SET active = true WHERE id = $1', [left])
+    const day = await readDay(pool, DAY, TZ, NOW)
+
     expect(day.employees.map((employee) => employee.name)).toContain('Left')
-    expect(day.entries.map((entry) => entry.employeeId)).toContain(left)
+    expect(day.entries.map((entry) => entry.customer)).toEqual(['anna'])
   })
 })
 
