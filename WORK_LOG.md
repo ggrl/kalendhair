@@ -2,6 +2,83 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-14, ninth session - the first pass over the interface
+
+Small, and a different way of working: **the owner names a change, I price it, they decide.** Two
+went in. **More are coming next session** - the owner has further GUI and user-experience tunings
+in mind and stopped here deliberately, not because the list was finished. Deployment waits behind
+that, and the backup gate still waits behind deployment.
+
+### Where things stand
+
+- **`main` is at `14a6eb1`** and is the only branch anywhere. PR #28 merged both changes together;
+  batching GUI tweaks onto one branch was the owner's call and is cheaper than a branch and a
+  review pass each. Working tree clean, no open pull requests.
+- **Twenty-one ADRs, unchanged.** Neither change needed a new one: ADR-0020 still rules that the
+  picker is the browser's own, and only how it is opened changed.
+
+### What was built, and where
+
+- **The date picker is a glyph beside the date.** `src/ui/TopBar.tsx`: a small calendar button next
+  to the heading, and the `<input type="date">` still there - transparent, one pixel, positioned
+  under it. The field used to sit two inches from the heading and say the same date again.
+- **The action row is `(cog) [Heute] (+)`.** Round icon buttons either side of the one word, in
+  that order, with `aria-label`s because an icon has no text to be named by. The add button is now
+  `Neuer Termin` rather than `+ Termin`, since the label is what a screen reader reads aloud.
+
+### What the owner decided
+
+- **Three dots were asked for and a cog was chosen instead**, once the reason was named: three dots
+  promise a menu that opens under the finger, and this opens a whole screen.
+- **`Heute` keeps its word** rather than becoming a third icon.
+- **The date field's duplication was the thing to remove** - and the owner was told first that this
+  does not fix `13/08/2026`, because the slashes live inside the native picker too.
+
+### What was verified, and how
+
+- On merged `main`: `npm run verify` green (112 unit), `npm run test:e2e` green (126),
+  `npm run test:db` green (144). CI green on PR #28.
+- **Six mutations, all caught**: the glyph not opening the picker, the input visible again, the
+  input back in the tab order, the wrong button order, a missing `aria-label`, and a "circle" whose
+  width and height differ.
+- **Measured on the real server at both sizes.** The top bar is unchanged at 104px on desktop and
+  **12px shorter on a phone**, because two words left the row and the date wraps less.
+
+### What was NOT verified
+
+- **Where the native calendar popup actually appears.** It is browser chrome, so Playwright cannot
+  screenshot it. The input is positioned under the button so it anchors correctly by construction,
+  and the owner has the running server.
+- **Nobody but the owner has judged how any of it looks.** That is the right way round - the
+  measurements are mine, the taste is theirs - but it means "better" here is one person's word.
+- **Typing a date directly is gone.** The field allowed it; an icon does not. The native picker is
+  keyboard-operable, so this is slower rather than closed, and it is the one real accessibility
+  cost of the change.
+
+### Unfinished, and what comes next
+
+1. **More GUI and user-experience tuning**, next session. The owner has further changes in mind and
+   the same working agreement applies: they describe, I price, they decide. Worth knowing what
+   makes a change cheap here - colours, spacing and wording are minutes; anything touching the
+   board's geometry or the top bar's layout is not, because tests assert exact grid rows and the
+   top bar arrangement is three review findings deep.
+2. **Then deployment** - the container and the VPS, blocked by the brief's backup gate: a backup
+   that leaves the machine on a schedule and one restore actually performed.
+3. Month steps and arrow keys, and the items named and deliberately not fixed in ADR-0018,
+   ADR-0019 and ADR-0021.
+
+### What surprised me
+
+- **My cog was a sun.** Spokes radiating from the centre with no body ring is exactly what a
+  sunburst looks like at 18px, and I only saw it by screenshotting the thing at four times scale.
+  Code that says "circle plus eight radial lines" reads as a cog while you are writing it.
+- **`showPicker()` has two constraints that would each have been a silent failure.** It throws
+  without a user gesture, and it throws on a `display: none` element - so the obvious way to hide
+  the field is the one way that breaks it. Both were measured before anything was built.
+- **`toBeHidden()` passes a 1px transparent element.** The assertion I reached for first would have
+  certified that the duplicate date was gone while it was still being rendered. Computed opacity
+  and width are what a person would see; visibility as Playwright defines it is not.
+
 ## 2026-08-14, eighth session - polling, a date picker, and the board on a phone
 
 Three features and three ADRs, and **seven review passes between them - five returned findings and
