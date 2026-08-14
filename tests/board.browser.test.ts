@@ -740,6 +740,41 @@ test('every control is on the top row and the date is underneath', async ({ page
   expect(markupOrder).toEqual(['topbar__step', 'topbar__actions', 'topbar__step', 'topbar__date'])
 })
 
+test('the hour scale takes what the times need and gives the rest to the columns', async ({ page }) => {
+  // Narrowed from 4rem to 2.5rem once the day-step buttons lost their boxes. Asserted as slack
+  // rather than as a number of pixels: the point is that "06:00" fits with room to spare, which is
+  // what a system font a fraction wider than this one would eat first.
+  await stubApi(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const scale = await page.evaluate(() => {
+    const label = document.querySelector('.board__hour') as HTMLElement
+    const range = document.createRange()
+    range.selectNodeContents(label)
+    const style = window.getComputedStyle(label)
+    const heads = window.getComputedStyle(document.querySelector('.board__heads')!).gridTemplateColumns
+    const grid = window.getComputedStyle(document.querySelector('.board__grid')!).gridTemplateColumns
+    return {
+      cell: Math.round(label.getBoundingClientRect().width),
+      text: range.getBoundingClientRect().width,
+      room: label.clientWidth - parseFloat(style.paddingRight),
+      // One line, not two: too narrow and the label wraps instead of clipping.
+      lines: Math.round(label.getBoundingClientRect().height / parseFloat(style.fontSize)),
+      firstColumnOfHeads: heads.split(' ')[0],
+      firstColumnOfGrid: grid.split(' ')[0],
+    }
+  })
+
+  expect(scale.cell).toBe(40)
+  expect(scale.text).toBeLessThan(scale.room)
+  expect(scale.lines).toBe(1)
+  // The pair that must never disagree: sizing the two grids apart is what once put every heading
+  // over the wrong stylist, and this is the column they share.
+  expect(scale.firstColumnOfHeads).toBe(scale.firstColumnOfGrid)
+})
+
 test('a narrow screen keeps the week steps on the row and drops their words, not their names', async ({ page }) => {
   // Five controls do not fit one row at 390px. The words go and the chevrons stay - and the thing
   // being defended is not the look: the row overflowing made the whole PAGE scroll sideways, which

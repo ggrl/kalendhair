@@ -439,7 +439,11 @@ body {
   left: 0;
   z-index: 8;
   background: var(--paper);
-  padding-right: 0.4rem;
+  /* 0.4rem until the scale went from 4rem to 2.5rem. At the new width "06:00" measured 33.89px
+     against a 33.6px content box - not visibly clipped, because the overflow is visible and the
+     text is right-aligned, but with nothing left for a system font a fraction wider than this
+     one's. The gap to the grid line is 4px now, and the number has room. */
+  padding-right: 0.25rem;
   font-size: 0.75rem;
   color: var(--muted);
   text-align: right;
