@@ -299,18 +299,21 @@ test('a long name on a short box never pushes the duration off it', async ({ pag
   expect(cut).toBe(false)
 })
 
-test('a note is a dot on the board and still a word to a screen reader', async ({ page }) => {
+test('a note is a folded corner on the board and still a word to a screen reader', async ({ page }) => {
   // The word `Notiz` was the widest thing in the corner and it is what the duration replaced. It
-  // survives out of sight, because a bare dot is announced as "bullet" or as nothing, and it is
-  // the only signal a blind user gets that a note exists - the note's text is deliberately not on
-  // the board at all, after a tooltip once showed an allergy to whoever stood at the desk.
+  // survives out of sight, because a shape says nothing to a screen reader and it is the only
+  // signal a blind user gets that a note exists - the note's text is deliberately not on the board
+  // at all, after a tooltip once showed an allergy to whoever stood at the desk.
+  //
+  // The dot that replaced the word lasted one session: 10px of punctuation on a coloured box read
+  // as a speck of dirt rather than as a clue.
   await page.goto('/?date=2026-08-13')
 
   const withNote = page.locator('.entry', { hasText: 'Anna Schmidt' }).first()
   const withoutNote = page.locator('.entry', { hasText: 'Bea Wolff' }).first()
 
-  await expect(withNote.locator('.entry__meta')).toContainText('•')
-  await expect(withoutNote.locator('.entry__meta')).not.toContainText('•')
+  await expect(withNote.locator('.entry__fold')).toHaveCount(1)
+  await expect(withoutNote.locator('.entry__fold')).toHaveCount(0)
 
   // Gone from sight - measured, not asserted with `toBeHidden`, which passes a clipped element
   // this size: it has a bounding box, so Playwright calls it visible. One pixel, clipped, is what
@@ -329,6 +332,31 @@ test('a note is a dot on the board and still a word to a screen reader', async (
   expect(spoken).toContain('Notiz')
   const quiet = await withoutNote.evaluate((box) => box.textContent ?? '')
   expect(quiet).not.toContain('Notiz')
+
+  // The shape adds nothing to that name and must not: "Dreieck" is not a thing anybody needs read
+  // out, and the word above is already carrying the meaning.
+  await expect(withNote.locator('.entry__fold')).toHaveAttribute('aria-hidden', 'true')
+})
+
+test('the folded corner is 15px in the box own bottom-right corner', async ({ page }) => {
+  // The owner's size, chosen by looking at it: big enough to read on a 15-minute box, and it clips
+  // the tail of that box's `15m` - a trade they made deliberately and with the screenshot in front
+  // of them.
+  //
+  // Anchored to its own box, which is the mistake the old marker made: absolutely positioned
+  // against `.board__grid` instead, a marker for the first column landed on the last one.
+  await page.goto('/?date=2026-08-13')
+
+  const withNote = page.locator('.entry', { hasText: 'Anna Schmidt' }).first()
+  const outline = (await withNote.boundingBox())!
+  const fold = (await withNote.locator('.entry__fold').boundingBox())!
+
+  expect(Math.round(fold.width)).toBe(15)
+  expect(Math.round(fold.height)).toBe(15)
+
+  // Hard into the bottom-right corner, within a pixel of both edges.
+  expect(Math.abs(fold.x + fold.width - (outline.x + outline.width))).toBeLessThanOrEqual(1)
+  expect(Math.abs(fold.y + fold.height - (outline.y + outline.height))).toBeLessThanOrEqual(1)
 })
 
 test('the corner sits on its own box, not somewhere else on the board', async ({ page }) => {

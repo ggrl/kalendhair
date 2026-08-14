@@ -144,12 +144,7 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
   const meta = (
     <span className={compact ? 'entry__meta entry__meta--line' : 'entry__meta'}>
       <span className="entry__duration">{duration}</span>
-      {entry.notes !== null && (
-        <>
-          <span aria-hidden="true"> •</span>
-          <span className="visually-hidden">Notiz</span>
-        </>
-      )}
+      {entry.notes !== null && <span className="visually-hidden">Notiz</span>}
     </span>
   )
 
@@ -188,6 +183,14 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
       )}
       {!oneLine && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
       {!compact && meta}
+      {/* The folded corner: this box has something written about it. A shape rather than a
+          character, because a character at this size is what the dot was and the dot was too
+          quiet to be a clue.
+
+          A real element and not a `::after`, for the reason the grips give above: a test can find
+          this one. `aria-hidden` because the word `Notiz` in the corner is what a screen reader
+          gets, and a shape has nothing to say to one. */}
+      {entry.notes !== null && <span className="entry__fold" aria-hidden="true" />}
       <Grips />
     </button>
   )
