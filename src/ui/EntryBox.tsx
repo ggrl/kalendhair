@@ -1,5 +1,5 @@
 import type { Entry } from '../calendar/types'
-import { rangeFromSlots, slotFromWallClock } from '../calendar/grid'
+import { SLOT_MINUTES, formatDuration, rangeFromSlots, slotFromWallClock } from '../calendar/grid'
 
 interface Props {
   entry: Entry
@@ -47,6 +47,9 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
   const slots = end - start
   const shown = drag === undefined ? entry : rangeFromSlots(drag.startSlot, drag.endSlot)
   const timeRange = `${shown.startsAt}–${shown.endsAt}`
+  // From the slots being drawn, not from the entry's own times: mid-drag the box shows the
+  // appointment somebody is about to have, and its length is part of that.
+  const duration = formatDuration(slots * SLOT_MINUTES)
 
   const placement = { gridColumn: column, gridRow: `${start + 1} / span ${slots}` }
   // Both classes are pure feedback: the drag is decided by where the pointer is, never by what
@@ -86,12 +89,17 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         {tight ? (
           <span className="entry__line">
             <span className="entry__time">{shown.startsAt}</span>
+            {/* Beside the start time, because a one-line box has no corner to spare and no end
+                time to subtract from - which is exactly the box where the length is hardest to
+                read off the grid. */}
+            <span className="entry__duration">{duration}</span>
             <span className="entry__label">{label}</span>
           </span>
         ) : (
           <>
             <span className="entry__time">{timeRange}</span>
             <span className="entry__label">{label}</span>
+            <span className="entry__meta"><span className="entry__duration">{duration}</span></span>
           </>
         )}
         <Grips />
@@ -135,6 +143,9 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
       {compact ? (
         <span className="entry__line">
           <span className="entry__time">{shown.startsAt}</span>
+          {/* Beside the start time on the short boxes: there is no corner to spare, and no end
+              time on the line to subtract from either. */}
+          <span className="entry__duration">{duration}</span>
           <span className="entry__customer">{entry.customer}</span>
         </span>
       ) : (
@@ -144,9 +155,26 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         </>
       )}
       {!oneLine && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
-      {/* Still a signal that there is something written about this customer, even though the
-          text now lives in the form rather than popping out of the box. */}
-      {entry.notes !== null && <span className="entry__notes-marker">Notiz</span>}
+      {/* The top-right corner: how long this runs, and a dot if something is written about it.
+          The dot replaced the word `Notiz`, which was the widest thing in the corner and the
+          reason the duration had nowhere to go.
+
+          The word survives for a screen reader, out of sight. A bare `•` is announced as "bullet"
+          or as nothing at all depending on the reader, and losing it would take away the only
+          signal a blind user has that a note exists - the note's text itself is deliberately not
+          on the board, because a tooltip over the box once revealed an allergy to whoever was
+          standing at the desk. */}
+      {(!compact || entry.notes !== null) && (
+        <span className="entry__meta">
+          {!compact && <span className="entry__duration">{duration}</span>}
+          {entry.notes !== null && (
+            <>
+              <span aria-hidden="true"> •</span>
+              <span className="visually-hidden">Notiz</span>
+            </>
+          )}
+        </span>
+      )}
       <Grips />
     </button>
   )

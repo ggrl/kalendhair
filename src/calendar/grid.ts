@@ -169,6 +169,25 @@ export function whyNotBookable(startsAt: string, endsAt: string): string | null 
   return null
 }
 
+/**
+ * How long an entry lasts, for the box to say so: `15m`, `45m`, `1h`, `1h15`.
+ *
+ * The stylists asked for it. Counting quarter-hour lines or subtracting one time from another is
+ * work the box can do for them, and it is the reading they do most.
+ *
+ * Minutes below an hour, bare hours with no `0m` after them, and no space inside the value, so the
+ * whole thing stays two or four characters in a corner that has 40px. The remainder is padded
+ * because a 5-minute one would read as `1h5` - the quarter-hour grid cannot produce that today, and
+ * this does not depend on it staying that way.
+ */
+export function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`
+
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `${hours}h` : `${hours}h${String(rest).padStart(2, '0')}`
+}
+
 /** The hour labels down the side: 06:00 to 20:00 inclusive, one per hour. */
 export function hourLabels(): string[] {
   const first = minutesSinceMidnight(DAY_STARTS_AT) / 60

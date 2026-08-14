@@ -220,14 +220,65 @@ test('the shortest bookable box still shows who it is for', async ({ page }) => 
   await expect(short).toContainText('14:00')
 })
 
-test('the notes marker sits on its own box, not somewhere else on the board', async ({ page }) => {
+test('every box says how long it lasts', async ({ page }) => {
+  // The stylists asked for it: reading a length off the grid means counting quarter-hour lines or
+  // subtracting one time from another, and the box can do both.
+  await page.goto('/?date=2026-08-13')
+
+  const durationOf = async (text: string): Promise<string | null> =>
+    page.locator('.entry', { hasText: text }).first().locator('.entry__duration').textContent()
+
+  expect(await durationOf('Anna Schmidt')).toBe('1h')
+  expect(await durationOf('Bea Wolff')).toBe('45m')
+  expect(await durationOf('Eva Sommer')).toBe('1h30')
+  // A 15-minute box: one line tall, so the duration is on the line rather than in a corner.
+  expect(await durationOf('Felix Rau')).toBe('15m')
+  await expect(page.locator('.entry', { hasText: 'Felix Rau' }).locator('.entry__line .entry__duration')).toBeVisible()
+  // Blocks too, which was the owner's call against my recommendation.
+  expect(await page.locator('.entry--block').first().locator('.entry__duration').textContent()).toBe('1h')
+})
+
+test('a note is a dot on the board and still a word to a screen reader', async ({ page }) => {
+  // The word `Notiz` was the widest thing in the corner and it is what the duration replaced. It
+  // survives out of sight, because a bare dot is announced as "bullet" or as nothing, and it is
+  // the only signal a blind user gets that a note exists - the note's text is deliberately not on
+  // the board at all, after a tooltip once showed an allergy to whoever stood at the desk.
+  await page.goto('/?date=2026-08-13')
+
+  const withNote = page.locator('.entry', { hasText: 'Anna Schmidt' }).first()
+  const withoutNote = page.locator('.entry', { hasText: 'Bea Wolff' }).first()
+
+  await expect(withNote.locator('.entry__meta')).toContainText('•')
+  await expect(withoutNote.locator('.entry__meta')).not.toContainText('•')
+
+  // Gone from sight - measured, not asserted with `toBeHidden`, which passes a clipped element
+  // this size: it has a bounding box, so Playwright calls it visible. One pixel, clipped, is what
+  // a person does not see.
+  const word = withNote.locator('.visually-hidden')
+  await expect(word).toHaveText('Notiz')
+  const occupied = await word.boundingBox()
+  // Not null: `display: none` would hide it from the accessible name too, which is the one way of
+  // hiding this word that defeats its entire purpose.
+  expect(occupied).not.toBeNull()
+  expect(occupied!.width).toBeLessThanOrEqual(1)
+  expect(occupied!.height).toBeLessThanOrEqual(1)
+
+  // And still in the name the button announces.
+  const spoken = await withNote.evaluate((box) => box.textContent ?? '')
+  expect(spoken).toContain('Notiz')
+  const quiet = await withoutNote.evaluate((box) => box.textContent ?? '')
+  expect(quiet).not.toContain('Notiz')
+})
+
+test('the corner sits on its own box, not somewhere else on the board', async ({ page }) => {
   // It used to anchor to .board__grid, so a marker for the first column appeared over the
-  // last one. Asserted as containment rather than pixels.
+  // last one. Asserted as containment rather than pixels. The corner now carries the duration
+  // as well as the note dot, and the same anchoring has to hold for both.
   await page.goto('/?date=2026-08-13')
 
   const withNotes = page.getByRole('button', { name: /Anna Schmidt/ }).first()
   const box = await withNotes.boundingBox()
-  const marker = await withNotes.locator('.entry__notes-marker').boundingBox()
+  const marker = await withNotes.locator('.entry__meta').boundingBox()
 
   expect(box).not.toBeNull()
   expect(marker).not.toBeNull()

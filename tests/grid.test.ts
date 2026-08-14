@@ -9,6 +9,7 @@ import {
   TIME_TAKEN,
   whyNotBookable,
   whyNotFree,
+  formatDuration,
   minutesSinceMidnight,
   rangeFromSlots,
   slotAt,
@@ -191,5 +192,33 @@ describe('whether a drop lands on occupied time', () => {
 
   it('says nothing about an empty day', () => {
     expect(whyNotFree([], { employeeId: MARCO, startsAt: '10:00', endsAt: '11:00' })).toBeNull()
+  })
+})
+
+describe('how long an entry lasts, as the box says it', () => {
+  it('says minutes below an hour', () => {
+    expect(formatDuration(15)).toBe('15m')
+    expect(formatDuration(30)).toBe('30m')
+    expect(formatDuration(45)).toBe('45m')
+  })
+
+  it('says a bare hour with no zero minutes after it', () => {
+    // `1h00` in a 40px corner is two wasted characters saying nothing.
+    expect(formatDuration(60)).toBe('1h')
+    expect(formatDuration(120)).toBe('2h')
+    // The whole bookable day, which is what a whole-day block measures.
+    expect(formatDuration(840)).toBe('14h')
+  })
+
+  it('hangs the remaining minutes off the hour', () => {
+    expect(formatDuration(75)).toBe('1h15')
+    expect(formatDuration(90)).toBe('1h30')
+    expect(formatDuration(150)).toBe('2h30')
+  })
+
+  it('pads a remainder below ten, which the quarter-hour grid cannot produce today', () => {
+    // Not a case the board can reach - every entry is on a quarter hour - and that is exactly why
+    // it is pinned: `1h5` would be the reading if the grid ever changed under this.
+    expect(formatDuration(65)).toBe('1h05')
   })
 })
