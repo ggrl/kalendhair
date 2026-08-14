@@ -34,6 +34,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Live updates, by polling the day on screen every 30 seconds | done |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
+| A phone can read the board and add an appointment with `+ Termin` | done |
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
 | A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
 | The salon's core hours, editable from that screen instead of hardcoded | done |
@@ -142,7 +143,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Twenty decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Twenty-one decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -169,6 +170,7 @@ re-decide.
 | [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - all three built |
 | [0019](docs/adr/ADR-0019-the-board-polls-and-says-when-it-cannot.md) | The board polls every 30 seconds, holds the swap under a hand, and says when it is not current |
 | [0020](docs/adr/ADR-0020-the-date-picker-is-the-browsers-own.md) | The date picker is the browser's own, and one place decides whether a date is real |
+| [0021](docs/adr/ADR-0021-the-board-on-a-phone.md) | The board on a phone: a 150px column minimum, sideways scrolling, `+ Termin`, and no dragging by touch |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

@@ -133,10 +133,12 @@ export async function versionForPassword(pool: Pool, password: string): Promise<
 /**
  * Whether this is the PIN that guards the settings screen. ADR-0017.
  *
- * No lockout and no counter, deliberately: four digits is ten thousand guesses, the owner was
- * told what that means and accepted it, and everybody who can reach the prompt is already
- * looking at every customer name on the board. What it costs to guess is one scrypt derive per
- * try, which is the only brake there is and the only one this ADR allows.
+ * **There is a counter now, and it is not here.** ADR-0017 allowed none, on the grounds that
+ * reaching the prompt needs a valid session "so it is a colleague". ADR-0021 put the board on
+ * phones that leave the building, so the owner amended it: ten wrong tries per address per five
+ * minutes, applied by `requirePin` in `app.ts` and explicitly a speed bump rather than a lockout.
+ * This function still just compares, and the scrypt derive is still the per-try cost - but the
+ * sentence that used to be here, saying a derive is the only brake there is, is no longer true.
  */
 export async function pinMatches(pool: Pool, pin: string): Promise<boolean> {
   const result = await pool.query<{ pin_hash: string }>('SELECT pin_hash FROM salon_credential WHERE id = 1')

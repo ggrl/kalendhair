@@ -16,10 +16,27 @@ interface Props {
   onToday: () => void
   /** A date chosen outright rather than stepped to. ADR-0020. */
   onPick: (date: string) => void
+  /**
+   * Open an empty form for a new appointment on the day being shown. ADR-0021.
+   *
+   * Null when there is nobody to book, and while a day is loading - the two states where the
+   * button would open a form that cannot name a person, or would name the wrong day.
+   */
+  onAdd: (() => void) | null
   onSettings: () => void
 }
 
-export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onPick, onSettings }: Props) {
+export function TopBar({
+  date,
+  isToday,
+  loadedAt,
+  stale,
+  onStep,
+  onToday,
+  onPick,
+  onAdd,
+  onSettings,
+}: Props) {
   const { week } = isoWeek(date)
   const holiday = holidayName(date)
 
@@ -94,6 +111,18 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onPick
             polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
             back on its own within thirty seconds of the network doing the same. The owner chose
             removing it over keeping it as a way to skip that wait. */}
+        {/* ADR-0021. Put here for a phone, where there is no dragging - and it closes a gap that
+            has nothing to do with phones: ADR-0013 records that there is deliberately no keyboard
+            gesture for creating an appointment, so until now somebody who cannot use a mouse could
+            not make one at all. This is their first way in, on every screen.
+
+            Absent rather than disabled when nobody is on the board: the form's first field is the
+            person, and there is nothing to put in it. The board already says so in words. */}
+        {onAdd !== null && (
+          <button type="button" className="topbar__today" onClick={onAdd}>
+            + Termin
+          </button>
+        )}
         {/* Last, and styled like the others rather than louder. It is the thing somebody needs
             twice a year, and the PIN behind it is what makes reaching it by accident harmless. */}
         <button type="button" className="topbar__today" onClick={onSettings}>

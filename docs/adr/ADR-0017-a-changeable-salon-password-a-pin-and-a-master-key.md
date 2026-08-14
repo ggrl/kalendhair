@@ -1,6 +1,11 @@
 # ADR-0017: A changeable salon password, a PIN, and a master key
 
 - Status: accepted, and **built on 2026-08-13** - with one part deliberately left out, below
+- **Amended on 2026-08-14 by [ADR-0021](ADR-0021-the-board-on-a-phone.md):** the PIN now has a
+  forgiving rate limit. This ruling accepted unlimited guessing on the stated grounds that reaching
+  the prompt needs a valid session, "so it is a colleague". Putting the board on phones that leave
+  the building is what stopped that premise holding, and the owner chose ten wrong tries per five
+  minutes per address - explicitly a speed bump, not a lockout
 - Date: 2026-08-13
 - Supersedes: the "the password lives in an environment variable" half of
   [ADR-0004](ADR-0004-one-shared-salon-password.md)

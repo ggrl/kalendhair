@@ -322,11 +322,13 @@ export function createApp(pool: Pool, config: AppConfig): Express {
   // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
   // of the API, which a review demonstrated.
   //
-  // Precisely what that buys, because the first version of this comment overclaimed: the
-  // route now wins on every path a client actually sends. Non-canonical spellings such as
-  // `/api//day` and `/api/./day` do not match the Express route at all and still fall
-  // through to here, where static normalises them. Nothing can write a file into `dist` over
-  // HTTP, so that is a residue rather than a hole - but it is not "impossible".
+  // Precisely what that buys, because the first version of this comment overclaimed, and the
+  // second one still did. Measured under express 5.2.1: `/api/./settings/staff` and
+  // `/api/settings/../settings/staff` **do** match the route, and both guards run on them - the
+  // claim that they "do not match at all" was wrong, in the safe direction. `/api//day` really
+  // does miss the route and falls through to here, where static normalises it. Nothing can write
+  // a file into `dist` over HTTP, so that is a residue rather than a hole - but it is not
+  // "impossible", and a wrong "cannot happen" is what closes a future investigation early.
   //
   // Relative to the working directory, like `migrations/`. Missing simply does not match,
   // which is what `npm run dev` relies on - Vite serves the front end then and proxies here.
@@ -384,14 +386,67 @@ function requireSession(pool: Pool, config: AppConfig): RequestHandler {
  * with 401 would have the settings screen log people out for a mistyped digit.
  */
 function requirePin(pool: Pool): RequestHandler {
+  /**
+   * Ten wrong PINs per address per five minutes, and **only wrong ones count**.
+   *
+   * The settings screen makes a handful of requests every time it is opened, all carrying the
+   * PIN it was given, so counting every request would spend the budget on somebody using the
+   * screen correctly. A right PIN costs nothing; a wrong one costs one.
+   *
+   * ADR-0017 accepted unlimited guessing, on the stated grounds that reaching this needs a valid
+   * session "so it is a colleague". ADR-0021 put the board on phones that leave the building and
+   * that premise stopped holding, which is what this answers. **It is a speed bump and the owner
+   * chose it as one**: ten tries per five minutes still walks the whole four-digit space in about
+   * three and a half days, and the thing actually guarding the salon's data is the login.
+   *
+   * Checked before the hash comparison, so a blocked address costs no scrypt derive - which also
+   * bounds, without closing, the thread-pool exhaustion ADR-0018 records as known and accepted.
+   */
+  const wrong = attemptCounter(5 * 60 * 1000)
+  const limit = 10
+
   return async (request, response, next) => {
+    const address = request.ip ?? 'unknown'
     const pin = request.header(PIN_HEADER)
 
-    if (pin === undefined || !(await pinMatches(pool, pin))) {
+    if (pin === undefined) {
+      // Refused, and it costs nothing. **A missing header is not a guess** - it is what every
+      // request from something that was never given the PIN looks like, and counting it spent the
+      // budget on innocent traffic: the test that walks every settings route without the header
+      // burned eight of ten tries in one go. An attack always sends a PIN.
+      //
+      // Answered before the limit is consulted, so a headerless request says the same thing
+      // whether or not the address is blocked. Checking the limit first told a stranger sharing an
+      // address that somebody else was failing PIN entry, for nothing.
       response.status(403).json({ error: 'Die PIN stimmt nicht.' })
       return
     }
 
+    // **Reserved before the derive, and given back if the PIN was right.**
+    //
+    // Counting after `pinMatches` resolved was a check-then-act race one scrypt derive wide: every
+    // request that arrived inside that window read the counter as it had been before any of them
+    // landed. A security pass measured a burst of 500 concurrent wrong PINs performing 131 derives
+    // against a limit of ten, with the multiplier being the attacker's socket count rather than
+    // any constant - which put the whole four-digit space back within about a minute, exactly
+    // where ADR-0017 measured it with no limiter at all.
+    //
+    // Reserving first bounds the derives at the limit no matter how many requests arrive at once.
+    // The refund is what keeps "only a wrong PIN costs anything" true: the settings screen makes
+    // several requests each time it opens, all carrying the PIN it was given.
+    const attempts = wrong.add(address)
+
+    if (attempts > limit) {
+      response.status(429).json({ error: 'Zu viele falsche PIN-Eingaben. Bitte in einigen Minuten erneut versuchen.' })
+      return
+    }
+
+    if (!(await pinMatches(pool, pin))) {
+      response.status(403).json({ error: 'Die PIN stimmt nicht.' })
+      return
+    }
+
+    wrong.refund(address)
     next()
   }
 }
@@ -419,38 +474,78 @@ function setSession(response: express.Response, config: AppConfig, version: numb
  * second system to run for a salon with one password.
  */
 function attemptLimiter(limit: number, windowMs: number): RequestHandler {
-  const seen = new Map<string, { count: number; until: number }>()
-  let sweptAt = 0
+  const counter = attemptCounter(windowMs)
 
   return (request, response, next) => {
-    const now = Date.now()
-
-    // Swept on a request rather than on a timer, so there is nothing to stop at shutdown - but
-    // at most once a second. Sweeping on every attempt was measured by a security pass at 21ms
-    // of blocked event loop with 300,000 addresses in the map, which one machine with a routed
-    // IPv6 range can produce in five minutes. Once a second, that cost is paid once a second.
-    if (now - sweptAt >= 1000) {
-      sweptAt = now
-      for (const [address, entry] of seen) {
-        if (entry.until <= now) seen.delete(address)
-      }
-    }
-
-    const address = request.ip ?? 'unknown'
-    // The window is checked here and not left to the sweep. With the sweep throttled, an
-    // address can be read back before its entry is collected, and taking that stale count
-    // would keep somebody locked out for as long as they kept trying.
-    const held = seen.get(address)
-    const entry = held === undefined || held.until <= now ? { count: 0, until: now + windowMs } : held
-    entry.count += 1
-    seen.set(address, entry)
-
-    if (entry.count > limit) {
+    if (counter.add(request.ip ?? 'unknown') > limit) {
       response.status(429).json({ error: 'Zu viele Versuche. Bitte in einigen Minuten erneut versuchen.' })
       return
     }
 
     next()
+  }
+}
+
+/**
+ * The counting behind the limiters, kept in one place because two copies of a sweep is one copy
+ * too many - this one carries a measured fix and a subtlety that would not survive being retyped.
+ *
+ * `add` records an attempt and answers how many are in the window. `count` answers without
+ * recording, which is what a guard needs when only *failures* should cost anything.
+ */
+function attemptCounter(windowMs: number): {
+  add: (address: string) => number
+  refund: (address: string) => void
+  count: (address: string) => number
+} {
+  const seen = new Map<string, { count: number; until: number }>()
+  let sweptAt = 0
+
+  /**
+   * The window is checked on read and not left to the sweep. With the sweep throttled, an address
+   * can be read back before its entry is collected, and taking that stale count would keep
+   * somebody locked out for as long as they kept trying.
+   */
+  function live(address: string, now: number): { count: number; until: number } | undefined {
+    const held = seen.get(address)
+    return held === undefined || held.until <= now ? undefined : held
+  }
+
+  return {
+    add(address) {
+      const now = Date.now()
+
+    // Swept on a request rather than on a timer, so there is nothing to stop at shutdown - but
+    // at most once a second. Sweeping on every attempt was measured by a security pass at 21ms
+    // of blocked event loop with 300,000 addresses in the map, which one machine with a routed
+    // IPv6 range can produce in five minutes. Once a second, that cost is paid once a second.
+      if (now - sweptAt >= 1000) {
+        sweptAt = now
+        for (const [other, entry] of seen) {
+          if (entry.until <= now) seen.delete(other)
+        }
+      }
+
+      const entry = live(address, now) ?? { count: 0, until: now + windowMs }
+      entry.count += 1
+      seen.set(address, entry)
+      return entry.count
+    },
+
+    /**
+     * Gives one attempt back, for a guard that has to reserve before it knows the answer.
+     *
+     * Never below zero, and it does not create an entry: refunding an address with no live window
+     * is a no-op rather than a way to mint credit.
+     */
+    refund(address) {
+      const entry = live(address, Date.now())
+      if (entry !== undefined && entry.count > 0) entry.count -= 1
+    },
+
+    count(address) {
+      return live(address, Date.now())?.count ?? 0
+    },
   }
 }
 

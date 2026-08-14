@@ -160,6 +160,9 @@ And three that are mine:
   constraint and renders nowhere - ADR-0012. It predates this screen, but this screen turns
   deactivation from an `UPDATE` by hand into a one-click button, which widens the window. Named by
   the security pass, left alone deliberately: it belongs with the write path, not with a screen.
+- **Guessing the PIN starves the thread pool.** Bounded on 2026-08-14 by ADR-0021's limiter, which
+  is checked before the scrypt comparison so a blocked address costs no derive. Ten tries per five
+  minutes still cost ten, so this is narrowed rather than closed.
 - **The PIN travels in a header on every settings request.** Nothing here logs headers and the
   usual proxy default does not either, but it becomes a leak the day somebody turns on header
   logging while debugging. One line for the deploy notes, next to `trust proxy`.

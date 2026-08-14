@@ -130,3 +130,22 @@ test('reaches the master reset and comes back to a login that says what happened
   await expect(page.getByLabel('Salon-Passwort')).toBeVisible()
   await expect(page.getByText('Alle Geräte sind abgemeldet.')).toBeVisible()
 })
+
+test('the login form stays centred, whatever the board shell does to itself', async ({ page }) => {
+  // ADR-0021 gave the board shell `display: flex; flex-direction: column; height: 100dvh`, and the
+  // first exclusion only named the settings screen. The login screen carries the same `shell`
+  // class, so it inherited a column axis at a higher specificity than its own `.login` rule - and
+  // a review pass measured the form flush against the left edge at x: 12 on a 1280px screen.
+  // Every person in the salon meets this screen, and it is where a lost phone sends them back to.
+  await stubApi(page, 'test-salon-password')
+  await page.goto('/')
+  const form = page.getByLabel('Salon-Passwort', { exact: true })
+  await expect(form).toBeVisible()
+
+  // The form, not the shell. The shell is full width whatever happens to it, so its centre is
+  // always the viewport's - an earlier version of this measured that and proved nothing.
+  const box = (await page.locator('.login__form').boundingBox())!
+  const width = page.viewportSize()!.width
+  const centre = box.x + box.width / 2
+  expect(Math.abs(centre - width / 2), `login form centre is at ${centre} on a ${width}px screen`).toBeLessThan(40)
+})
