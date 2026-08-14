@@ -9,6 +9,7 @@ import type { Day } from '../src/calendar/types.js'
 
 const MARCO = '11111111-1111-1111-1111-111111111111'
 const JANA = '22222222-2222-2222-2222-222222222222'
+const SVEN = '33333333-3333-3333-3333-333333333333'
 const TODAY = '2026-08-12'
 
 function dayFor(date: string): Day {
@@ -98,14 +99,21 @@ function dayFor(date: string): Day {
         ]
       : []
 
+  const employees = [
+    { id: MARCO, name: 'Marco' },
+    { id: JANA, name: 'Jana' },
+  ]
+
+  // One date where a third stylist exists. The staff list is the same on every day in reality,
+  // so this is not a day-to-day difference - it stands in for the list changing under an open
+  // board, which is what the settings screen and the poll can do between two days.
+  if (date === '2026-08-18') employees.push({ id: SVEN, name: 'Sven' })
+
   return {
     date,
     today: TODAY,
     coreHours: date in CORE_HOURS ? CORE_HOURS[date] : { from: '09:00', to: '18:00' },
-    employees: [
-      { id: MARCO, name: 'Marco' },
-      { id: JANA, name: 'Jana' },
-    ],
+    employees,
     entries,
   }
 }
@@ -571,6 +579,76 @@ test('the top bar names the holiday, so the pink board is not a riddle', async (
   // And an ordinary day says nothing extra.
   await page.goto('/?date=2026-04-02')
   await expect(page.locator('.topbar__holiday')).toHaveCount(0)
+})
+
+test('the board opens at 08:00, clear of the column headings', async ({ page }) => {
+  // The bookable day starts at 06:00 and the salon rarely works before 08:00, so the board used
+  // to open on two empty hours. Clear of the headings is the half that is easy to get wrong: the
+  // headings are sticky and opaque, so scrolling 08:00 to the very top of the pane would tuck the
+  // line under them and land somewhere that looks like 09:00.
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const scrolled = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(scrolled).toBeGreaterThan(0)
+
+  const eight = (await page.getByText('08:00', { exact: true }).boundingBox())!
+  const heads = (await page.locator('.board__heads').boundingBox())!
+  const pane = (await page.locator('.shell__day').boundingBox())!
+
+  expect(eight.y).toBeGreaterThanOrEqual(heads.y + heads.height)
+  expect(eight.y + eight.height).toBeLessThanOrEqual(pane.y + pane.height)
+
+  // And 06:00 is above the fold rather than gone: it is still bookable, ADR-0015 shades it and
+  // refuses nothing, so this is a starting position and not a shorter day.
+  const six = (await page.getByText('06:00', { exact: true }).boundingBox())!
+  expect(six.y).toBeLessThan(pane.y)
+})
+
+test('stepping a day keeps the position, so an afternoon is not sent back to the morning', async ({ page }) => {
+  // The landing is for opening the board, not for every navigation. Somebody checking the same
+  // slot across a week steps days repeatedly, and having the board jump under them each time is
+  // the behaviour this deliberately does not have.
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const landed = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  // Read back rather than assumed: 700 is past the bottom of a 56-row board on this viewport, and
+  // the browser silently clamps it. Asserting the number that was written would have compared the
+  // position against one the pane never held.
+  const moved = await page.locator('.shell__day').evaluate((pane) => {
+    pane.scrollTop = 700
+    return pane.scrollTop
+  })
+  // Or a board that reset to 08:00 on every step would pass this test.
+  expect(moved).not.toBe(landed)
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  const after = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(after).toBe(moved)
+})
+
+test('a stylist appearing does not send the board back to 08:00 either', async ({ page }) => {
+  // The landing happens once and stays happened. It is written as an effect that re-runs when the
+  // column count changes - a day with nobody on it draws no grid, so the first day loaded can have
+  // nothing to scroll - and without the guard beside it, a staff list changing under an open board
+  // would jump a reader back to the morning. ADR-0019 is the same principle for the poll: data
+  // arriving is not a navigation.
+  await page.goto('/?date=2026-08-17')
+  await page.waitForSelector('.board__grid')
+
+  const moved = await page.locator('.shell__day').evaluate((pane) => {
+    pane.scrollTop = 700
+    return pane.scrollTop
+  })
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByText('Sven', { exact: true })).toBeVisible()
+
+  const after = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(after).toBe(moved)
 })
 
 test('the action row reads settings, today, add - and the icons are named', async ({ page }) => {

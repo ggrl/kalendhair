@@ -50,6 +50,20 @@ interface Props {
  */
 const MIN_COLUMN = '150px'
 
+/**
+ * The hour the board is scrolled to when it opens.
+ *
+ * The bookable day starts at 06:00 and the salon almost never uses the first two hours: the
+ * earliest core start is 08:00, on a Saturday. So the board opened on two empty hours and every
+ * session began by scrolling past them.
+ *
+ * One fixed hour, deliberately, rather than each day's own core start from the settings screen.
+ * That would put Tuesday at 09:00 and Saturday at 08:00, so the board would sit somewhere
+ * different from one day to the next while the times stayed in the same place - and 06:00 to
+ * 08:00 stays bookable and reachable either way, because this scrolls and refuses nothing.
+ */
+const OPENS_AT = '08:00'
+
 interface Undrawn {
   entry: Entry
   reason: string
@@ -121,6 +135,9 @@ export function Board({
 
   const grid = useRef<HTMLDivElement>(null)
   const columns = useRef<(HTMLDivElement | null)[]>([])
+  /** The `OPENS_AT` label, which is what the board is scrolled to, and whether that has happened. */
+  const opening = useRef<HTMLDivElement>(null)
+  const landed = useRef(false)
   const [gesture, setGesture] = useState<Gesture | null>(null)
 
   // Reported from an effect rather than from each place that sets a gesture, so there is one
@@ -130,6 +147,26 @@ export function Board({
   useEffect(() => {
     onGesturing(gesture !== null)
   }, [gesture, onGesturing])
+
+  // Once, when the board first has a grid to scroll - not on every day. A day step keeps the
+  // position the person chose, because somebody working through an afternoon should not be sent
+  // back to the morning by pressing "next day". The guard is a ref rather than a dependency list
+  // for the same reason: `day` changes on every poll, and ADR-0019 says a poll is not a
+  // navigation, so it must not move the board under a reader.
+  //
+  // It runs when the column count changes because a day with nobody on it renders no grid at all,
+  // and the first day loaded can be one of those.
+  useEffect(() => {
+    if (landed.current) return
+    const line = opening.current
+    if (line === null) return
+    landed.current = true
+    // `scrollIntoView` and not a `scrollTop` sum: the scrollport is `.shell__day`, which this
+    // component does not own, and `scroll-padding-top` there already keeps a scrolled-to element
+    // out from under the sticky column headings. Reimplementing that here would be a second
+    // opinion about the same number.
+    line.scrollIntoView({ block: 'start' })
+  }, [day.employees.length])
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
   // entries used to be painted at the same fixed position, hiding each other and any real 06:00
@@ -444,6 +481,7 @@ export function Board({
           return (
             <div
               key={label}
+              ref={label === OPENS_AT ? opening : undefined}
               className={`board__hour${isLast ? ' board__hour--last' : ''}`}
               style={{ gridColumn: 1, gridRow: isLast ? SLOT_COUNT : index * slotsPerHour + 1 }}
             >
