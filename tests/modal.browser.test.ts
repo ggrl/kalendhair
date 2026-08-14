@@ -21,6 +21,7 @@ function dayWith(entries: Day['entries']): Day {
   return {
     date: TODAY,
     today: TODAY,
+    coreHours: { from: '09:00', to: '18:00' },
     employees: [
       { id: MARCO, name: 'Marco' },
       { id: JANA, name: 'Jana' },

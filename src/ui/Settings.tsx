@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { StaffMember } from '../calendar/types'
+import type { CoreHoursDay, StaffMember } from '../calendar/types'
+import { germanWeekday } from '../calendar/dates'
+import { DAY_ENDS_AT, DAY_STARTS_AT, SLOT_COUNT, SLOT_MINUTES, minutesSinceMidnight, wallClockFromMinutes } from '../calendar/grid'
 import {
   PinRefused,
   Unauthenticated,
   addStaff,
   changePassword,
   changePin,
+  fetchHours,
   fetchStaff,
   moveStaff,
   removeStaff,
+  saveHours,
   unlockSettings,
   updateStaff,
 } from './api'
@@ -19,9 +23,6 @@ import {
  * The PIN is asked for every time this opens and lives in this component's state for exactly as
  * long as it is on screen - the owner chose that over anything longer-lived, and it means there
  * is no ticket to leave lying around on the front desk machine. Going back to the board drops it.
- *
- * The core hours are the third thing ADR-0018 puts here and they are not built: they move
- * `opening.ts` half into the database and grow `GET /api/day` a field, which is its own change.
  */
 export function Settings({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: () => void }) {
   const [pin, setPin] = useState<string | null>(null)
@@ -141,23 +142,16 @@ function SettingsScreen({
    * client that renumbers its own copy after a move will disagree with the next person to open
    * this screen. Six rows is not a payload worth being clever about.
    */
+  const failed = useCallback(
+    (error: unknown, say: (message: string) => void) => {
+      failure(error, { onSignedOut, onLocked, say })
+    },
+    [onLocked, onSignedOut],
+  )
+
   const reload = useCallback(() => {
-    fetchStaff(pin).then(setStaff, (error: unknown) => {
-      // The two ways this screen can stop being allowed, and they are different: the password
-      // changed, so nobody is logged in anywhere, or the PIN changed, so the board is fine and
-      // this screen is not. Answering both with the same message would send somebody hunting for
-      // the wrong problem.
-      if (error instanceof Unauthenticated) {
-        onSignedOut()
-        return
-      }
-      if (error instanceof PinRefused) {
-        onLocked()
-        return
-      }
-      setProblem(error instanceof Error ? error.message : String(error))
-    })
-  }, [pin, onLocked, onSignedOut])
+    fetchStaff(pin).then(setStaff, (error: unknown) => failed(error, setProblem))
+  }, [pin, failed])
 
   useEffect(reload, [reload])
 
@@ -167,12 +161,17 @@ function SettingsScreen({
    * `reloadAfter` is false for exactly one caller: changing the PIN takes this screen's own key
    * away, so the reload that follows every other write would be refused with the old PIN and
    * lock the screen a second time - wiping the message that says why it locked the first time.
+   *
+   * `say` is where the German sentence goes, and it defaults to the message line at the top of
+   * this screen. A section far enough down the page that the top is off-screen passes its own,
+   * because a refusal nobody can see reads exactly like a save that worked.
    */
   const run = useCallback(
-    (work: Promise<void>, done?: () => void, reloadAfter = true) => {
+    (work: Promise<void>, done?: () => void, reloadAfter = true, say: (message: string | null) => void = setProblem) => {
       setBusy(true)
       setProblem(null)
       setNotice(null)
+      say(null)
       work.then(
         () => {
           setBusy(false)
@@ -181,22 +180,14 @@ function SettingsScreen({
         },
         (error: unknown) => {
           setBusy(false)
-          if (error instanceof Unauthenticated) {
-            onSignedOut()
-            return
-          }
-          if (error instanceof PinRefused) {
-            onLocked()
-            return
-          }
-          setProblem(error instanceof Error ? error.message : String(error))
+          failed(error, say)
           // The list is reloaded after a refusal too: a refusal means the screen and the database
           // disagree, and the screen is the one that is wrong.
           reload()
         },
       )
     },
-    [reload, onLocked, onSignedOut],
+    [reload, failed],
   )
 
   return (
@@ -216,15 +207,52 @@ function SettingsScreen({
       {notice !== null && <p className="settings__notice">{notice}</p>}
 
       <StaffSection staff={staff} busy={busy} pin={pin} run={run} problem={problem} onRetry={reload} />
+      <HoursSection busy={busy} pin={pin} run={run} onFailed={failed} />
       <CredentialsSection busy={busy} pin={pin} run={run} onPinChanged={onLocked} />
     </main>
   )
 }
 
+/**
+ * Where a failed settings request goes: the login screen, the PIN prompt, or a sentence on screen.
+ *
+ * One home for that decision, because it is three different answers to what looks like one event.
+ * The password changed, so nobody is logged in anywhere; or the PIN changed, so the board is fine
+ * and this screen is not; or something else went wrong and the server said what. Answering all
+ * three the same way sends somebody hunting for the wrong problem.
+ */
+function failure(
+  error: unknown,
+  {
+    onSignedOut,
+    onLocked,
+    say,
+  }: { onSignedOut: () => void; onLocked: (why?: string) => void; say: (message: string) => void },
+): void {
+  if (error instanceof Unauthenticated) {
+    onSignedOut()
+    return
+  }
+  if (error instanceof PinRefused) {
+    onLocked()
+    return
+  }
+  say(error instanceof Error ? error.message : String(error))
+}
+
 interface SectionProps {
   busy: boolean
   pin: string
-  run: (work: Promise<void>, done?: () => void, reloadAfter?: boolean) => void
+  /**
+   * `say` is where a refusal's German sentence goes. It defaults to the message line at the top of
+   * the screen; a section low enough down the page that the top is off-screen passes its own.
+   */
+  run: (
+    work: Promise<void>,
+    done?: () => void,
+    reloadAfter?: boolean,
+    say?: (message: string | null) => void,
+  ) => void
 }
 
 function StaffSection({
@@ -377,6 +405,181 @@ function StaffSection({
         <input id="new-staff" value={newName} onChange={(event) => setNewName(event.target.value)} required />
         <button type="submit" disabled={busy}>
           Hinzufügen
+        </button>
+      </form>
+    </section>
+  )
+}
+
+/**
+ * Every time the board can be shaded from or to: 06:00 to 20:00, on the quarter hour.
+ *
+ * Built from `grid.ts` rather than written out, so the choices cannot outlive the window they
+ * belong to. A dropdown and not a typed field because the board draws 15-minute rows: 09:07 is a
+ * time the grid cannot put where it says, and offering it only to refuse it wastes somebody's
+ * afternoon.
+ */
+const TIME_CHOICES = Array.from({ length: SLOT_COUNT + 1 }, (_, index) =>
+  wallClockFromMinutes(minutesSinceMidnight(DAY_STARTS_AT) + index * SLOT_MINUTES),
+)
+
+/** What a day gets when somebody unticks `Geschlossen`: the salon's own ordinary working day. */
+const USUAL_DAY = { from: '09:00', to: '18:00' }
+
+/**
+ * The salon's core hours, the third thing ADR-0018 puts on this screen.
+ *
+ * The whole week is edited and then saved by one button, which is what the owner chose: somebody
+ * sits down once a year and fixes the hours, and a per-row save would be seven requests, seven
+ * places to fail, and a half-edited week the screen would have to explain.
+ */
+function HoursSection({
+  busy,
+  pin,
+  run,
+  onFailed,
+}: SectionProps & { onFailed: (error: unknown, say: (message: string) => void) => void }) {
+  const [week, setWeek] = useState<CoreHoursDay[] | null>(null)
+  /**
+   * Said here, beside the button, and not on the message line at the top of the screen.
+   *
+   * A review pass measured it: with the salon's six staff rows above this section, a refused save
+   * rendered its sentence 373px above the top of the viewport. Nothing moved, nothing went red,
+   * and the only reading available to the person at the desk was that the week had been saved -
+   * when it had not been written at all.
+   */
+  const [problem, setProblem] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+
+  /**
+   * Loaded here rather than by the screen above, because this section is the only thing that
+   * wants it - and reloaded after a save for the same reason the staff list is: the database is
+   * what the next person to open this screen will see, not the draft this one was holding.
+   */
+  const load = useCallback(() => {
+    setProblem(null)
+    // Routed through the same three-way decision as every other request on this screen: a load
+    // that fails because the PIN changed belongs at the PIN prompt, not on a retry button that
+    // will fail identically every time it is pressed.
+    fetchHours(pin).then(setWeek, (error: unknown) => onFailed(error, setProblem))
+  }, [pin, onFailed])
+
+  useEffect(load, [load])
+
+  const change = (weekday: number, hours: CoreHoursDay['hours']) => {
+    // The confirmation goes as soon as the week stops being the one it was about, or it sits there
+    // saying "saved" over an edit that has not been.
+    setSaved(false)
+    setWeek((current) => current?.map((day) => (day.weekday === weekday ? { ...day, hours } : day)) ?? null)
+  }
+
+  if (week === null) {
+    return (
+      <section className="settings__section">
+        <h2>Kernzeiten</h2>
+        {problem === null ? (
+          <p>Kernzeiten werden geladen …</p>
+        ) : (
+          <>
+            {/* The sentence, and then the button. A naked retry button with nothing saying what
+                failed leaves somebody pressing it to find out. */}
+            <p className="settings__error" role="alert">
+              {problem}
+            </p>
+            <p>
+              <button type="button" onClick={load}>
+                Erneut versuchen
+              </button>
+            </p>
+          </>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <section className="settings__section">
+      <h2>Kernzeiten</h2>
+      {/* The one place this belief can be corrected. A screen that lets somebody edit opening
+          times is exactly where they conclude that booking outside them will be refused - and
+          ADR-0015's whole ruling is that it is not. */}
+      <p className="settings__hint">
+        Diese Zeiten färben nur den Kalender. Termine sind weiterhin an jedem
+        Tag von {DAY_STARTS_AT} bis {DAY_ENDS_AT} möglich, auch an Sonntagen und Feiertagen.
+      </p>
+
+      <form
+        className="settings__hours"
+        onSubmit={(event) => {
+          event.preventDefault()
+          setSaved(false)
+          run(
+            saveHours(pin, week),
+            () => {
+              setSaved(true)
+              load()
+            },
+            false,
+            setProblem,
+          )
+        }}
+      >
+        <ul>
+          {week.map((day) => (
+            <li key={day.weekday}>
+              <span className="settings__weekday">{germanWeekday(day.weekday)}</span>
+
+              <label className="settings__closed">
+                <input
+                  type="checkbox"
+                  checked={day.hours === null}
+                  onChange={(event) => change(day.weekday, event.target.checked ? null : USUAL_DAY)}
+                />
+                Geschlossen
+              </label>
+
+              {day.hours !== null && (
+                <>
+                  <select
+                    aria-label={`${germanWeekday(day.weekday)} von`}
+                    value={day.hours.from}
+                    onChange={(event) => change(day.weekday, { from: event.target.value, to: day.hours!.to })}
+                  >
+                    {TIME_CHOICES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                  <span>bis</span>
+                  <select
+                    aria-label={`${germanWeekday(day.weekday)} bis`}
+                    value={day.hours.to}
+                    onChange={(event) => change(day.weekday, { from: day.hours!.from, to: event.target.value })}
+                  >
+                    {TIME_CHOICES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {/* Both answers land here, next to the control that asked the question, because the top
+            of this screen is off-screen by the time somebody is standing on this button. */}
+        {problem !== null && (
+          <p className="settings__error" role="alert">
+            {problem}
+          </p>
+        )}
+        {saved && problem === null && <p className="settings__notice">Die Kernzeiten wurden gespeichert.</p>}
+
+        <button type="submit" disabled={busy}>
+          Kernzeiten speichern
         </button>
       </form>
     </section>

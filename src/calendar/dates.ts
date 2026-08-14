@@ -115,6 +115,23 @@ export function shortGermanDate(date: string): string {
   }).format(toUtc(date))
 }
 
+/**
+ * The German name of an ISO weekday: 1 is `Montag` and 7 is `Sonntag`.
+ *
+ * Formatted from a reference Monday rather than written out as a list of seven strings, so there
+ * is no second spelling of `Mittwoch` to keep in step with the one `longGermanDate` produces. The
+ * reference is 2024-01-01, which was a Monday, read in UTC like everything else here.
+ *
+ * Used by the settings screen to label the rows and by the server to name the weekday in a
+ * refusal, which is why it lives here and not in a component: one spelling, ADR-0011.
+ */
+export function germanWeekday(weekday: number): string {
+  const monday = Date.UTC(2024, 0, 1)
+  return new Intl.DateTimeFormat('de-DE', { weekday: 'long', timeZone: 'UTC' }).format(
+    new Date(monday + (weekday - 1) * 86_400_000),
+  )
+}
+
 export function longGermanDate(date: string): string {
   return new Intl.DateTimeFormat('de-DE', {
     weekday: 'long',

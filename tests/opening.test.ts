@@ -1,17 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import {
-  HOLIDAYS_COVERED_THROUGH,
-  HOLIDAY_SOURCE,
-  coreHoursOn,
-  holidayName,
-  isHoliday,
-  weekdayOf,
-} from '../src/calendar/opening.js'
+import { HOLIDAYS_COVERED_THROUGH, HOLIDAY_SOURCE, holidayName, isHoliday, weekdayOf } from '../src/calendar/opening.js'
 
-// The salon's core hours, which shade the board and refuse nothing. Fixed dates rather than
+// Which weekday a date is, and which days Hessen keeps as holidays. Fixed dates rather than
 // anything derived from today: a weekday table tested on a Wednesday passes for the wrong reason.
 //
 // The week of 2026-08-10 is a Monday to Sunday run, which is what these lean on.
+//
+// **The core hours are no longer tested here**, because they are no longer here: ADR-0018 moved
+// them into `core_hours` in the database, and `tests/hours.db.test.ts` is where they are asserted
+// now - against real Postgres, which is the only place the answer actually lives.
 
 describe('which weekday a salon date is', () => {
   it('counts Monday as 1 and Sunday as 7', () => {
@@ -25,38 +22,6 @@ describe('which weekday a salon date is', () => {
     // silently move every shaded band by one day for a stylist checking from abroad: ADR-0007.
     expect(weekdayOf('2026-01-01')).toBe(4)
     expect(weekdayOf('2027-01-01')).toBe(5)
-  })
-})
-
-describe('the salon core hours', () => {
-  it('works 09:00 to 18:00 from Tuesday to Friday', () => {
-    for (const date of ['2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14']) {
-      expect(coreHoursOn(date)).toEqual({ from: '09:00', to: '18:00' })
-    }
-  })
-
-  it('works 08:00 to 13:30 on Saturday', () => {
-    // Half past one, which lands on a quarter-hour row: the grid could not draw the edge of the
-    // shading otherwise.
-    expect(coreHoursOn('2026-08-15')).toEqual({ from: '08:00', to: '13:30' })
-  })
-
-  it('is closed all day on Sunday and Monday', () => {
-    expect(coreHoursOn('2026-08-16')).toBeNull()
-    expect(coreHoursOn('2026-08-10')).toBeNull()
-  })
-
-  it('is closed on a Hessen public holiday that falls on a working day', () => {
-    // This asserted the opposite until ADR-0016 added the list: 25 December 2026 is a Friday, and
-    // it read as an ordinary working day. Reversed deliberately, so the test was rewritten.
-    expect(weekdayOf('2026-12-25')).toBe(5)
-    expect(coreHoursOn('2026-12-25')).toBeNull()
-  })
-
-  it('leaves the working day next to a holiday alone', () => {
-    // The day after Christmas is also a holiday; the 24th is not, whatever the salon chooses to do
-    // about it. Heiligabend is not a public holiday in Hessen and the list does not invent one.
-    expect(coreHoursOn('2026-12-24')).toEqual({ from: '09:00', to: '18:00' })
   })
 })
 

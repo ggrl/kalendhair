@@ -1,10 +1,16 @@
-// When the salon is normally open, for shading the board and nothing else.
+// When the salon is normally shut for the whole day, and which weekday a date falls on.
 //
 // **This changes no rule.** The bookable window is still 06:00-20:00 for everybody, every day,
-// and `grid.ts` remains its only home: an appointment outside these hours is accepted without a
-// murmur, because the salon books outside them and the paper page always allowed it. What this
-// file buys is that the receptionist can see at a glance which part of the day is the ordinary
-// working one. See ADR-0015.
+// and `grid.ts` remains its only home: an appointment on Christmas Day is accepted without a
+// murmur, because the salon books outside its hours and the paper page always allowed it. What
+// this file buys is that the receptionist can see at a glance which part of the day is the
+// ordinary working one. See ADR-0015.
+//
+// **The core hours used to live here and no longer do.** ADR-0018 moved them into `core_hours`
+// in the database so the settings screen can change them without a release, which is the exact
+// condition ADR-0015 named when it wrote them down as a constant. The holidays stay put -
+// ADR-0016 - so this file has one foot on each side, and ADR-0018 says what to do if that ever
+// reads badly: the holidays follow the hours and ADR-0016 gets a successor.
 //
 // Imports nothing, like every file in this folder - the server and the browser resolve modules
 // differently and a free-standing file pleases both. That is why the weekday is worked out here
@@ -12,28 +18,6 @@
 
 /** Monday is 1 and Sunday is 7, as ISO 8601 has it. */
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
-
-/** The hours the salon normally works, as wall clock times in its own timezone: ADR-0007. */
-export interface CoreHours {
-  from: string
-  to: string
-}
-
-/**
- * The salon's core hours, by weekday. A day missing from here is closed all day.
- *
- * Written as data rather than as configuration on purpose: one salon, and a constant that has to
- * be edited and deployed is honest about that. It becomes configuration the day there is a second
- * salon, or the day these hours change often enough that somebody wants to do it without a
- * release.
- */
-export const CORE_HOURS: Partial<Record<Weekday, CoreHours>> = {
-  2: { from: '09:00', to: '18:00' },
-  3: { from: '09:00', to: '18:00' },
-  4: { from: '09:00', to: '18:00' },
-  5: { from: '09:00', to: '18:00' },
-  6: { from: '08:00', to: '13:30' },
-}
 
 /**
  * Hessen's public holidays, fetched from `feiertage-api.de` for 2026 to 2030 and checked against
@@ -142,15 +126,4 @@ export function isHoliday(date: string): boolean {
 export function weekdayOf(date: string): Weekday {
   const day = new Date(`${date}T00:00:00Z`).getUTCDay()
   return (day === 0 ? 7 : day) as Weekday
-}
-
-/**
- * The core hours on a given date, or null when the salon is normally closed all day.
- *
- * Null for three reasons that the board treats identically, because they mean the same thing to
- * somebody looking at it: Sunday, Monday, and a Hessen public holiday. ADR-0016 added the third.
- */
-export function coreHoursOn(date: string): CoreHours | null {
-  if (isHoliday(date)) return null
-  return CORE_HOURS[weekdayOf(date)] ?? null
 }

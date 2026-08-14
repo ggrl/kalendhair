@@ -19,6 +19,30 @@ export type WallClock = string
 
 export type EntryKind = 'appointment' | 'block'
 
+/**
+ * The hours the salon normally works on one day, as wall clock in its own timezone: ADR-0007.
+ *
+ * Lived in `opening.ts` next to the constant it described until ADR-0018 moved the hours into the
+ * database. It crosses the API boundary now, which is what this file is for.
+ */
+export interface CoreHours {
+  from: WallClock
+  to: WallClock
+}
+
+/**
+ * One weekday's core hours, as the settings screen reads and writes them.
+ *
+ * `hours` is null on a day the salon does not normally work - which the screen shows as a
+ * `Geschlossen` tick, not as an empty pair of times. Two ways to say the same thing is how they
+ * end up disagreeing.
+ */
+export interface CoreHoursDay {
+  /** ISO 8601: Monday is 1 and Sunday is 7, the numbering `weekdayOf` returns. */
+  weekday: number
+  hours: CoreHours | null
+}
+
 export interface Employee {
   id: string
   name: string
@@ -82,4 +106,16 @@ export interface Day {
   today: SalonDate
   employees: Employee[]
   entries: Entry[]
+  /**
+   * The hours to shade this day around, or null when the salon does not normally work it.
+   *
+   * ADR-0018: the board draws what the server sends rather than computing it, so one source of
+   * truth reaches every machine. Null covers all three reasons a day is closed - Sunday, Monday,
+   * and a public holiday - because the board treats them identically and combining two rules in
+   * the client is how they come apart.
+   *
+   * **This shades and refuses nothing.** ADR-0015 is unchanged: the full 06:00-20:00 stays
+   * bookable every day, for everybody, and `grid.ts` is still the only home of that window.
+   */
+  coreHours: CoreHours | null
 }

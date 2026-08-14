@@ -10,6 +10,7 @@ import type { Day } from '../src/calendar/types.js'
 const EMPTY_DAY: Day = {
   date: '2026-08-13',
   today: '2026-08-13',
+  coreHours: { from: '09:00', to: '18:00' },
   employees: [{ id: '11111111-1111-1111-1111-111111111111', name: 'Marco' }],
   entries: [],
 }

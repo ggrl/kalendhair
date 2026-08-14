@@ -50,11 +50,13 @@ does not, and a master password in the environment that can reset the other two 
 No email of any kind - no reset links, no notifications. See ADR-0017 and ADR-0018, which record
 what was rejected on the way, including an email reset the owner proposed and withdrew.
 
-Of that, what exists today is everything except the core hours: the login screen, the session that
-a password change ends, the master password's reset screen, and behind the PIN, the screen that
-manages the staff list and both credentials. The hours are still a constant in the code, so
-changing them is still a release - ADR-0015's own condition for becoming configuration, met and
-not yet acted on.
+All of that exists as of 2026-08-14: the login screen, the session that a password change ends, the
+master password's reset screen, and behind the PIN, the screen that manages the staff list, both
+credentials and the core hours. The hours are seven rows in the database, edited as one week and
+chosen from quarter hours between 06:00 and 20:00, with `Geschlossen` for a day the salon does not
+work. `GET /api/day` sends the day's hours and the board draws them, so changing them takes no
+release - ADR-0015's own condition for becoming configuration, met and now acted on. They still
+refuse nothing, and the screen says so in German where somebody would otherwise assume otherwise.
 
 The board is a CSS grid of 15-minute rows from 06:00 to 20:00, one column per active
 employee, with absolutely positioned appointment boxes: drag to create, drag to move
@@ -93,7 +95,8 @@ bookable every day of the week, which is the half of this line that still holds.
 
 What changed on 2026-08-13, by ADR-0015: the board now *draws* the salon's core hours. Tuesday
 to Friday 09:00-18:00 and Saturday 08:00-13:30 stay white; everything else, and all of Sunday
-and Monday, is shaded light red. ADR-0016 added Hessen's public holidays to that, as a hardcoded
+and Monday, is shaded grey - light red until 2026-08-14, changed by the owner on their own screen
+because red read as a fault about hours that are perfectly ordinary. ADR-0016 added Hessen's public holidays to that, as a hardcoded
 list of fifty dates through 2030 that expires with a failing test rather than in silence. It is
 all shading and not a rule, it takes no clicks, and the sentence that used to say there is no
 concept of opening days is therefore no longer true.

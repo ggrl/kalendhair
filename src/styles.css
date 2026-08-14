@@ -82,8 +82,10 @@ body {
   color: var(--ink);
 }
 
-/* Named in the same red the board is washed in, so the word and the colour answer each other.
-   Not the alert red: a holiday is information, not a fault. */
+/* Not the alert red: a holiday is information, not a fault.
+   This used to match the board's wash so the word and the colour answered each other. The wash
+   went grey on 2026-08-14 and this stayed red, deliberately - grey on grey would lose the name,
+   which is the one thing standing between a fully shaded board and "is the software broken". */
 .topbar__holiday {
   font-weight: 600;
   color: #b45252;
@@ -252,7 +254,10 @@ body {
    a booking, and the only thing that does is the exclusion constraint. */
 .board__closed {
   z-index: 0;
-  background: rgb(220 38 38 / 7%);
+  /* Grey since 2026-08-14, on the owner's judgement after seeing it on their own screen: red said
+     "something is wrong with this day" about hours that are perfectly ordinary. Same notation as
+     the other translucent fills in this file, same colour they chose. */
+  background: rgb(55 54 54 / 7%);
   pointer-events: none;
 }
 
@@ -963,6 +968,34 @@ body {
 .settings__add label {
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.settings__hours ul {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.settings__hours li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--rule-quarter);
+}
+
+/* A fixed width, so the seven dropdowns line up under each other rather than stepping in and out
+   with the length of the weekday's name. Sonntag is the short one and Donnerstag the long one. */
+.settings__weekday {
+  width: 7.5rem;
+  font-weight: 600;
+}
+
+.settings__closed {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
 }
 
 .settings__credential {

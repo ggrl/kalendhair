@@ -17,6 +17,7 @@ import {
   whyPinUnusable,
 } from './credentials.js'
 import { addStaff, moveStaff, readStaff, removeStaff, updateStaff } from './staff.js'
+import { readWeek, writeWeek } from './hours.js'
 import { SESSION_COOKIE, SESSION_LIFETIME_MS, issueSession, readSession, sessionCookieFrom, shouldRefresh } from './session.js'
 import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 import { PIN_HEADER } from '../src/calendar/types.js'
@@ -222,6 +223,22 @@ export function createApp(pool: Pool, config: AppConfig): Express {
     if (unusable !== null) throw new Refused(400, 'invalid', unusable)
 
     await replacePassword(pool, password)
+    response.status(204).end()
+  })
+
+  /**
+   * The salon's core hours, all seven days of them. ADR-0018.
+   *
+   * Behind the PIN like everything else here, and a `PUT` rather than a `PATCH` because the unit
+   * the salon edits is the week: one screen, one button, one transaction, and no way to leave
+   * Tuesday changed and Saturday refused.
+   */
+  app.get('/api/settings/hours', async (_request, response) => {
+    response.json(await readWeek(pool))
+  })
+
+  app.put('/api/settings/hours', body, async (request, response) => {
+    await writeWeek(pool, (request.body as { week?: unknown })?.week)
     response.status(204).end()
   })
 
