@@ -139,7 +139,12 @@ body {
   color: inherit;
   background: #fff;
   border: 1px solid var(--rule-hour);
-  border-radius: 0.4rem;
+  /* Capsules, not softened corners. A browser clamps the radius to half the box, so any number
+     past that draws semicircular ends whatever the button's height or its text turns out to be -
+     which is what keeps `Heute` the same shape as the round icons it sits between, and the two
+     week steps the same shape as `Heute`. A fixed radius would have to be re-tuned every time the
+     padding or the font size moves. */
+  border-radius: 999px;
   cursor: pointer;
 }
 

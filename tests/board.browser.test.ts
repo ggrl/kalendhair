@@ -651,6 +651,32 @@ test('a stylist appearing does not send the board back to 08:00 either', async (
   expect(after).toBe(moved)
 })
 
+test('the word buttons have round ends, like the icons beside them', async ({ page }) => {
+  // `Heute` sits between two circles, and a square-cornered button between them read as an odd one
+  // out. The week steps follow it so the top bar is one set of shapes.
+  //
+  // Half the height or more is the test, not a particular number: that is the point at which a
+  // browser draws semicircular ends, and it stays true if the padding or the font size moves.
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const shapes = await page
+    .locator('.topbar__today, .topbar__step')
+    .evaluateAll((buttons) =>
+      buttons.map((button) => ({
+        label: button.textContent?.trim() ?? '',
+        radius: parseFloat(window.getComputedStyle(button).borderTopLeftRadius),
+        height: button.getBoundingClientRect().height,
+      })),
+    )
+
+  expect(shapes).toHaveLength(3)
+  for (const shape of shapes) {
+    expect(shape.height).toBeGreaterThan(0)
+    expect(shape.radius, shape.label).toBeGreaterThanOrEqual(shape.height / 2)
+  }
+})
+
 test('the action row reads settings, today, add - and the icons are named', async ({ page }) => {
   // The order is deliberate: the day you are on in the middle, and the two ways of leaving it
   // either side. An icon has no text to be named by, so both carry an `aria-label` - a control a
