@@ -572,3 +572,24 @@ test('the top bar names the holiday, so the pink board is not a riddle', async (
   await page.goto('/?date=2026-04-02')
   await expect(page.locator('.topbar__holiday')).toHaveCount(0)
 })
+
+test('the action row reads settings, today, add - and the icons are named', async ({ page }) => {
+  // The order is deliberate: the day you are on in the middle, and the two ways of leaving it
+  // either side. An icon has no text to be named by, so both carry an `aria-label` - a control a
+  // screen reader announces only as "Schaltfläche" is one nobody can use.
+  await stubApi(page)
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const names = await page
+    .locator('.topbar__actions button')
+    .evaluateAll((buttons) => buttons.map((button) => button.getAttribute('aria-label') ?? button.textContent?.trim()))
+  expect(names).toEqual(['Einstellungen', 'Heute', 'Neuer Termin'])
+
+  // Round, and actually round: equal width and height, or the border-radius draws an oval.
+  const shape = await page.locator('.topbar__icon').first().evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return { width: Math.round(box.width), height: Math.round(box.height) }
+  })
+  expect(shape.width).toBe(shape.height)
+})

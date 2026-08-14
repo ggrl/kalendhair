@@ -162,6 +162,29 @@ body {
   padding: 0.35rem 1.4rem;
 }
 
+/* The round ones either side of `Heute`. Same border and hover as the text buttons, so the row
+   reads as one set of controls rather than two - only the shape differs, because there is a glyph
+   in the middle rather than a word. */
+.topbar__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Fixed and equal, so a circle stays a circle whatever is drawn inside it. */
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.topbar__icon:hover,
+.topbar__icon:focus-visible {
+  background: #f3f4f6;
+}
+
 .topbar__step:hover,
 .topbar__today:hover {
   background: #f3f4f6;
