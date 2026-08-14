@@ -322,11 +322,13 @@ export function createApp(pool: Pool, config: AppConfig): Express {
   // purpose: static first meant a file in `dist` at the path `api/day` would answer instead
   // of the API, which a review demonstrated.
   //
-  // Precisely what that buys, because the first version of this comment overclaimed: the
-  // route now wins on every path a client actually sends. Non-canonical spellings such as
-  // `/api//day` and `/api/./day` do not match the Express route at all and still fall
-  // through to here, where static normalises them. Nothing can write a file into `dist` over
-  // HTTP, so that is a residue rather than a hole - but it is not "impossible".
+  // Precisely what that buys, because the first version of this comment overclaimed, and the
+  // second one still did. Measured under express 5.2.1: `/api/./settings/staff` and
+  // `/api/settings/../settings/staff` **do** match the route, and both guards run on them - the
+  // claim that they "do not match at all" was wrong, in the safe direction. `/api//day` really
+  // does miss the route and falls through to here, where static normalises it. Nothing can write
+  // a file into `dist` over HTTP, so that is a residue rather than a hole - but it is not
+  // "impossible", and a wrong "cannot happen" is what closes a future investigation early.
   //
   // Relative to the working directory, like `migrations/`. Missing simply does not match,
   // which is what `npm run dev` relies on - Vite serves the front end then and proxies here.
@@ -405,12 +407,6 @@ function requirePin(pool: Pool): RequestHandler {
 
   return async (request, response, next) => {
     const address = request.ip ?? 'unknown'
-
-    if (wrong.count(address) >= limit) {
-      response.status(429).json({ error: 'Zu viele falsche PIN-Eingaben. Bitte in einigen Minuten erneut versuchen.' })
-      return
-    }
-
     const pin = request.header(PIN_HEADER)
 
     if (pin === undefined) {
@@ -418,16 +414,39 @@ function requirePin(pool: Pool): RequestHandler {
       // request from something that was never given the PIN looks like, and counting it spent the
       // budget on innocent traffic: the test that walks every settings route without the header
       // burned eight of ten tries in one go. An attack always sends a PIN.
+      //
+      // Answered before the limit is consulted, so a headerless request says the same thing
+      // whether or not the address is blocked. Checking the limit first told a stranger sharing an
+      // address that somebody else was failing PIN entry, for nothing.
       response.status(403).json({ error: 'Die PIN stimmt nicht.' })
+      return
+    }
+
+    // **Reserved before the derive, and given back if the PIN was right.**
+    //
+    // Counting after `pinMatches` resolved was a check-then-act race one scrypt derive wide: every
+    // request that arrived inside that window read the counter as it had been before any of them
+    // landed. A security pass measured a burst of 500 concurrent wrong PINs performing 131 derives
+    // against a limit of ten, with the multiplier being the attacker's socket count rather than
+    // any constant - which put the whole four-digit space back within about a minute, exactly
+    // where ADR-0017 measured it with no limiter at all.
+    //
+    // Reserving first bounds the derives at the limit no matter how many requests arrive at once.
+    // The refund is what keeps "only a wrong PIN costs anything" true: the settings screen makes
+    // several requests each time it opens, all carrying the PIN it was given.
+    const attempts = wrong.add(address)
+
+    if (attempts > limit) {
+      response.status(429).json({ error: 'Zu viele falsche PIN-Eingaben. Bitte in einigen Minuten erneut versuchen.' })
       return
     }
 
     if (!(await pinMatches(pool, pin))) {
-      wrong.add(address)
       response.status(403).json({ error: 'Die PIN stimmt nicht.' })
       return
     }
 
+    wrong.refund(address)
     next()
   }
 }
@@ -476,6 +495,7 @@ function attemptLimiter(limit: number, windowMs: number): RequestHandler {
  */
 function attemptCounter(windowMs: number): {
   add: (address: string) => number
+  refund: (address: string) => void
   count: (address: string) => number
 } {
   const seen = new Map<string, { count: number; until: number }>()
@@ -510,6 +530,17 @@ function attemptCounter(windowMs: number): {
       entry.count += 1
       seen.set(address, entry)
       return entry.count
+    },
+
+    /**
+     * Gives one attempt back, for a guard that has to reserve before it knows the answer.
+     *
+     * Never below zero, and it does not create an entry: refunding an address with no live window
+     * is a no-op rather than a way to mint credit.
+     */
+    refund(address) {
+      const entry = live(address, Date.now())
+      if (entry !== undefined && entry.count > 0) entry.count -= 1
     },
 
     count(address) {

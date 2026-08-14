@@ -432,6 +432,60 @@ describe('guessing the PIN', () => {
     }
   })
 
+  it('bounds a burst, not just a queue', async () => {
+    // The blocker a security pass measured, and the one every serial test above passed while it
+    // was wide open. The count used to be read before `pinMatches` and written after it, so every
+    // request arriving inside that one-derive window saw the counter as it had been before any of
+    // them landed: a burst of 500 concurrent wrong PINs performed 131 derives against a limit of
+    // ten, the multiplier being the attacker's socket count. Fired all at once, with no waiting.
+    const { ask, stop } = await fresh()
+    try {
+      const burst = await Promise.all(Array.from({ length: 60 }, () => ask('0000')))
+      const refused = burst.filter((response) => response.status === 403).length
+      const blocked = burst.filter((response) => response.status === 429).length
+
+      expect(refused + blocked).toBe(60)
+      // Exactly the allowance reaches a hash comparison. Every 403 is one derive that happened.
+      expect(refused, `${refused} of 60 concurrent guesses were actually compared`).toBeLessThanOrEqual(10)
+      expect(blocked).toBeGreaterThan(0)
+    } finally {
+      await stop()
+    }
+  })
+
+  it('gives the attempt back when the PIN was right, so a burst of real use costs nothing', async () => {
+    // The other half of reserving up front. The screen opens several requests at once, all with
+    // the PIN it was given; without the refund the reservation alone would spend the budget on
+    // somebody using the screen correctly.
+    const { ask, stop } = await fresh()
+    try {
+      const burst = await Promise.all(Array.from({ length: 8 }, () => ask()))
+      expect(burst.every((response) => response.status === 200)).toBe(true)
+
+      // The whole allowance is still there.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        expect((await ask('0000')).status).toBe(403)
+      }
+      expect((await ask('0000')).status).toBe(429)
+    } finally {
+      await stop()
+    }
+  })
+
+  it('says the same thing to a headerless request whether or not the address is blocked', async () => {
+    // The limit is consulted after the header is checked, so a request with no PIN cannot be used
+    // to read whether somebody else on the same address is currently failing PIN entry.
+    const { url, ask, stop } = await fresh()
+    try {
+      expect((await fetch(url, { headers: { cookie } })).status).toBe(403)
+      for (let attempt = 0; attempt < 11; attempt += 1) await ask('0000')
+      expect((await ask('0000')).status).toBe(429)
+      expect((await fetch(url, { headers: { cookie } })).status).toBe(403)
+    } finally {
+      await stop()
+    }
+  })
+
   it('does not count a missing header as a guess', async () => {
     // A request with no PIN is not somebody guessing - it is what anything that was never given
     // the PIN looks like. Counting it spent the budget on innocent traffic: the test above that

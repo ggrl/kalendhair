@@ -153,10 +153,31 @@ server-side window.
     walks every settings route without the header burned eight of the ten tries in one go, and two
     unrelated tests started failing. An attack always sends a PIN.
 
+  **The first attempt at this did not bound what it claimed to**, and a second security pass
+  measured it: the count was read before the scrypt comparison and written after it, so every
+  request arriving inside that one-derive window saw the counter as it had been before any of them
+  landed. A burst of 500 concurrent wrong PINs performed 131 derives against a limit of ten, the
+  multiplier being the attacker's socket count rather than any constant - which put the whole
+  four-digit space back within about a minute, exactly where ADR-0017 measured it with no limiter
+  at all. The attempt is reserved before the derive now and given back if the PIN was right, which
+  bounds the derives at the limit however many requests arrive at once and keeps a right PIN free.
+  Our own suite fires sixty at once: ten are compared, fifty are refused.
+
   What it buys, stated plainly so nobody mistakes it for more: ten tries per five minutes still
-  walks the whole four-digit space in about three and a half days. It also bounds - without
+  walks the whole four-digit space in about three and a half days.
+
+  It is a **fixed** window, not a sliding one, so ten wrong tries at the end of one window and ten
+  at the start of the next is twenty back to back. Consistent with "deliberately forgiving", named
+  here so it is not discovered as a surprise. It also bounds - without
   closing - the thread-pool exhaustion ADR-0018 records, because the limit is checked before the
   scrypt comparison, so a blocked address costs no derive.
+
+  **The limiter is also a new way to shut the revocation screen.** `/api/settings/password` is
+  behind the PIN, and changing that password is this ruling's stated remedy for a lost phone. Under
+  a proxy with `trust proxy` unset the budget is one budget for the whole salon, so whoever holds
+  the phone can spend it - two requests a minute - and hold the salon out of its own remedy. The
+  way back is the master password, whose reset route has its own limiter and does not sit behind
+  the PIN. Written here rather than discovered during the incident.
 
   **Untested here: that the limit is per address.** `trust proxy` is deliberately unset, so
   `X-Forwarded-For` cannot vary `request.ip` and the harness has one address to offer. When a proxy
