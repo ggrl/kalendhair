@@ -365,3 +365,99 @@ describe('the credentials', () => {
     expect((await settings('/unlock', { method: 'POST' })).status).toBe(204)
   })
 })
+
+describe('guessing the PIN', () => {
+  // ADR-0021 and the owner's ruling: a speed bump, deliberately forgiving. ADR-0017 accepted no
+  // limit at all because reaching this needs a valid session "so it is a colleague" - and putting
+  // the board on phones that leave the building is what stopped that premise holding.
+
+  /**
+   * Its own server per test, because the counter is per process and per address - and every client
+   * here is loopback, so one shared server would carry one test's blocked address into the next
+   * and into every other test in this file.
+   *
+   * That is also why nothing below asserts the per-address half of the rule: `trust proxy` is
+   * deliberately unset (ADR-0017), so `X-Forwarded-For` cannot vary `request.ip` and this harness
+   * has exactly one address to offer.
+   */
+  async function fresh(): Promise<{
+    url: string
+    ask: (pin?: string) => Promise<Response>
+    stop: () => Promise<void>
+  }> {
+    const own = createApp(pool, TEST_CONFIG).listen(0, '127.0.0.1')
+    await new Promise<void>((resolve) => own.once('listening', resolve))
+    const address = own.address()
+    if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
+    const url = `http://127.0.0.1:${address.port}/api/settings/staff`
+
+    return {
+      url,
+      ask: (pin = TEST_PIN) => fetch(url, { headers: { cookie, [PIN_HEADER]: pin } }),
+      stop: () => new Promise<void>((resolve) => own.close(() => resolve())),
+    }
+  }
+
+  it('lets ten wrong PINs through as refusals, and stops the eleventh', async () => {
+    const { ask, stop } = await fresh()
+    try {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        expect((await ask('0000')).status).toBe(403)
+      }
+
+      const blocked = await ask('0000')
+      expect(blocked.status).toBe(429)
+      expect(((await blocked.json()) as { error: string }).error).toContain('Zu viele falsche PIN-Eingaben')
+    } finally {
+      await stop()
+    }
+  })
+
+  it('does not spend the budget on somebody using the screen correctly', async () => {
+    // The reason only failures count. Opening the settings screen makes several requests, all
+    // carrying the PIN it was given; counting those would lock out the person who typed it right.
+    const { ask, stop } = await fresh()
+    try {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        expect((await ask()).status).toBe(200)
+      }
+
+      // The whole allowance is still there afterwards.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        expect((await ask('0000')).status).toBe(403)
+      }
+      expect((await ask('0000')).status).toBe(429)
+    } finally {
+      await stop()
+    }
+  })
+
+  it('does not count a missing header as a guess', async () => {
+    // A request with no PIN is not somebody guessing - it is what anything that was never given
+    // the PIN looks like. Counting it spent the budget on innocent traffic: the test above that
+    // walks every settings route without the header burned eight of the ten tries in one go.
+    const { url, ask, stop } = await fresh()
+    try {
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        expect((await fetch(url, { headers: { cookie } })).status).toBe(403)
+      }
+
+      // The allowance is untouched, and a right PIN still works.
+      expect((await ask()).status).toBe(200)
+    } finally {
+      await stop()
+    }
+  })
+
+  it('refuses a right PIN too once an address is blocked', async () => {
+    // Blocked is blocked. Letting the correct PIN through would make the limit a hint rather than
+    // a limit - and somebody guessing has no way to know which try was the right one.
+    const { ask, stop } = await fresh()
+    try {
+      for (let attempt = 0; attempt < 11; attempt += 1) await ask('0000')
+      expect((await ask()).status).toBe(429)
+    } finally {
+      await stop()
+    }
+  })
+})

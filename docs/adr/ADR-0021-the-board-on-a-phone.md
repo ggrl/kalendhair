@@ -139,9 +139,29 @@ server-side window.
   relies on.** That ruling accepted unlimited PIN guessing on the stated grounds that it needs a
   valid session, "so it is a colleague", and measured the whole 10,000-PIN space at 65 seconds.
   This is what stops "holds a valid session" and "is a colleague" being the same sentence: the
-  session now rides in a pocket. `requirePin` has no attempt limiter - the two that exist are wired
-  to `/api/login` and `/api/credentials/reset` only. **Not fixed here, and it is the one item on
-  this list that is a decision rather than a note.**
+  session now rides in a pocket. **The owner's answer: ten wrong tries per address per five
+  minutes**, and they named it as a bump rather than a measure - "that is the login". So it is
+  built, and ADR-0017 is amended rather than quietly contradicted.
+
+  Two things decide whether such a limit helps or hurts, and both were settled by measurement:
+
+  - **Only a wrong PIN costs anything.** The settings screen makes several requests every time it
+    opens, all carrying the PIN it was given; counting those would lock out the person who typed it
+    correctly.
+  - **A missing header costs nothing either.** It is not a guess - it is what anything never given
+    the PIN looks like. Counting it spent the budget on innocent traffic: the existing test that
+    walks every settings route without the header burned eight of the ten tries in one go, and two
+    unrelated tests started failing. An attack always sends a PIN.
+
+  What it buys, stated plainly so nobody mistakes it for more: ten tries per five minutes still
+  walks the whole four-digit space in about three and a half days. It also bounds - without
+  closing - the thread-pool exhaustion ADR-0018 records, because the limit is checked before the
+  scrypt comparison, so a blocked address costs no derive.
+
+  **Untested here: that the limit is per address.** `trust proxy` is deliberately unset, so
+  `X-Forwarded-For` cannot vary `request.ip` and the harness has one address to offer. When a proxy
+  arrives it must be set to the specific hop, or the limit becomes one budget for the whole salon -
+  which ADR-0017 already warns about for the login limiter.
 - **A password change does not blank a phone that is already showing the day.** Polling stops while
   the tab is hidden - ADR-0019, deliberately - so a backgrounded board never learns the session
   ended and keeps the last-fetched day sheet painted indefinitely. Disclosure of what was already
