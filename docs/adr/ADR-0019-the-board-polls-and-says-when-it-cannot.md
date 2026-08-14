@@ -58,9 +58,24 @@ matters when the network is actually gone.
 within thirty seconds of the network doing the same. There is nothing to press and nothing that
 needs pressing.
 
-**"Not current" is one idea with two causes.** A navigation that failed and a poll that failed twice
-both mean what is on screen cannot be trusted, and they now share one phrase. Two near-identical
-German sentences for the same fact would say less than one.
+**`nicht aktuell` is about the poll and nothing else.** A day step that failed gets the banner it
+already had, naming which day did not load in a whole sentence.
+
+> This originally read the other way - one phrase for both causes, which was my idea. A review pass
+> reproduced why it is wrong: `failure` is cleared only by asking for another day, so one failed day
+> step pinned `nicht aktuell` on indefinitely while the poll went on succeeding against the day
+> actually on screen, moving the boxes and the timestamp beside it. A line that says "not current"
+> next to data demonstrably arriving is how people learn to ignore the one line that matters when
+> the network is really gone - the exact failure the two-failure threshold was chosen to avoid.
+
+**A held day is void the moment anything else asks for a day.** Not merely when its date stops
+matching: the parcel is dropped whenever a load starts, which covers navigation, the reload after
+a write, and Back and Forward. Date-matching alone let a parcel survive a round trip and overwrite
+genuinely newer data with older, stamped with a fresh `Stand` so the board claimed to be current.
+
+**A poll that finds an ended session closes the form as well.** The same line the navigation path
+carries, for the same reason, and it matters more here: a poll interrupts somebody mid-sentence
+rather than somebody who pressed a button.
 
 ## Consequences
 
@@ -73,6 +88,16 @@ German sentences for the same fact would say less than one.
 - A chained `setTimeout` rather than `setInterval`, so the next ask is scheduled when the last one
   finishes. An interval fires regardless of whether the previous request came back, and on a slow
   connection that stacks requests until one wins a race and the board flickers between two answers.
+
+  **The chain is not sufficient on its own, which this ADR originally claimed.** Both review passes
+  measured the same hole: hide and show the tab while a request is in flight and there is no timer
+  left to clear, so the visibility handler opens a second request - and each surviving chain
+  overwrites the single timer variable, orphaning the other. Twenty cycles during a slow response
+  measured twenty-one concurrent requests against a designed two per minute. What makes the claim
+  true is an explicit in-flight flag that `tick` refuses to run past, plus `schedule` clearing
+  before it sets.
+- Polling is suspended while a navigation is in flight, so two answers for two different days are
+  never in the air at once - `setDay` has no ordering guard anywhere.
 - A poll answered with 401 stops the polling and shows the login screen, rather than retrying an
   ended session every thirty seconds.
 - Two of the brief's awkward cases are now closed by code rather than by a warning: an update
@@ -89,8 +114,15 @@ German sentences for the same fact would say less than one.
   for something this change fixed.
 - **Thirty seconds is a judgement, not a measurement.** Nobody has run six machines against one
   server in a real salon. The number is one constant in `App.tsx`.
-- **A held day is dropped when its date stops matching**, which means navigating with the form open
-  costs one interval rather than being applied instantly. Correct and cheap; worth knowing.
+- **A held day is dropped whenever a load starts**, which means navigating with the form open costs
+  one interval rather than being applied instantly. Correct and cheap; worth knowing.
+- **Every return to a visible tab costs one request**, with no floor on how often. Twenty quick tab
+  switches are twenty requests - bounded by the in-flight guard to one per response rather than one
+  per switch, and only reachable from the salon's own keyboard. Named by a review pass so the
+  decision is conscious rather than accidental.
+- **During a navigation the `Stand` line briefly belongs to a different date than the heading**,
+  because the header names the day being fetched while the timestamp still describes the day on
+  screen. No data is wrong and the window is one request long.
 
 ## Alternatives rejected
 

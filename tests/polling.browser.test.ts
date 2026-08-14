@@ -48,6 +48,10 @@ interface Server {
   requests: string[]
   entries: Day['entries']
   failing: boolean
+  /** Answers 401, as an ended session does. A flag rather than a second route, so the day stub is
+   *  never unregistered - removing it would let the board keep rendering stale state and make an
+   *  assertion about what is on screen mean nothing. */
+  unauthorized: boolean
   delayMs: number
   inFlight: number
   mostInFlight: number
@@ -58,6 +62,7 @@ async function stubDay(page: Page): Promise<Server> {
     requests: [],
     entries: [ANNA],
     failing: false,
+    unauthorized: false,
     delayMs: 0,
     inFlight: 0,
     mostInFlight: 0,
@@ -73,6 +78,11 @@ async function stubDay(page: Page): Promise<Server> {
     if (server.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, server.delayMs))
 
     server.inFlight -= 1
+
+    if (server.unauthorized) {
+      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: 'Bitte anmelden.' }) })
+      return
+    }
 
     if (server.failing) {
       await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'kaputt' }) })
@@ -313,4 +323,125 @@ test('a response slower than the interval never produces two requests at once', 
   await expect.poll(() => server.inFlight).toBe(0)
 
   expect(server.mostInFlight).toBe(1)
+})
+
+test('a poll that finds an ended session closes the form and stops asking', async ({ page }) => {
+  // The logic review's first blocker, and the ADR consequence that was written down and never
+  // asserted. A navigation already closed the form on a 401 and carried a comment saying why; the
+  // poll is a second door onto the same bug and a worse one, because it interrupts somebody who is
+  // typing rather than somebody who pressed a button.
+  const server = await openBoard(page)
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await page.getByLabel('Kundin / Kunde').fill('Halb getippter Name')
+
+  server.unauthorized = true
+  await pollAndSettle(page)
+  await expect(page.getByLabel('Salon-Passwort', { exact: true })).toBeVisible()
+
+  // It stops rather than retrying an ended session every thirty seconds.
+  const after = server.requests.length
+  await tick(page, 4)
+  await page.waitForTimeout(300)
+  expect(server.requests.length).toBe(after)
+
+  // **Now log back in**, which is the only place the bug is visible. While `needsLogin` is true the
+  // login screen replaces the whole tree, so the dialogue is absent whether or not it was closed -
+  // asserting its absence here passes with the fix reverted, and did.
+  server.unauthorized = false
+  const loads = server.requests.length
+  await page.route('**/api/login', async (route) => {
+    await route.fulfill({ status: 204, body: '' })
+  })
+  await page.getByLabel('Salon-Passwort', { exact: true }).fill('egal')
+  await page.getByRole('button', { name: 'Anmelden' }).click()
+
+  // A real load after the login, not leftover state: the board asked again and was answered.
+  await expect.poll(() => server.requests.length).toBeGreaterThan(loads)
+  await expect(page.getByText('Anna Schmidt')).toBeVisible()
+  // The form must not come back with its typing gone and a captured date pointing at a day nobody
+  // is looking at.
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toHaveCount(0)
+})
+
+test('hiding and showing during a request does not open a second one or a second chain', async ({ page }) => {
+  // The logic and security passes found this one independently, and both measured it. Without the
+  // in-flight guard, `clearTimeout` has nothing to clear while a request is open, so the
+  // visibility handler starts a second - and each surviving chain overwrites the single timer
+  // variable, orphaning the other. Twenty cycles measured 21 concurrent requests.
+  const server = await openBoard(page)
+  server.delayMs = 1_200
+
+  for (let cycle = 0; cycle < 5; cycle += 1) {
+    await page.clock.runFor(INTERVAL)
+    await page.waitForTimeout(150)
+    await setHidden(page, true)
+    await setHidden(page, false)
+  }
+
+  await expect.poll(() => server.inFlight).toBe(0)
+  expect(server.mostInFlight).toBe(1)
+
+  // And exactly one chain survives: one interval must produce one request, not five.
+  server.delayMs = 0
+  const before = server.requests.length
+  await tick(page)
+  await page.waitForTimeout(400)
+  expect(server.requests.length).toBe(before + 1)
+})
+
+test('a day held while the form is open is dropped by a navigation, not applied over newer data', async ({ page }) => {
+  // The logic review's second blocker. The parcel was guarded only by its date, and the date is
+  // not enough: it survived Back and Forward, and a navigation that re-fetched the same day
+  // brought newer data that the older parcel then clobbered on close - with a fresh `Stand`, so
+  // the board claimed to be current while showing an entry that had already been removed.
+  const server = await openBoard(page)
+
+  // Somewhere to go back to. Opening the board at a URL leaves no history behind it, and Back and
+  // Forward are the gesture this is about - a mouse's side button does it, which is how the
+  // mid-drag write bug was found two sessions ago.
+  await page.getByRole('button', { name: 'Vorheriger Tag' }).click()
+  await expect(page.getByRole('heading', { name: 'Mittwoch, 12. August 2026' })).toBeVisible()
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+
+  await page.getByRole('button', { name: /Anna Schmidt/ }).click()
+  await expect(page.getByRole('heading', { name: 'Eintrag bearbeiten' })).toBeVisible()
+
+  // A poll lands and is held, holding the board as it was: Anna alone.
+  await pollAndSettle(page)
+
+  // Somebody books Bernd, and a navigation round trip brings him in properly.
+  server.entries = [ANNA, BERND]
+  await page.goBack()
+  await expect(page.getByRole('heading', { name: 'Mittwoch, 12. August 2026' })).toBeVisible()
+  await page.goForward()
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+  await expect(page.getByText('Bernd Klein')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Abbrechen' }).click()
+
+  // The stale parcel must not put the board back to before Bernd existed.
+  await page.waitForTimeout(300)
+  await expect(page.getByText('Bernd Klein')).toBeVisible()
+})
+
+test('a failed day step does not brand the board stale while the poll keeps working', async ({ page }) => {
+  // The logic review's fourth blocker, and it was my own ruling that caused it: folding a failed
+  // navigation into the same phrase pinned `nicht aktuell` on until somebody asked for another
+  // day, while the poll went on succeeding and moving the timestamp next to it.
+  const server = await openBoard(page)
+  const stand = page.locator('.topbar__stand')
+
+  server.failing = true
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByRole('alert')).toContainText('konnte nicht geladen werden')
+
+  // The banner says which day failed, in a sentence. The Stand line is about the poll.
+  server.failing = false
+  server.entries = [ANNA, BERND]
+  await pollAndSettle(page)
+
+  await expect(page.getByText('Bernd Klein')).toBeVisible()
+  await expect(stand).not.toContainText('nicht aktuell')
 })
