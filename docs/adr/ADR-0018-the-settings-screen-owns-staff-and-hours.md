@@ -1,7 +1,7 @@
 # ADR-0018: The settings screen owns staff and hours
 
-- Status: accepted. **Staff and credentials built on 2026-08-13; the core hours are not**, and
-  until they are, ADR-0015's constant is still the only place they live
+- Status: accepted and **fully built**: staff and credentials on 2026-08-13, the core hours on
+  2026-08-14. `CORE_HOURS` no longer exists in `src/calendar/opening.ts`
 - Date: 2026-08-13
 - Amends: [ADR-0002](ADR-0002-employees-are-deactivated-never-deleted.md) with one narrow
   exception, and supersedes the "core hours are a constant, not configuration" paragraph of
@@ -95,6 +95,46 @@ for their own change. Four things this ruling did not say, decided while writing
   whose password nobody knows, with the way back being the master password out of the environment.
   The master-password screen keeps its single field, where a typo costs re-typing something you
   are already holding.
+
+## What building the hours settled, on 2026-08-14
+
+The rest of it. `CORE_HOURS` is gone, `core_hours` holds seven rows, `GET /api/day` sends
+`coreHours` for the day it is answering, and the board draws that and computes nothing. Six things
+this ruling did not say, five of them asked of the owner:
+
+- **One continuous band per weekday, not two.** A salon that shuts over lunch cannot shade that
+  hour. Asked, and answered: the constant could not express it either, nobody has wanted it, and
+  the alternative is a row-per-band table plus overlap validation for a colour.
+- **Quarter hours only, from a dropdown.** Asked, and answered. The board is a grid of 15-minute
+  rows, so 09:07 cannot be drawn where it says - and rounding it would leave the number on the
+  settings screen and the band on the board quietly disagreeing. Refusing what cannot be drawn is
+  honest; snapping it silently is not.
+- **The whole week saves in one press.** Asked, and answered over a save per row. Somebody sits
+  down once a year and fixes the hours; seven requests would be seven places to fail and a
+  half-edited week for the screen to explain.
+- **A backwards or zero-length range is refused, naming the weekday**, rather than read as a closed
+  day. Asked, and answered. `Geschlossen` is a tick, and it is the only way to say a day is shut:
+  turning `09:00` to `09:00` into "closed" would throw away what somebody typed with nothing on
+  screen saying so.
+- **The screen says in German that the hours colour the board and refuse nothing.** Asked, and
+  answered. A screen that lets somebody edit opening times is exactly where they conclude that
+  booking outside them will now be refused, and ADR-0015's whole ruling is that it never is. That
+  sentence is the only place the belief can be corrected.
+- **A tab that already has the board open keeps the old shading**, until it loads any day. Asked,
+  and accepted: it is a colour, not a booking, and polling closes it for free.
+
+And three that are mine:
+
+- **The server applies the holiday rule, not the client.** `Day.coreHours` is one answer rather
+  than two rules a client has to combine, so Sunday, Monday and Karfreitag arrive identically. The
+  Hessen list stays in the code where ADR-0016 put it; only the decision moved.
+- **06:00-20:00 is checked against `grid.ts` and deliberately not written into a SQL constraint**,
+  for the same reason `001_init.sql` does not constrain appointment times: that window has one
+  home, and a copy of it in a `CHECK` is a second place for it to disagree with itself. The
+  structural rules that are not about the window - open with both times or shut with neither, and
+  an end after a beginning - are constraints.
+- **`germanWeekday` is formatted from a reference Monday**, not written out as seven strings, so
+  there is no second spelling of `Mittwoch` to drift from the one `longGermanDate` produces.
 
 ## Known, accepted, and not fixed here
 

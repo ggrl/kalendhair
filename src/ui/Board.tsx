@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import type { Day, Entry } from '../calendar/types'
+import type { CoreHours, Day, Entry } from '../calendar/types'
 import {
   DAY_ENDS_AT,
   DAY_STARTS_AT,
@@ -13,7 +13,6 @@ import {
   slotFromWallClock,
   whyNotFree,
 } from '../calendar/grid'
-import { coreHoursOn } from '../calendar/opening'
 import { EntryBox } from './EntryBox'
 import { previewOf } from './gesture'
 import type { Gesture, Preview } from './gesture'
@@ -54,15 +53,16 @@ function undrawnReason(entry: Entry, hasColumn: boolean): string | null {
  * The stretches of the day the salon is not normally working, as grid rows.
  *
  * Shading only: ADR-0015. Nothing here refuses a booking, and `grid.ts` still owns the bookable
- * window - 06:00 to 20:00, every day, for everybody. A closed day comes back as one band covering
- * the board.
+ * window - 06:00 to 20:00, every day, for everybody. A closed day arrives as null and comes back
+ * as one band covering the board, which is the same answer for Sunday, Monday and a public
+ * holiday: ADR-0018 has the server decide that, so the client combines no rules of its own.
  *
- * The slots are clamped because `CORE_HOURS` is a hand-edited constant: hours reaching outside the
- * bookable window would otherwise ask the grid for a negative row or one past its last, which the
- * browser answers by dropping the element out of the grid entirely.
+ * The slots are clamped because these times arrive over the network. The API refuses hours outside
+ * the bookable window, so a band reaching past the edge means the server is wrong - and the way
+ * the browser reports a negative grid row or one past the last is to drop the element out of the
+ * grid entirely, which looks exactly like a salon that is open all day.
  */
-function closedBands(date: string): { startSlot: number; endSlot: number }[] {
-  const core = coreHoursOn(date)
+function closedBands(core: CoreHours | null): { startSlot: number; endSlot: number }[] {
   if (core === null) return [{ startSlot: 0, endSlot: SLOT_COUNT }]
 
   const opens = Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT)
@@ -374,7 +374,7 @@ export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragge
         {/* Behind everything else, and never in the way of a pointer: the hours the salon does not
             normally work, so the ordinary working day is the white part. It stops at column 2 so
             the hour scale stays plain. */}
-        {closedBands(day.date).map((band) => (
+        {closedBands(day.coreHours).map((band) => (
           <div
             key={band.startSlot}
             className="board__closed"

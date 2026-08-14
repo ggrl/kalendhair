@@ -1,4 +1,4 @@
-import type { Day, EntryKind, StaffMember } from '../calendar/types'
+import type { CoreHoursDay, Day, EntryKind, StaffMember } from '../calendar/types'
 import { PIN_HEADER } from '../calendar/types'
 
 /**
@@ -221,6 +221,16 @@ export async function changePassword(pin: string, password: string): Promise<voi
 
 export async function changePin(pin: string, newPin: string): Promise<void> {
   await settings(pin, '/pin', { method: 'POST', body: JSON.stringify({ pin: newPin }) })
+}
+
+/** The salon's core hours, all seven weekdays, Monday first. ADR-0018. */
+export async function fetchHours(pin: string): Promise<CoreHoursDay[]> {
+  return (await (await settings(pin, '/hours')).json()) as CoreHoursDay[]
+}
+
+/** The whole week in one request, because the server writes all seven or none of them. */
+export async function saveHours(pin: string, week: CoreHoursDay[]): Promise<void> {
+  await settings(pin, '/hours', { method: 'PUT', body: JSON.stringify({ week }) })
 }
 
 /**

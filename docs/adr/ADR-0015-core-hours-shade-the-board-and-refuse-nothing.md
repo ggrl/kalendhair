@@ -4,8 +4,10 @@
   [ADR-0016](ADR-0016-hessen-holidays-are-a-list-in-the-code.md) took the no-public-holidays
   paragraph: Hessen's holidays are a hardcoded list and shade a whole day.
   [ADR-0018](ADR-0018-the-settings-screen-owns-staff-and-hours.md) takes the hours-as-a-constant
-  paragraph: they move into the database so a settings screen can change them, which is not built
-  yet. The rule that shading refuses nothing stands, and it is the important half.
+  paragraph: they moved into the database on 2026-08-14 so the settings screen can change them,
+  and `CORE_HOURS` no longer exists. The rule that shading refuses nothing stands untouched, and
+  it is the important half - the screen that edits the hours now says so in German, because that
+  is where somebody would otherwise conclude the opposite.
 - Date: 2026-08-13
 
 ## Context
@@ -44,8 +46,9 @@ salon, or the day the hours change often enough that somebody wants it without a
 
 > Superseded by [ADR-0018](ADR-0018-the-settings-screen-owns-staff-and-hours.md) on 2026-08-13,
 > before a line of it was written: that day arrived when the owner asked for a settings screen. The
-> hours move into the database and `GET /api/day` sends them. The sentence above is kept because it
-> named the condition under which it would stop being true, and then that condition happened.
+> hours moved into the database on 2026-08-14 and `GET /api/day` sends them. The sentence above is
+> kept because it named the condition under which it would stop being true, and then that condition
+> happened - twelve hours later, which is the shortest life any ruling in this folder has had.
 
 **There is no calendar of public holidays.** 25 December reads as an ordinary Friday. Inventing
 one means a source of truth for holidays, a region, and a rule for the ones that move - and the
@@ -62,6 +65,10 @@ paper page did not have one either.
 - The shading is a claim about the salon, so it is wrong the moment the hours change and nobody
   edits the constant. That is the cost of it not being configuration, and it is one line plus a
   release.
+
+  > Closed on 2026-08-14 by ADR-0018. There is no constant and no release: the salon edits the
+  > hours on the settings screen. What replaces this cost is a smaller one - the hours have no
+  > history, so editing Saturday re-shades every Saturday that ever was.
 - Nothing about the write path, the constraint, the colours or the drag rules moves. The board
   gained one more thing it draws and no rule at all.
 - A weekday is derived from the date parsed as UTC midnight, the same way `dates.ts` does it, so

@@ -50,11 +50,13 @@ does not, and a master password in the environment that can reset the other two 
 No email of any kind - no reset links, no notifications. See ADR-0017 and ADR-0018, which record
 what was rejected on the way, including an email reset the owner proposed and withdrew.
 
-Of that, what exists today is everything except the core hours: the login screen, the session that
-a password change ends, the master password's reset screen, and behind the PIN, the screen that
-manages the staff list and both credentials. The hours are still a constant in the code, so
-changing them is still a release - ADR-0015's own condition for becoming configuration, met and
-not yet acted on.
+All of that exists as of 2026-08-14: the login screen, the session that a password change ends, the
+master password's reset screen, and behind the PIN, the screen that manages the staff list, both
+credentials and the core hours. The hours are seven rows in the database, edited as one week and
+chosen from quarter hours between 06:00 and 20:00, with `Geschlossen` for a day the salon does not
+work. `GET /api/day` sends the day's hours and the board draws them, so changing them takes no
+release - ADR-0015's own condition for becoming configuration, met and now acted on. They still
+refuse nothing, and the screen says so in German where somebody would otherwise assume otherwise.
 
 The board is a CSS grid of 15-minute rows from 06:00 to 20:00, one column per active
 employee, with absolutely positioned appointment boxes: drag to create, drag to move

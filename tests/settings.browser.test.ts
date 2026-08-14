@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import type { Page, Request } from '@playwright/test'
-import type { Day, StaffMember } from '../src/calendar/types.js'
+import type { CoreHoursDay, Day, StaffMember } from '../src/calendar/types.js'
 import { PIN_HEADER } from '../src/calendar/types.js'
 
 // ADR-0018's screen in a real browser. The API is stubbed, as everywhere in this folder: what is
@@ -12,9 +12,21 @@ const PIN = '2468'
 const DAY: Day = {
   date: '2026-08-13',
   today: '2026-08-13',
+  coreHours: { from: '09:00', to: '18:00' },
   employees: [{ id: 'marco', name: 'Marco' }],
   entries: [],
 }
+
+/** The week the stubbed server holds: the salon's own, with Monday and Sunday shut. */
+const WEEK: CoreHoursDay[] = [
+  { weekday: 1, hours: null },
+  { weekday: 2, hours: { from: '09:00', to: '18:00' } },
+  { weekday: 3, hours: { from: '09:00', to: '18:00' } },
+  { weekday: 4, hours: { from: '09:00', to: '18:00' } },
+  { weekday: 5, hours: { from: '09:00', to: '18:00' } },
+  { weekday: 6, hours: { from: '08:00', to: '13:30' } },
+  { weekday: 7, hours: null },
+]
 
 const STAFF: StaffMember[] = [
   { id: 'marco', name: 'Marco', active: true, deletable: false },
@@ -64,6 +76,10 @@ async function stubApi(page: Page): Promise<Request[]> {
 
     if (request.url().endsWith('/staff') && request.method() === 'GET') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STAFF) })
+      return
+    }
+    if (request.url().endsWith('/hours') && request.method() === 'GET') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(WEEK) })
       return
     }
     await route.fulfill({ status: 204, body: '' })
@@ -129,7 +145,8 @@ test('renames somebody without moving them, and sends what was typed', async ({ 
 
   await page.getByRole('button', { name: 'Umbenennen' }).first().click()
   await page.getByLabel('Name von Marco').fill('Marco B.')
-  await page.getByRole('button', { name: 'Speichern' }).click()
+  // Exact, because the Kernzeiten section has a Speichern of its own and a loose match finds both.
+  await page.getByRole('button', { name: 'Speichern', exact: true }).click()
 
   await expect(page.getByLabel('Name von Marco')).toHaveCount(0)
   const patch = seen.find((request) => request.method() === 'PATCH')
@@ -200,4 +217,79 @@ test('changing the salon password lands on the login screen, because it logs eve
   // click. What must not happen is the settings screen sitting there with an error on it.
   await expect(page.getByRole('heading', { name: 'Terminplan' })).toBeVisible()
   await expect(page.getByLabel('Salon-Passwort', { exact: true })).toBeVisible()
+})
+
+test('shows the week as it stands, and says what the hours do not do', async ({ page }) => {
+  await stubApi(page)
+  await openSettings(page)
+
+  await expect(page.getByRole('heading', { name: 'Kernzeiten' })).toBeVisible()
+
+  // The sentence exists because this screen is exactly where somebody concludes that editing
+  // opening times will start refusing bookings. ADR-0015 says it never does.
+  await expect(page.getByText('färben nur den Kalender')).toBeVisible()
+  await expect(page.getByText('von 06:00 bis 20:00 möglich')).toBeVisible()
+
+  await expect(page.getByLabel('Samstag von')).toHaveValue('08:00')
+  await expect(page.getByLabel('Samstag bis')).toHaveValue('13:30')
+
+  // A closed day says so with the tick and shows no times at all - two ways to say "shut" is how
+  // they end up disagreeing.
+  await expect(page.getByLabel('Sonntag von')).toHaveCount(0)
+  await expect(page.getByLabel('Montag von')).toHaveCount(0)
+})
+
+test('saves the whole week in one request, not the day that changed', async ({ page }) => {
+  // The owner chose one button over a save per row: somebody sits down once a year and fixes the
+  // hours, and the server writes all seven or none of them.
+  const seen = await stubApi(page)
+  await openSettings(page)
+
+  await page.getByLabel('Samstag bis').selectOption('12:00')
+  await page.getByRole('button', { name: 'Kernzeiten speichern' }).click()
+
+  await expect.poll(() => seen.filter((request) => request.method() === 'PUT').length).toBe(1)
+  const put = seen.find((request) => request.method() === 'PUT')
+  expect(put?.url()).toContain('/api/settings/hours')
+  expect(put?.postDataJSON()).toEqual({
+    week: [
+      { weekday: 1, hours: null },
+      { weekday: 2, hours: { from: '09:00', to: '18:00' } },
+      { weekday: 3, hours: { from: '09:00', to: '18:00' } },
+      { weekday: 4, hours: { from: '09:00', to: '18:00' } },
+      { weekday: 5, hours: { from: '09:00', to: '18:00' } },
+      { weekday: 6, hours: { from: '08:00', to: '12:00' } },
+      { weekday: 7, hours: null },
+    ],
+  })
+})
+
+test('ticking Geschlossen takes the times away and sends null', async ({ page }) => {
+  const seen = await stubApi(page)
+  await openSettings(page)
+
+  const saturday = page.getByRole('listitem').filter({ hasText: 'Samstag' })
+  await saturday.getByRole('checkbox').check()
+  await expect(page.getByLabel('Samstag von')).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Kernzeiten speichern' }).click()
+
+  await expect.poll(() => seen.filter((request) => request.method() === 'PUT').length).toBe(1)
+  const sent = seen.find((request) => request.method() === 'PUT')?.postDataJSON() as {
+    week: { weekday: number; hours: unknown }[]
+  }
+  expect(sent.week.find((day) => day.weekday === 6)?.hours).toBeNull()
+})
+
+test('unticking a closed day offers a working day rather than an empty pair of times', async ({ page }) => {
+  // There is no such thing as a half-set day - the table refuses one - so unticking has to put
+  // something in both dropdowns. The salon's own ordinary day is the least surprising answer.
+  await stubApi(page)
+  await openSettings(page)
+
+  const sunday = page.getByRole('listitem').filter({ hasText: 'Sonntag' })
+  await sunday.getByRole('checkbox').uncheck()
+
+  await expect(page.getByLabel('Sonntag von')).toHaveValue('09:00')
+  await expect(page.getByLabel('Sonntag bis')).toHaveValue('18:00')
 })

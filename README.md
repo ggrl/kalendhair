@@ -35,7 +35,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Moving and resizing by dragging, with a form for the details | done |
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
 | A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
-| The salon's core hours, editable from that screen instead of hardcoded | not started - the rest of ADR-0018 |
+| The salon's core hours, editable from that screen instead of hardcoded | done |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
@@ -165,7 +165,7 @@ re-decide.
 | [0015](docs/adr/ADR-0015-core-hours-shade-the-board-and-refuse-nothing.md) | Core hours shade the board and refuse nothing |
 | [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
 | [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - built, except the PIN check, which has nothing to guard yet |
-| [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - staff and credentials built, hours not |
+| [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - all three built |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

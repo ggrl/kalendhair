@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { StaffMember } from '../calendar/types'
+import type { CoreHoursDay, StaffMember } from '../calendar/types'
+import { germanWeekday } from '../calendar/dates'
+import { DAY_ENDS_AT, DAY_STARTS_AT, SLOT_COUNT, SLOT_MINUTES, minutesSinceMidnight, wallClockFromMinutes } from '../calendar/grid'
 import {
   PinRefused,
   Unauthenticated,
   addStaff,
   changePassword,
   changePin,
+  fetchHours,
   fetchStaff,
   moveStaff,
   removeStaff,
+  saveHours,
   unlockSettings,
   updateStaff,
 } from './api'
@@ -19,9 +23,6 @@ import {
  * The PIN is asked for every time this opens and lives in this component's state for exactly as
  * long as it is on screen - the owner chose that over anything longer-lived, and it means there
  * is no ticket to leave lying around on the front desk machine. Going back to the board drops it.
- *
- * The core hours are the third thing ADR-0018 puts here and they are not built: they move
- * `opening.ts` half into the database and grow `GET /api/day` a field, which is its own change.
  */
 export function Settings({ onClose, onSignedOut }: { onClose: () => void; onSignedOut: () => void }) {
   const [pin, setPin] = useState<string | null>(null)
@@ -216,6 +217,7 @@ function SettingsScreen({
       {notice !== null && <p className="settings__notice">{notice}</p>}
 
       <StaffSection staff={staff} busy={busy} pin={pin} run={run} problem={problem} onRetry={reload} />
+      <HoursSection busy={busy} pin={pin} run={run} onSaved={setNotice} />
       <CredentialsSection busy={busy} pin={pin} run={run} onPinChanged={onLocked} />
     </main>
   )
@@ -377,6 +379,141 @@ function StaffSection({
         <input id="new-staff" value={newName} onChange={(event) => setNewName(event.target.value)} required />
         <button type="submit" disabled={busy}>
           Hinzufügen
+        </button>
+      </form>
+    </section>
+  )
+}
+
+/**
+ * Every time the board can be shaded from or to: 06:00 to 20:00, on the quarter hour.
+ *
+ * Built from `grid.ts` rather than written out, so the choices cannot outlive the window they
+ * belong to. A dropdown and not a typed field because the board draws 15-minute rows: 09:07 is a
+ * time the grid cannot put where it says, and offering it only to refuse it wastes somebody's
+ * afternoon.
+ */
+const TIME_CHOICES = Array.from({ length: SLOT_COUNT + 1 }, (_, index) =>
+  wallClockFromMinutes(minutesSinceMidnight(DAY_STARTS_AT) + index * SLOT_MINUTES),
+)
+
+/** What a day gets when somebody unticks `Geschlossen`: the salon's own ordinary working day. */
+const USUAL_DAY = { from: '09:00', to: '18:00' }
+
+/**
+ * The salon's core hours, the third thing ADR-0018 puts on this screen.
+ *
+ * The whole week is edited and then saved by one button, which is what the owner chose: somebody
+ * sits down once a year and fixes the hours, and a per-row save would be seven requests, seven
+ * places to fail, and a half-edited week the screen would have to explain.
+ */
+function HoursSection({ busy, pin, run, onSaved }: SectionProps & { onSaved: (notice: string) => void }) {
+  const [week, setWeek] = useState<CoreHoursDay[] | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
+
+  /**
+   * Loaded here rather than by the screen above, because this section is the only thing that
+   * wants it - and reloaded after a save for the same reason the staff list is: the database is
+   * what the next person to open this screen will see, not the draft this one was holding.
+   */
+  const load = useCallback(() => {
+    setProblem(null)
+    fetchHours(pin).then(setWeek, (error: unknown) => {
+      setProblem(error instanceof Error ? error.message : String(error))
+    })
+  }, [pin])
+
+  useEffect(load, [load])
+
+  const change = (weekday: number, hours: CoreHoursDay['hours']) => {
+    setWeek((current) => current?.map((day) => (day.weekday === weekday ? { ...day, hours } : day)) ?? null)
+  }
+
+  if (week === null) {
+    return (
+      <section className="settings__section">
+        <h2>Kernzeiten</h2>
+        {problem === null ? (
+          <p>Kernzeiten werden geladen …</p>
+        ) : (
+          <p>
+            <button type="button" onClick={load}>
+              Erneut versuchen
+            </button>
+          </p>
+        )}
+      </section>
+    )
+  }
+
+  return (
+    <section className="settings__section">
+      <h2>Kernzeiten</h2>
+      {/* The one place this belief can be corrected. A screen that lets somebody edit opening
+          times is exactly where they conclude that booking outside them will be refused - and
+          ADR-0015's whole ruling is that it is not. */}
+      <p className="settings__hint">
+        Diese Zeiten färben nur den Kalender: außerhalb ist er rot hinterlegt. Termine sind weiterhin an jedem
+        Tag von {DAY_STARTS_AT} bis {DAY_ENDS_AT} möglich, auch an Sonntagen und Feiertagen.
+      </p>
+
+      <form
+        className="settings__hours"
+        onSubmit={(event) => {
+          event.preventDefault()
+          run(saveHours(pin, week), () => {
+            onSaved('Die Kernzeiten wurden gespeichert.')
+            load()
+          }, false)
+        }}
+      >
+        <ul>
+          {week.map((day) => (
+            <li key={day.weekday}>
+              <span className="settings__weekday">{germanWeekday(day.weekday)}</span>
+
+              <label className="settings__closed">
+                <input
+                  type="checkbox"
+                  checked={day.hours === null}
+                  onChange={(event) => change(day.weekday, event.target.checked ? null : USUAL_DAY)}
+                />
+                Geschlossen
+              </label>
+
+              {day.hours !== null && (
+                <>
+                  <select
+                    aria-label={`${germanWeekday(day.weekday)} von`}
+                    value={day.hours.from}
+                    onChange={(event) => change(day.weekday, { from: event.target.value, to: day.hours!.to })}
+                  >
+                    {TIME_CHOICES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                  <span>bis</span>
+                  <select
+                    aria-label={`${germanWeekday(day.weekday)} bis`}
+                    value={day.hours.to}
+                    onChange={(event) => change(day.weekday, { from: day.hours!.from, to: event.target.value })}
+                  >
+                    {TIME_CHOICES.map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+
+        <button type="submit" disabled={busy}>
+          Kernzeiten speichern
         </button>
       </form>
     </section>

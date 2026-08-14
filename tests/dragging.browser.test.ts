@@ -77,6 +77,9 @@ function dayWith(entries: Day['entries']): Day {
   return {
     date: TODAY,
     today: TODAY,
+    // Nothing in this file is about the shading; it is here because the board draws what the
+    // server sends and this stub is the server. ADR-0018.
+    coreHours: { from: '09:00', to: '18:00' },
     employees: [
       { id: MARCO, name: 'Marco' },
       { id: JANA, name: 'Jana' },

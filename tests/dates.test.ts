@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, addMonths, addWeeks, isoWeek, longGermanDate } from '../src/calendar/dates.js'
+import { addDays, addMonths, addWeeks, germanWeekday, isoWeek, longGermanDate } from '../src/calendar/dates.js'
 import { isSalonDate } from '../src/calendar/salon-date.js'
 
 /** A step that is expected to land somewhere. Fails loudly rather than typing `!`. */
@@ -137,6 +137,30 @@ describe('the edges of the representable calendar', () => {
   it('still steps normally just inside the edges', () => {
     expect(addDays('9999-12-30', 1)).toBe('9999-12-31')
     expect(addDays('1000-01-01', 1)).toBe('1000-01-02')
+  })
+})
+
+describe('germanWeekday', () => {
+  it('names all seven, Monday first, as ISO 8601 counts them', () => {
+    // The settings screen labels its seven rows with these and the server names the weekday in a
+    // refusal with them, so an off-by-one here would tell somebody Saturday was refused when it
+    // was Sunday. Written out in full rather than spot-checked for exactly that reason.
+    expect([1, 2, 3, 4, 5, 6, 7].map(germanWeekday)).toEqual([
+      'Montag',
+      'Dienstag',
+      'Mittwoch',
+      'Donnerstag',
+      'Freitag',
+      'Samstag',
+      'Sonntag',
+    ])
+  })
+
+  it('agrees with the weekday longGermanDate names for the same day', () => {
+    // Two spellings of Mittwoch is the thing this test exists to stop: one from a hardcoded list
+    // and one from Intl would drift the day somebody edited the list.
+    expect(longGermanDate('2026-08-13').startsWith(germanWeekday(4))).toBe(true)
+    expect(longGermanDate('2026-08-16').startsWith(germanWeekday(7))).toBe(true)
   })
 })
 

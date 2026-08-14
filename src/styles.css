@@ -965,6 +965,34 @@ body {
   font-weight: 600;
 }
 
+.settings__hours ul {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.settings__hours li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--rule-quarter);
+}
+
+/* A fixed width, so the seven dropdowns line up under each other rather than stepping in and out
+   with the length of the weekday's name. Sonntag is the short one and Donnerstag the long one. */
+.settings__weekday {
+  width: 7.5rem;
+  font-weight: 600;
+}
+
+.settings__closed {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+
 .settings__credential {
   display: flex;
   flex-direction: column;

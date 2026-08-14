@@ -101,12 +101,27 @@ function dayFor(date: string): Day {
   return {
     date,
     today: TODAY,
+    coreHours: date in CORE_HOURS ? CORE_HOURS[date] : { from: '09:00', to: '18:00' },
     employees: [
       { id: MARCO, name: 'Marco' },
       { id: JANA, name: 'Jana' },
     ],
     entries,
   }
+}
+
+/**
+ * What the server says the core hours are, per date. ADR-0018: the board draws this and computes
+ * nothing, so these are the whole truth about where the shading goes.
+ *
+ * Thursday is deliberately **not** the 09:00-18:00 the old constant held. A board that quietly
+ * fell back to a hardcoded week would still pass a test that asked for the values that constant
+ * had, which is the one way this test could look green and prove nothing.
+ */
+const CORE_HOURS: Record<string, { from: string; to: string } | null> = {
+  '2026-08-13': { from: '10:00', to: '17:00' },
+  '2026-08-15': { from: '08:00', to: '13:30' },
+  '2026-08-16': null,
 }
 
 async function stubApi(page: Page): Promise<void> {
@@ -457,6 +472,11 @@ test('an entry whose column is missing is reported, not dropped', async ({ page 
       json: {
         date: '2026-08-13',
         today: '2026-08-13',
+        // Hand-built rather than taken from `dayFor`, so every field the board needs has to be
+        // spelled out here. Leaving `coreHours` off blanks the whole board rather than losing the
+        // shading - see the note in the pull request; the type is what stops that happening for
+        // real, and nothing else does.
+        coreHours: null,
         employees: [{ id: MARCO, name: 'Marco' }],
         entries: [
           {
@@ -484,22 +504,29 @@ test('an entry whose column is missing is reported, not dropped', async ({ page 
   await expect(report).toContainText('keine Spalte')
 })
 
-test('the board shades the hours the salon does not normally work', async ({ page }) => {
-  // ADR-0015, and shading only: the bookable window is still 06:00-20:00 and nothing here refuses
-  // a booking. 2026-08-13 is a Thursday, so the white part runs 09:00 to 18:00.
+test('the board shades the hours the server says the salon does not work', async ({ page }) => {
+  // ADR-0015 for what the shading means, ADR-0018 for where it comes from: the server sends the
+  // hours and the board draws them. Shading only - the bookable window is still 06:00-20:00 and
+  // nothing here refuses a booking.
+  //
+  // The stub says 10:00 to 17:00 for this Thursday, which is **not** what the deleted constant
+  // said. A board that had kept its own copy of the week would draw 09:00 to 18:00 here and fail.
   await page.goto('/?date=2026-08-13')
 
   const bands = page.locator('.board__closed')
   await expect(bands).toHaveCount(2)
 
-  // Rows are 1-based in CSS grid, so 06:00 to 09:00 is rows 1 to 12 and 18:00 to 20:00 is 49 to 56.
+  // Rows are 1-based in CSS grid, so 06:00 to 10:00 is rows 1 to 16 and 17:00 to 20:00 is 45 to 56.
   await expect(bands.first()).toHaveCSS('grid-row-start', '1')
-  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 12')
-  await expect(bands.last()).toHaveCSS('grid-row-start', '49')
-  await expect(bands.last()).toHaveCSS('grid-row-end', 'span 8')
+  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 16')
+  await expect(bands.last()).toHaveCSS('grid-row-start', '45')
+  await expect(bands.last()).toHaveCSS('grid-row-end', 'span 12')
 })
 
-test('a Saturday closes at half past one, and a Sunday is shaded all day', async ({ page }) => {
+test('a half-hour edge lands on the grid, and a closed day is shaded all day', async ({ page }) => {
+  // 13:30 is the one core hour that is not on the hour, and null is how the server says a day is
+  // shut - which it answers for Sunday, for Monday and for a public holiday alike, so this is the
+  // board's whole behaviour for all three.
   await page.goto('/?date=2026-08-15')
   const saturday = page.locator('.board__closed')
   await expect(saturday).toHaveCount(2)
@@ -525,20 +552,11 @@ test('the shading takes no clicks, so closed hours still book', async ({ page })
   await expect(page.getByLabel('Von')).toHaveValue('06:00')
 })
 
-test('a public holiday is shaded like a Sunday, even on a working weekday', async ({ page }) => {
-  // ADR-0016. 25 December 2026 is a Friday, so nothing about the weekday explains the shading -
-  // only the Hessen holiday list does.
-  await page.goto('/?date=2026-12-25')
-
-  const bands = page.locator('.board__closed')
-  await expect(bands).toHaveCount(1)
-  await expect(bands.first()).toHaveCSS('grid-row-start', '1')
-  await expect(bands.first()).toHaveCSS('grid-row-end', 'span 56')
-
-  // And the day before is an ordinary Thursday with its two bands.
-  await page.goto('/?date=2026-12-24')
-  await expect(page.locator('.board__closed')).toHaveCount(2)
-})
+// The holiday shading used to be asserted here and is not any more. ADR-0018 moved the decision
+// to the server, so with a stubbed `/api/day` this file can only ever assert what the stub was
+// told to say - a test that looks like it proves the Hessen list and proves the fixture instead.
+// It is asserted in `tests/hours.db.test.ts` against the real thing, and the half that is still
+// the board's job - null means shade the whole day - is the Sunday case above.
 
 test('the top bar names the holiday, so the pink board is not a riddle', async ({ page }) => {
   // ADR-0016. Without the name, a board washed from 06:00 to 20:00 is ambiguous between "the

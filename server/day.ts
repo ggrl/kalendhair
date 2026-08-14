@@ -2,6 +2,7 @@ import type { Pool } from 'pg'
 import type { Day, Employee, Entry, EntryKind } from '../src/calendar/types.js'
 import { assignColours } from '../src/calendar/colours.js'
 import { todayIn } from '../src/calendar/salon-date.js'
+import { hoursOn } from './hours.js'
 
 interface EntryRow {
   id: string
@@ -75,9 +76,15 @@ export async function readDay(pool: Pool, date: string, salonTimeZone: string, n
     })),
   )
 
+  // ADR-0018: sent rather than computed by the client, so every machine shades the same day the
+  // same way and changing the hours takes no release. It is a display concept and nothing here
+  // refuses anything - ADR-0015 is unchanged.
+  const coreHours = await hoursOn(pool, date)
+
   return {
     date,
     today: todayIn(salonTimeZone, now),
+    coreHours,
     employees: employees.rows,
     entries: entries.rows.map((row): Entry => ({
       id: row.id,
