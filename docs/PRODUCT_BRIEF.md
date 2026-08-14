@@ -95,7 +95,8 @@ bookable every day of the week, which is the half of this line that still holds.
 
 What changed on 2026-08-13, by ADR-0015: the board now *draws* the salon's core hours. Tuesday
 to Friday 09:00-18:00 and Saturday 08:00-13:30 stay white; everything else, and all of Sunday
-and Monday, is shaded light red. ADR-0016 added Hessen's public holidays to that, as a hardcoded
+and Monday, is shaded grey - light red until 2026-08-14, changed by the owner on their own screen
+because red read as a fault about hours that are perfectly ordinary. ADR-0016 added Hessen's public holidays to that, as a hardcoded
 list of fifty dates through 2030 that expires with a failing test rather than in silence. It is
 all shading and not a rule, it takes no clicks, and the sentence that used to say there is no
 concept of opening days is therefore no longer true.

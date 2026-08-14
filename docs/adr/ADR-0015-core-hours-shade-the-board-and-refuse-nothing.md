@@ -19,6 +19,11 @@ The salon does not work most of that: Tuesday to Friday it is 09:00 to 18:00, Sa
 The owner asked for the ordinary working hours to stay white and everything else - including
 all of Sunday and Monday - to be light red.
 
+> The colour changed to grey on 2026-08-14, by the same owner looking at the built screen: red
+> reads as a fault, and these are ordinary hours. Kept as written because it records what was
+> asked for at the time. The ruling was never about which colour - only that there is one, that it
+> is translucent, and that it refuses nothing.
+
 The brief says the opposite about the concept, not about the colour: *"There is no concept of
 opening days and this keeps it that way."* That line was written to stop opening hours becoming
 a rule that refuses bookings. It is now half wrong and has been amended: the board knows the

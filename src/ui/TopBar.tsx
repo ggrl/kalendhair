@@ -33,7 +33,7 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onRelo
           KW {week}
           {/* Saying which day this is beats leaving it to a greyed-out button. */}
           {isToday && <span className="topbar__istoday"> · heute</span>}
-          {/* ADR-0016. The board is washed pink on a holiday, and without the name that is
+          {/* ADR-0016. The board is shaded top to bottom on a holiday, and without the name that is
               ambiguous between "the salon is shut" and "the software has a fault". It sits here
               rather than in the heading because the heading is the date and nothing else, and
               because this line already reads as a list of things about the day. */}

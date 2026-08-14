@@ -504,7 +504,7 @@ function HoursSection({
           times is exactly where they conclude that booking outside them will be refused - and
           ADR-0015's whole ruling is that it is not. */}
       <p className="settings__hint">
-        Diese Zeiten färben nur den Kalender: außerhalb ist er rot hinterlegt. Termine sind weiterhin an jedem
+        Diese Zeiten färben nur den Kalender. Termine sind weiterhin an jedem
         Tag von {DAY_STARTS_AT} bis {DAY_ENDS_AT} möglich, auch an Sonntagen und Feiertagen.
       </p>
 
