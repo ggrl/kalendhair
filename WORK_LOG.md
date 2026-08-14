@@ -2,6 +2,88 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-13, sixth session - the salon can manage its own staff
+
+ADR-0018's staff and credentials halves, built and merged. **The core hours are the part that is
+left**, and they are the next thing to build. Two review passes again, and the logic pass again
+returned NO-SHIP on something a green suite could not see.
+
+### Where things stand
+
+- **`main` is at `b48719e`** and is the only branch. PR #19 merged the previous session's note;
+  PR #20 merged this. Nothing in flight, working tree clean.
+- **Eighteen ADRs.** ADR-0018 is now "staff and credentials built, hours not", and both it and
+  ADR-0017 gained a "what building it settled" section - read those before touching either area,
+  because that is where the decisions live that the original rulings did not make.
+- **Both of the salon's own doors now exist**: the login screen (fifth session) and the settings
+  screen behind the PIN (this one). The one thing the salon still cannot change from a screen is
+  the core hours.
+
+### What was built, and where
+
+- **`server/staff.ts`** - the first code in this application that writes to `employee`. Read, add,
+  rename, reorder, deactivate, reactivate, delete. Delete only for somebody who has never held an
+  entry, which the foreign key enforces and this turns into a German sentence.
+- **`/api/settings/*`** in `server/app.ts`, behind the session guard and a new PIN guard. The PIN
+  travels in the `x-salon-pin` header, so one guard covers the reads too and no PIN reaches a URL.
+- **`src/ui/Settings.tsx`** - the screen, reached from `Einstellungen` in the top bar, with the
+  state in the address bar. Password and PIN changes sit in it, on ADR-0017's mechanism.
+- `src/calendar/types.ts` gained `StaffMember` and `PIN_HEADER`, which both sides now share rather
+  than each keeping their own copy.
+
+### What the owner decided, and what I decided
+
+- **Scope**: staff and credentials together, hours later. Asked, and answered.
+- **The PIN is asked for every time the screen opens.** Asked, and answered - chosen over a
+  thirty-minute unlock. It is why there is no ticket of any kind: the PIN is checked on every
+  settings request and held in memory only while the screen is open.
+- Mine, and recorded in ADR-0018: 403 for a wrong PIN against 401 for an ended session, renumbering
+  the whole list on a move rather than swapping two rows, and locking the screen when the PIN
+  changes under it.
+
+### What was verified, and how
+
+- On `main` after the merge: `npm run verify` green (115 unit), `npm run test:db` green (114
+  against a real Postgres), `npm run test:e2e` green (83 in a browser).
+- **Against a running server, not only the suite.** The whole walk through the real screen - add
+  somebody, move them up, rename them, deactivate a stylist - and then the board on the way back,
+  which had lost that column *and their appointments*, exactly as ADR-0012 says. Also the delete
+  refusal against a stylist with real appointments, the malformed id answering 404, and the PIN
+  guard answering 403 without the header and 200 with it.
+
+### What was NOT verified
+
+- **Nobody but me has used this screen.** Every judgement in it about what a receptionist will do
+  is mine.
+- **No employee row has a version stamp**, so two people renaming one stylist in the same minute is
+  last-write-wins. ADR-0003 covers appointments, where the race is real; this is not that.
+- The core hours are still a constant, so nothing about editing them has been tried at all.
+
+### Unfinished, and what comes next
+
+1. **The rest of ADR-0018: the core hours.** They move out of `src/calendar/opening.ts` into the
+   database, `GET /api/day` grows a field, and `Board.tsx` draws the shading from that rather than
+   computing it. The holiday half of `opening.ts` stays put - ADR-0016 - so that file ends with one
+   foot on each side, and ADR-0018 already says what to do if that reads badly.
+2. Polling, and the remaining navigation aids: date picker, month steps, arrow keys.
+3. The container and the VPS, behind the brief's blocking backup gate. That deploy is also the day
+   `COOKIE_SECURE` and `trust proxy` matter - both are written up in ADR-0017.
+4. Two things named in the ADRs and deliberately not fixed: an appointment can still be booked
+   against a deactivated stylist through the API, and guessing the PIN starves the thread pool that
+   serves the bundle.
+
+### What surprised me
+
+- **I contradicted myself in one branch and did not notice.** The reordering renumbers the list
+  because positions can tie - I wrote that comment myself - and the column order broke ties on the
+  *name*, so renaming somebody moved their column. Two things I wrote an hour apart, each true, and
+  together a bug on every day of the board.
+- **A test can be written to prove a claim and still be unable to fail.** The rename test used
+  positions 1 and 2. The claim it asserted was exactly the one that was broken, and it passed.
+- **`FOR UPDATE` did not do what I assumed.** Under READ COMMITTED the `ORDER BY` runs on the
+  snapshot from before the lock is granted, so two people pressing the arrows could lose a move.
+  The comment claiming otherwise was the more dangerous half.
+
 ## 2026-08-13, fifth session - the board goes behind a password
 
 ADR-0017 built and merged, after two review passes that between them returned one NO-SHIP and two
