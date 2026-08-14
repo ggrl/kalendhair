@@ -299,20 +299,56 @@ body {
   transform: translateX(-50%);
 }
 
+/* The day steps: no box at all, only the chevron.
+
+   Wide when there is room and narrow when there is not, with no breakpoint to step over. Below
+   about 1280px the strip is the 1.75rem it always was; past that it grows a pixel per pixel of
+   screen up to 9rem, so on a 1920px screen it is a 144px target near the edge - the shape of the
+   gesture, without the presentation app's invisible zone over the board itself.
+
+   The width comes off the board, which is why the cap is 9rem: the shell stops at 1600px, so at
+   that width the two strips take 288px and four stylists still have ~330px each. A salon of eight
+   at 1450px is the case where this starts sideways scrolling the board sooner than before - the
+   150px column minimum from ADR-0021 is what gives way, and it gives way to scrolling rather than
+   to squeezing. */
 .edge {
-  flex: 0 0 1.75rem;
+  flex: 0 0 clamp(1.75rem, 100vw - 1280px, 9rem);
   font-size: 1.5rem;
   line-height: 1;
   color: var(--muted);
-  background: #f6f6f4;
-  border: 1px solid var(--rule-hour);
-  border-radius: 0.4rem;
-  cursor: pointer;
+  background: none;
+  border: 0;
 }
 
+/* No border and no fill means the glyph is the whole control, so the glyph is what answers a
+   hover. The focus ring is deliberately NOT touched: with the box gone it is the only thing that
+   shows a keyboard user where they are, and the browser's own is better than one drawn here. */
 .edge:hover {
-  background: #ececea;
   color: var(--ink);
+}
+
+/* A one-way arrow, because the finger promised a button and this reads as "go that way" - the
+   pattern the owner asked for by name, from a presentation app.
+
+   Drawn here rather than named, because CSS has no one-way arrow cursor: the nearest keywords are
+   the resize pair, and an operating system is free to draw those as a double-headed arrow meaning
+   "drag to resize". White under black so it stays visible whatever it is over, hotspot at the tip,
+   and the resize keyword kept as the fallback for a browser that will not take the image.
+
+   Not verifiable by test: a cursor is drawn by the operating system and Playwright cannot
+   screenshot one. A test can assert which cursor was declared and nothing more. */
+.edge--prev {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M15 4 L7 12 L15 20' fill='none' stroke='white' stroke-width='5.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M15 4 L7 12 L15 20' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      7 12,
+    w-resize;
+}
+
+.edge--next {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Cpath d='M9 4 L17 12 L9 20' fill='none' stroke='white' stroke-width='5.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 4 L17 12 L9 20' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+      17 12,
+    e-resize;
 }
 
 /* As wide as the columns need, never narrower than the pane, and one width for both grids. */
