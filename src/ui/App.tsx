@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Day, Entry } from '../calendar/types'
-import { DAY_ENDS_AT, DAY_STARTS_AT } from '../calendar/grid'
+import { DAY_ENDS_AT, DAY_STARTS_AT, minutesSinceMidnight, wallClockFromMinutes } from '../calendar/grid'
 import { addDays, addWeeks, shortGermanDate } from '../calendar/dates'
 import { isSalonDate } from '../calendar/salon-date'
 import { Refused, Unauthenticated, createEntry, fetchDay, removeEntry, updateEntry } from './api'
@@ -9,6 +9,21 @@ import { EntryModal } from './EntryModal'
 import { Login } from './Login'
 import { Settings } from './Settings'
 import { TopBar } from './TopBar'
+
+/**
+ * The hour a new appointment starts in when nothing else says otherwise: the salon's opening hour,
+ * or 09:00 on a day it does not normally work.
+ *
+ * Hardcoded to 09:00 until a review pass pointed out that the comment beside it claimed "the first
+ * hour of the salon's day" while the code said nine o'clock - so a salon opening at 10:00 got a
+ * default sitting inside its own shaded closed band. The server accepts either; this makes the
+ * sentence true.
+ */
+function firstHourOf(day: Day): { startsAt: string; endsAt: string } {
+  const from = day.coreHours?.from ?? '09:00'
+  const start = minutesSinceMidnight(from)
+  return { startsAt: from, endsAt: wallClockFromMinutes(Math.min(start + 60, minutesSinceMidnight(DAY_ENDS_AT))) }
+}
 
 /**
  * The date lives in the address bar, so a refresh, a crash or a redeploy returns to the day
@@ -597,14 +612,19 @@ export function App() {
         // stylist and the first hour of the salon's day are a starting point to change, not a
         // proposal. `day.date` and not `pending`, because the form saves onto the day it captured
         // and that has to be the day whose board is underneath it.
+        // Null while a day is loading, too. The top bar sits outside the `inert` subtree - that
+        // covers the board only - so during a step the header names one day, the board underneath
+        // is another, and this button was live between them. A review pass clicked it mid-load and
+        // the appointment landed on the day just left, with the header saying otherwise and the
+        // form showing no date at all to contradict it.
         onAdd={
-          day.employees.length === 0
+          day.employees.length === 0 || loading
             ? null
             : () =>
                 setEditor({
                   date: day.date,
                   editing: null,
-                  draft: { employeeId: day.employees[0].id, startsAt: '09:00', endsAt: '10:00' },
+                  draft: { employeeId: day.employees[0].id, ...firstHourOf(day) },
                 })
         }
         onSettings={() => {

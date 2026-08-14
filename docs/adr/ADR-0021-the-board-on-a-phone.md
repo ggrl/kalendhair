@@ -75,6 +75,9 @@ The response, written down so nobody has to invent it under pressure: **`Einstel
 salon password.** It exists, it takes a minute, and ADR-0017 makes it end every session in the
 salon - the lost phone included. Five people retype it once.
 
+**That is not the whole truth, and the section below says what it leaves out** - it is a race with
+the person holding the phone, and it does not blank a board already on screen.
+
 Rejected with it: per-person accounts, which are the correct answer to the warning and are a table
 of people, a redone session, screens to manage them and a migration; and keeping phones read-only,
 which removes the reason for this change.
@@ -84,12 +87,72 @@ which removes the reason for this change.
 - A day sheet - named people and where they will be - now travels on personal devices. That is
   what ADR-0004 calls personal data under GDPR, and the salon is the controller of it. Nothing here
   changes what the API returns; what changes is where it is read.
-- The desktop board scrolls inside its own box rather than scrolling the page. Verified as no
-  visible change at 1280px with six stylists: no horizontal scrolling, columns wider than the
-  minimum, headings pinned exactly as before.
-- Anything relying on the page scrolling vertically for the board - `html { scroll-padding-top }`
-  and the fixed position of the loading line - now describes a scrollport that is not the one the
-  board uses. Neither is wrong today; both are worth remembering.
+- The desktop board scrolls inside its own box rather than scrolling the page. No visible change at
+  1280px with six stylists: no horizontal scrolling, columns wider than the minimum, headings
+  pinned as before.
+
+  > That sentence originally said "verified", and it was verified only against short test names. A
+  > review pass ran the same probe with `Alexandra Bergmann` and a treatment reading
+  > `Waschen, Schneiden, Föhnen` and found the desktop board scrolling horizontally by 48px, plus
+  > up to 41px of drift between the headings and the columns. The cause is below; the claim is
+  > corrected rather than left standing.
+- **Anything that assumed the page was the scrollport had to move with it**, and the first version
+  of this ruling said of them "neither is wrong today", which was wrong on both counts. A review
+  pass measured the loading line painting 58px *inside* a taller top bar on a phone - the label
+  announcing a load printed across the date being loaded - and focus parking a half-hidden box
+  behind the opaque heading band. The loading line is now positioned against the pane, and
+  `scroll-padding-top` is on the pane rather than on `html`.
+- **The headings and the board are two grids, and they must be given one width.** Sized
+  independently, a `1fr` track resolves from each grid's own widest item, so they drift apart and
+  every column from the second on is labelled with the previous stylist's name - a name stated
+  confidently and wrongly, which is worse than the clipped name this change set out to fix. Both
+  grids are 100% of one wrapper, which wraps only the grids: the undrawn-entries report would
+  otherwise stretch it to the width of a sentence.
+- **The frozen hour scale takes no presses.** Once the board is scrolled it covers whichever column
+  has passed under it, and the grid resolves a stylist from the pointer's x - so a press on the
+  times opened a form for somebody nobody could see. Refused in the handler rather than with
+  `pointer-events: none`, which only lets the press fall through to the grid and reach the same
+  wrong column.
+- **`+ Termin` is absent while a day is loading.** The top bar is outside the `inert` subtree, which
+  covers the board only, so during a step the header names one day and the board underneath is
+  another. A review pass clicked the button in that window and booked onto the day just left, with
+  the form showing no date at all to contradict the header.
+- The login screen keeps its own layout. It carries the same `shell` class as the board, so the new
+  flex column reached it at a higher specificity than `.login` and put the form flush against the
+  left edge - measured at a centre of 188px on a 1280px screen. Every person in the salon meets
+  that screen, and it is where this ruling sends them after a lost phone.
+
+## What the security pass corrected about the response
+
+Three things this ruling implied and does not deliver. The invalidation mechanism itself was
+verified rather than taken on trust: `replacePassword` increments the credential version in the
+same statement that writes the hash, and `requireSession` re-reads that version from the database
+on every request, so the lost phone's cookie is dead on its next API call and there is no
+server-side window.
+
+- **The response is a race, and the phone is on the other side of it.** Reaching `Einstellungen`
+  needs a live session and the PIN. A departed employee holding the phone has both - the session is
+  on the device and the PIN is shared salon-wide by design. They can change the password *and* the
+  PIN first, and the salon's only way back is then `MASTER_PASSWORD` from the server's environment,
+  which on a VPS means somebody with shell access.
+- **This change breaks a premise [ADR-0017](ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md)
+  relies on.** That ruling accepted unlimited PIN guessing on the stated grounds that it needs a
+  valid session, "so it is a colleague", and measured the whole 10,000-PIN space at 65 seconds.
+  This is what stops "holds a valid session" and "is a colleague" being the same sentence: the
+  session now rides in a pocket. `requirePin` has no attempt limiter - the two that exist are wired
+  to `/api/login` and `/api/credentials/reset` only. **Not fixed here, and it is the one item on
+  this list that is a decision rather than a note.**
+- **A password change does not blank a phone that is already showing the day.** Polling stops while
+  the tab is hidden - ADR-0019, deliberately - so a backgrounded board never learns the session
+  ended and keeps the last-fetched day sheet painted indefinitely. Disclosure of what was already
+  delivered, not a live session.
+
+And said plainly, because this ruling should not have left it to be worked out: a session lasts
+thirty days and is re-issued for a fresh thirty once it is a day old, and the board polls every
+thirty seconds while visible - so **merely having the board open on the lost phone renews the
+session for ever**. For that whole period the holder can read any date's customer names, treatments
+and notes, can read out the customer list one letter at a time through `/api/suggestions`, and can
+write. Nothing anywhere records that a session exists.
 
 ## Known, accepted, and not fixed here
 
@@ -108,3 +171,12 @@ which removes the reason for this change.
   a short box drops, which is its own ruling.
 - The whole-day checkbox now sits in a heading row that scrolls sideways. It works; nobody has
   tried it with a thumb.
+- **A booking cannot be dragged to a column that is off screen.** With ten stylists at 1280px the
+  grid is wider than the pane and there is no auto-scroll during a captured drag, so the pointer
+  can only reach the columns it can see. Traced by a review pass, not reproduced. This ruling
+  offers the ten-person salon as a case the column minimum covers: it covers reading that board,
+  not moving anything across it.
+- **`+ Termin` opens on the salon's first hour, which is the slot most likely to be taken.** If the
+  first stylist is already booked then, the phone's only way in opens pre-filled with a clash and
+  is refused on `Speichern` with a sentence saying so. The board already owns `whyNotFree` and
+  could pick a free hour; left alone as its own decision.

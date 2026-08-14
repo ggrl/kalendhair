@@ -219,6 +219,14 @@ export function Board({
     if (event.button !== 0) return
 
     const target = event.target as HTMLElement
+
+    // The frozen hour scale is not part of anybody's column. It is sticky, so once the board is
+    // scrolled sideways it covers whichever column has passed under it - and the grid resolves a
+    // stylist from the pointer's x, so a press here opened a form for somebody nobody could see.
+    // Refused here rather than with `pointer-events: none`, which only makes the press fall
+    // through to the grid underneath and reach the same wrong column.
+    if (target.closest('.board__scale') !== null || target.closest('.board__hour') !== null) return
+
     const box = target.closest<HTMLElement>('[data-entry-id]')
     const slot = slotFrom(event.clientY)
     const held = { date: day.date, fromY: event.clientY, travelled: false }
@@ -348,6 +356,15 @@ export function Board({
     <div className="board">
       <Undrawable entries={undrawn} />
 
+      {/* One width for both grids, and it is the reason this wrapper exists.
+          The headings and the board are separate grids. Sized independently, a `1fr` track
+          resolves from each grid's *own* widest item - the headings from the names, the board from
+          the boxes - so they drift apart and every column ends up labelled with the previous
+          stylist's name. A review pass measured 46px of drift per column and reproduced headings
+          sitting over the wrong bookings. Both grids are now 100% of this one element, so they
+          cannot disagree. It wraps only the grids: the undrawn-entries report above would
+          otherwise stretch it to the width of a sentence. */}
+      <div className="board__scroller">
       {/* Sticky, because 56 rows is taller than a laptop screen: scrolled to the evening, the
           board was four unlabelled pastel columns and a wrong-column booking waiting to
           happen. */}
@@ -504,6 +521,7 @@ export function Board({
             />
           )
         })}
+      </div>
       </div>
     </div>
   )

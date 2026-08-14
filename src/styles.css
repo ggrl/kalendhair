@@ -47,10 +47,14 @@ body {
    the board instead of under the top bar.
    The shell owns the viewport height and hands the board whatever the top bar did not take, so
    nothing here depends on knowing how tall that bar is. */
-.shell:not(.settings) {
+.shell:not(.settings):not(.login) {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* iOS Safari resolves `100vh` to the *large* viewport, so the bottom of the pane sits under the
+     browser toolbar with no page scroll left to recover it. `dvh` is the live one, and the line
+     above stays as the fallback. */
+  height: 100dvh;
 }
 
 /* Everything above the board keeps its own height. A column flex container shrinks its children
@@ -58,13 +62,13 @@ body {
    again - the very defect the `min-height` was meant to end. A pixel probe over the headings
    caught it; a bounding-box check could not, because the box was the right size and the paint
    was not. */
-.shell:not(.settings) > .topbar,
-.shell:not(.settings) > .shell__failure,
-.shell:not(.settings) > .shell__notice {
+.shell:not(.settings):not(.login) > .topbar,
+.shell:not(.settings):not(.login) > .shell__failure,
+.shell:not(.settings):not(.login) > .shell__notice {
   flex: 0 0 auto;
 }
 
-.shell:not(.settings) .shell__board {
+.shell:not(.settings):not(.login) .shell__board {
   flex: 1 1 auto;
   /* Without this a flex child refuses to shrink below its content, so the board would push the
      page taller instead of scrolling inside its own box. */
@@ -207,6 +211,10 @@ body {
      auto makes the other a scrollport too - and this is the element the headings and the hour
      scale stick to. */
   overflow: auto;
+  /* Focus scrolls an element flush to the top of its scrollport, which is now this pane rather
+     than the window - so `html { scroll-padding-top }` protects a scroller nothing scrolls, and
+     tabbing to a half-hidden box put it behind the opaque heading band. */
+  scroll-padding-top: 3rem;
 }
 
 /* A click has to change something immediately, or the natural response is to click again - and a
@@ -225,8 +233,12 @@ body {
      positioned it measured y = -234 once the board was scrolled to the afternoon, so the only
      signal that a load was in flight was a 45% opacity. Above the sticky headings, and outside
      the dimmed element, or the label announcing the load was itself faint. */
-  position: fixed;
-  top: calc(var(--topbar-height) + 0.6rem);
+  /* Against the pane, not the viewport. `--topbar-height` became a minimum rather than an exact
+     height, so a fixed offset from it painted this line *inside* a taller bar - measured 58px up
+     into the date heading on a phone, the label announcing a load printed over the date being
+     loaded. `.shell__day` is already `position: relative`. */
+  position: absolute;
+  top: 0.6rem;
   left: 50%;
   z-index: 11;
   margin: 0;
@@ -254,13 +266,18 @@ body {
   color: var(--ink);
 }
 
+/* As wide as the columns need, never narrower than the pane, and one width for both grids. */
+.board__scroller {
+  width: max-content;
+  min-width: 100%;
+}
+
 .board__heads,
 .board__grid {
   display: grid;
-  /* As wide as the columns need, and never narrower than the pane. Without `max-content` the grid
-     would shrink to the pane and the column minimum would have nothing to push against. */
-  width: max-content;
-  min-width: 100%;
+  /* Both exactly the wrapper's width, so a `1fr` track cannot resolve differently in one grid than
+     in the other. Sizing them independently is what made the headings drift off their columns. */
+  width: 100%;
 }
 
 .board__grid {
