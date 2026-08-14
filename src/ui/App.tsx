@@ -163,6 +163,15 @@ export function App() {
   const busyRef = useRef(busy)
   busyRef.current = busy
 
+  /**
+   * The day an arrow key steps from - the one asked for, not the one drawn.
+   *
+   * A ref because `pending` is computed below the early returns, where a hook cannot go, and
+   * because the listener reads it when a key is pressed rather than when it was attached. Same
+   * reason as `busyRef` above: a value the handler needs, not a value anything renders from.
+   */
+  const pendingRef = useRef<string | null>(null)
+
   useEffect(() => {
     // Back and forward have to move the board, or the address bar is decoration. That includes
     // stepping back out of the settings screen, which is a history entry like any other.
@@ -392,6 +401,72 @@ export function App() {
   }, [])
 
   /**
+   * Left and right step a day, with Shift a week. ADR-0010 owns the arithmetic; this only reaches
+   * it from the keyboard, through the same `goTo` the edge buttons use, so there is one route into
+   * a day change and not two behaviours to keep in agreement.
+   *
+   * Deliberately NOT guarded on `loading`: the edge buttons already allow stepping through a slow
+   * load, and one route means one behaviour.
+   *
+   * Up and down are left alone. They scroll the board through the day, which since the board
+   * started opening at 08:00 is the only way a keyboard reaches the evening.
+   */
+  useEffect(() => {
+    // Not attached at all while the form, the settings screen or the login screen is up, or while
+    // a drag is in flight. The first three own the keyboard; the last is ADR-0019's rule that
+    // nothing may redraw the board under a moving box, and a day change is a redraw.
+    if (needsLogin || settings || busy) return
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+
+      // Alt+Left and Cmd+Left are the browser's own Back, and Ctrl+Left jumps a word. Taking any
+      // of them would be trading a key people already know for one they do not.
+      if (event.altKey || event.ctrlKey || event.metaKey) return
+
+      // A held key repeats about thirty times a second, and every real step pushes one history
+      // entry: two seconds of leaning on the arrow would bury Back under sixty of them. One
+      // press, one day - Shift is how you cover ground.
+      if (event.repeat) return
+
+      // Typing beats navigating. The form is already excluded above, so what this catches is the
+      // hidden `<input type="date">` in the top bar: `TopBar.openPicker` focuses it on a browser
+      // without `showPicker`, and arrows are how a native date field is edited.
+      //
+      // Blunt on purpose - every input, not the subset where arrows mean something. It costs one
+      // small thing: focus a column's whole-day checkbox, where arrows do nothing natively, and
+      // the day stops moving until you tab away. A list of exceptions is worth more than that.
+      //
+      // Named `focused` rather than `target`, which in this component is already the day being
+      // asked for.
+      const focused = event.target
+      if (
+        focused instanceof HTMLElement &&
+        (focused.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName))
+      ) {
+        return
+      }
+
+      const from = pendingRef.current
+      if (from === null) return
+
+      const step = event.key === 'ArrowRight' ? 1 : -1
+      // So the press does not also scroll the board sideways: with six stylists the pane is a
+      // horizontal scrollport, and arrow keys are what a browser scrolls one with.
+      //
+      // Honest about what this is: with focus on an appointment box, Chromium was measured NOT to
+      // scroll the pane sideways here even without this line, while ArrowDown does scroll it
+      // vertically. So this is insurance for the browsers the suite cannot run - not a fix for
+      // something observed - and the test below pins the outcome rather than this mechanism.
+      event.preventDefault()
+      goTo(event.shiftKey ? addWeeks(from, step) : addDays(from, step))
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [needsLogin, settings, busy, goTo])
+
+  /**
    * Asks the server which day today is, rather than trusting the one cached at the last load.
    * That cached value goes stale at midnight, and the header would then assert "heute" on a
    * board showing yesterday - with this button, the only thing that could correct it.
@@ -583,6 +658,8 @@ export function App() {
   // Except after a failure, where the day on screen is the loaded one and stepping from a date
   // that never arrived would skip over it.
   const pending = failure !== null ? day.date : (target.date ?? day.date)
+  // What an arrow key steps from, handed to a listener that cannot see this scope.
+  pendingRef.current = pending
   // While a load is open the header names the day being fetched, so a click is visibly
   // acknowledged. The board is dimmed at the same time, because it still shows the old day.
   const shown = loading ? pending : day.date
