@@ -61,6 +61,11 @@ function undrawnReason(entry: Entry, hasColumn: boolean): string | null {
  * the bookable window, so a band reaching past the edge means the server is wrong - and the way
  * the browser reports a negative grid row or one past the last is to drop the element out of the
  * grid entirely, which looks exactly like a salon that is open all day.
+ *
+ * **The clamp covers the range and not the grid.** A time that is not on a quarter hour gives a
+ * fractional row, which the browser also drops, and nothing here rounds it - the API refuses those
+ * too, and a second opinion about which row 09:07 belongs on is how the shading and the settings
+ * screen would come to disagree about the same number.
  */
 function closedBands(core: CoreHours | null): { startSlot: number; endSlot: number }[] {
   if (core === null) return [{ startSlot: 0, endSlot: SLOT_COUNT }]

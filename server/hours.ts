@@ -81,11 +81,20 @@ export async function writeWeek(pool: Pool, week: unknown): Promise<void> {
   try {
     await client.query('BEGIN')
     for (const day of days) {
-      await client.query('UPDATE core_hours SET opens_at = $2, closes_at = $3 WHERE weekday = $1', [
-        day.weekday,
-        day.hours?.from ?? null,
-        day.hours?.to ?? null,
-      ])
+      const result = await client.query(
+        'UPDATE core_hours SET opens_at = $2, closes_at = $3 WHERE weekday = $1',
+        [day.weekday, day.hours?.from ?? null, day.hours?.to ?? null],
+      )
+      // A weekday with no row is the one way this can accept a week and change nothing, and 204
+      // for a write that did not happen is the worst answer available. Only reachable if a row has
+      // been deleted by hand, which is also the state `readWeek` would show as a short week.
+      //
+      // A plain error rather than a `Refused`: the caller did nothing wrong, so this is a logged
+      // 500 with a generic body, not a German sentence about a rule. The transaction rolls back,
+      // so a week that cannot be written completely is not written at all.
+      if (result.rowCount !== 1) {
+        throw new Error(`core_hours has no row for weekday ${day.weekday}`)
+      }
     }
     await client.query('COMMIT')
   } catch (error) {
@@ -119,8 +128,10 @@ function validWeek(week: unknown): CoreHoursDay[] {
 
   const days = week.map(validDay)
 
-  const seen = new Set(days.map((day) => day.weekday))
-  if (seen.size !== WEEKDAYS.length || WEEKDAYS.some((weekday) => !seen.has(weekday))) {
+  // Seven distinct weekdays. `validDay` has already restricted every one of them to 1..7, so
+  // seven distinct values is the whole check - Tuesday sent twice is what this catches, and a
+  // length check on its own would let that through and leave the missing day as it was.
+  if (new Set(days.map((day) => day.weekday)).size !== WEEKDAYS.length) {
     throw new Refused(400, 'invalid', 'Es müssen alle sieben Wochentage geschickt werden.')
   }
 

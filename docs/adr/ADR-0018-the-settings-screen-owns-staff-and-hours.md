@@ -120,8 +120,10 @@ this ruling did not say, five of them asked of the owner:
   answered. A screen that lets somebody edit opening times is exactly where they conclude that
   booking outside them will now be refused, and ADR-0015's whole ruling is that it never is. That
   sentence is the only place the belief can be corrected.
-- **A tab that already has the board open keeps the old shading**, until it loads any day. Asked,
-  and accepted: it is a colour, not a booking, and polling closes it for free.
+- **A tab that already has the board open keeps the old shading**, until it loads any day - a day
+  step, `Heute` or `Aktualisieren`. Asked, and accepted: it is a colour, not a booking. **Nothing
+  closes this today**; polling will, when it is built, and the tab that made the change is already
+  correct because leaving the settings screen reloads the board.
 
 And three that are mine:
 
@@ -137,6 +139,17 @@ And three that are mine:
   there is no second spelling of `Mittwoch` to drift from the one `longGermanDate` produces.
 
 ## Known, accepted, and not fixed here
+
+- **The week carries no version stamp**, so two people with the settings screen open both hold a
+  whole draft and the second save reverts the first. ADR-0003 exists for appointments because that
+  race is real inside one polling interval; a colour edited once a year is not that, and the same
+  reasoning already covers the staff rows. Considered and not built, written down here so the next
+  session does not have to work out whether it was missed.
+- **A weekday with no row makes every save impossible from the screen.** `readWeek` would return a
+  short week, the screen would render it, and the API would refuse every save for not being seven
+  days - with no way out of the interface. Nothing can produce that state: the rows come from the
+  migration and no code deletes them. The write refuses rather than answering 204 for a write that
+  did not happen, which is the half worth defending.
 
 - **An appointment can still be booked against a deactivated stylist through the API.** Nothing in
   `createEntry` checks `active`, so the row lands in the table, holds a slot in the exclusion

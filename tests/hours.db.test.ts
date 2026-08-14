@@ -70,11 +70,12 @@ async function shadingOn(date: string): Promise<CoreHours | null> {
  */
 async function reseed(): Promise<void> {
   for (const day of SEEDED) {
-    await pool.query('UPDATE core_hours SET opens_at = $2, closes_at = $3 WHERE weekday = $1', [
-      day.weekday,
-      day.hours?.from ?? null,
-      day.hours?.to ?? null,
-    ])
+    // An upsert rather than an `UPDATE`, so this also puts back a row a test deleted on purpose.
+    await pool.query(
+      `INSERT INTO core_hours (weekday, opens_at, closes_at) VALUES ($1, $2, $3)
+       ON CONFLICT (weekday) DO UPDATE SET opens_at = EXCLUDED.opens_at, closes_at = EXCLUDED.closes_at`,
+      [day.weekday, day.hours?.from ?? null, day.hours?.to ?? null],
+    )
   }
 }
 
@@ -254,6 +255,26 @@ describe('a week the board could not draw', () => {
 
     expect((await save(bad)).status).toBe(400)
     expect(await week()).toEqual(SEEDED)
+  })
+})
+
+describe('a weekday with no row at all', () => {
+  it('does not answer 204 for a write that changed nothing', async () => {
+    // Nothing in the application can produce this - the seven rows come from the migration and no
+    // code deletes them - but the answer to a write that silently did nothing must not be "saved".
+    // A review pass found the `rowCount` going unread.
+    await pool.query('DELETE FROM core_hours WHERE weekday = 6')
+
+    const response = await save(SEEDED)
+    expect(response.status).toBe(500)
+
+    // And the transaction rolled back, so the days before Saturday in the loop are untouched.
+    await pool.query("UPDATE core_hours SET opens_at = '11:11', closes_at = '12:12' WHERE weekday = 1")
+    expect((await save(SEEDED)).status).toBe(500)
+    const monday = (await pool.query<{ from: string | null }>(
+      `SELECT to_char(opens_at, 'HH24:MI') AS "from" FROM core_hours WHERE weekday = 1`,
+    )).rows[0]
+    expect(monday.from).toBe('11:11')
   })
 })
 

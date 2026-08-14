@@ -293,3 +293,92 @@ test('unticking a closed day offers a working day rather than an empty pair of t
   await expect(page.getByLabel('Sonntag von')).toHaveValue('09:00')
   await expect(page.getByLabel('Sonntag bis')).toHaveValue('18:00')
 })
+
+test('a refused week says so where the button is, not off the top of the screen', async ({ page }) => {
+  // The logic review's blocker. With the salon's staff above it, the Kernzeiten button sits far
+  // below the message line at the top of this screen: a refusal rendered up there is 373px above
+  // the viewport, so the only reading available at the desk is that the week was saved. It was not.
+  await stubApi(page)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await openSettings(page)
+
+  await page.route('**/api/settings/hours', async (route) => {
+    if (route.request().method() !== 'PUT') return route.fallback()
+    await route.fulfill({
+      status: 400,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Dienstag: Das Ende muss nach dem Beginn liegen.', code: 'invalid' }),
+    })
+  })
+
+  const save = page.getByRole('button', { name: 'Kernzeiten speichern' })
+  await save.scrollIntoViewIfNeeded()
+  await save.click()
+
+  const refusal = page.getByText('Dienstag: Das Ende muss nach dem Beginn liegen.')
+  await expect(refusal).toBeVisible()
+
+  // Visible is not enough - it has to be visible from where the button is. Both boxes are measured
+  // against the viewport, which is the thing the person is actually looking at.
+  const box = await refusal.boundingBox()
+  const button = await save.boundingBox()
+  const height = page.viewportSize()!.height
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y).toBeLessThan(height)
+  expect(Math.abs(box!.y - button!.y)).toBeLessThan(200)
+})
+
+test('a saved week says so in the same place', async ({ page }) => {
+  await stubApi(page)
+  await page.setViewportSize({ width: 1280, height: 720 })
+  await openSettings(page)
+
+  const save = page.getByRole('button', { name: 'Kernzeiten speichern' })
+  await save.scrollIntoViewIfNeeded()
+  await save.click()
+
+  const notice = page.getByText('Die Kernzeiten wurden gespeichert.')
+  await expect(notice).toBeVisible()
+  const box = await notice.boundingBox()
+  expect(box!.y).toBeGreaterThanOrEqual(0)
+  expect(box!.y).toBeLessThan(page.viewportSize()!.height)
+
+  // And it goes as soon as the week stops being the one it was about.
+  await page.getByLabel('Samstag bis').selectOption('12:00')
+  await expect(notice).toHaveCount(0)
+})
+
+test('a Kernzeiten load that fails says what failed, not just "try again"', async ({ page }) => {
+  await stubApi(page)
+  await page.route('**/api/settings/hours', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Datenbank nicht erreichbar.' }) })
+  })
+  await openSettings(page)
+
+  // A naked retry button with nothing saying why leaves somebody pressing it to find out.
+  await expect(page.getByText('Datenbank nicht erreichbar.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toBeVisible()
+})
+
+test('a Kernzeiten load refused for the PIN goes back to the PIN prompt', async ({ page }) => {
+  // Every other request on this screen routes a 403 to the prompt; this one used to park on a
+  // retry button that would fail identically every time it was pressed.
+  await stubApi(page)
+  await page.route('**/api/settings/hours', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'Die PIN stimmt nicht.' }) })
+  })
+
+  // Opened by hand rather than through `openSettings`, which waits for the staff heading: the
+  // refused hours fetch takes the screen back to the prompt before that heading ever settles,
+  // which is the behaviour under test.
+  await page.goto('/?date=2026-08-13')
+  await page.getByRole('button', { name: 'Einstellungen' }).click()
+  await page.getByLabel('PIN').fill(PIN)
+  await page.getByRole('button', { name: 'Weiter' }).click()
+
+  await expect(page.getByLabel('PIN')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Erneut versuchen' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Kernzeiten' })).toHaveCount(0)
+})
