@@ -84,7 +84,10 @@ the same weekday.
 
 Also in the top bar, in this build order rather than all at once: a today button first,
 because once week steps exist somebody will be six weeks out and need one click back;
-then a date picker, month steps, and left and right arrow keys for day movement. Week and
+then a date picker, month steps, and left and right arrow keys for day movement. **The date
+picker was built on 2026-08-14 and is the browser's own `<input type="date">`: ADR-0020.** Month
+steps and arrow keys are still unbuilt, and the picker does not replace them - a week or month
+step keeps the weekday, which is what makes "the same slot in four weeks" four clicks. Week and
 month steps keep the weekday; month steps clamp the day of the month, which is not
 reversible. Week numbers are ISO 8601, whose year is not always the year in the date. See
 ADR-0010.

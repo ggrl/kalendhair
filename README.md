@@ -29,7 +29,8 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | The board: 06:00-20:00 grid, a column per employee, coloured boxes, grey blocks, notes on click | done |
 | The salon's core hours and Hessen's holidays shaded on the board, refusing nothing | done |
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
-| Navigation: date picker, month steps, arrow keys | not started |
+| Navigation: a date picker, using the browser's own | done |
+| Navigation: month steps, arrow keys | not started |
 | Live updates, by polling the day on screen every 30 seconds | done |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
@@ -141,7 +142,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Nineteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Twenty decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -167,6 +168,7 @@ re-decide.
 | [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - built, except the PIN check, which has nothing to guard yet |
 | [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - all three built |
 | [0019](docs/adr/ADR-0019-the-board-polls-and-says-when-it-cannot.md) | The board polls every 30 seconds, holds the swap under a hand, and says when it is not current |
+| [0020](docs/adr/ADR-0020-the-date-picker-is-the-browsers-own.md) | The date picker is the browser's own, and one place decides whether a date is real |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

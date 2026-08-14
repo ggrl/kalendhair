@@ -588,6 +588,11 @@ export function App() {
         stale={pollFailures >= FAILURES_BEFORE_STALE}
         onStep={(weeks) => goTo(addWeeks(pending, weeks))}
         onToday={goToday}
+        // ADR-0020. Validated before it moves anything: a date can be typed into the picker as
+        // well as chosen from it, and `isSalonDate` is what refuses a two-digit year - which
+        // `Date.UTC(50, 0, 1)` would silently read as 1950 rather than failing. An impossible
+        // date goes nowhere, exactly as a step off the end of the calendar already does.
+        onPick={(picked) => goTo(isSalonDate(picked) ? picked : null)}
         onSettings={() => {
           window.history.pushState(null, '', urlFor(shown, true))
           setSettings(true)
