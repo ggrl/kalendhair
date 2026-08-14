@@ -533,6 +533,26 @@ body {
 
 /* The two resize edges. A share of the box rather than a fixed height: one 15-minute row is
    17.6px, so two 6px handles would leave nothing in the middle to grab for a move. */
+/* A note, said as a folded corner rather than as a character: the dot it replaces was 10px of
+   punctuation on a coloured box and read as a speck of dirt.
+
+   Bottom right, so the duration keeps the top right corner it shares with nothing else. 15px, which
+   is the owner's number and which on a 15-minute box reaches the top - they were asked and said
+   partly covering the duration there is not a problem.
+
+   Drawn with borders: a triangle whose upright sides are the box's own corner, so it reads as the
+   page being folded rather than as a shape somebody dropped on it. `--ink` and not a colour, so it
+   survives every one of the ten pastel backgrounds ADR-0009 can assign. */
+.entry__fold {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 0;
+  height: 0;
+  border-bottom: 15px solid var(--ink);
+  border-left: 15px solid transparent;
+}
+
 .entry__grip {
   position: absolute;
   right: 0;
