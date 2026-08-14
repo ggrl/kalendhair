@@ -2,6 +2,111 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-14, seventh session - the salon sets its own core hours
+
+ADR-0018 is finished. `CORE_HOURS` no longer exists, the hours are seven rows the salon edits
+itself, and **the settings screen is done - all three parts of it**. Two review passes again, and
+the logic pass again returned NO-SHIP on something no test and no live check of mine could see.
+
+### Where things stand
+
+- **`main` is at `434d1b3`** and is the only branch. PR #22 merged the hours (`c7bf109`); PR #21
+  merged the previous session's log. Nothing in flight, working tree clean.
+- **Eighteen ADRs, and ADR-0018 is now fully built.** ADR-0015's "core hours are a constant"
+  paragraph is dead prose kept for its reasoning; its consequence about silent staleness is closed.
+  Both gained notes rather than being rewritten.
+- **The one blocker on real customer names is unchanged**: still no backup and no tested restore,
+  which `docs/PRODUCT_BRIEF.md` makes the condition. Loopback and no TLS, so fake names only.
+- **Read this before opening the settings screen: the PIN in `.env` no longer works.** The salon
+  password still does. The PIN was changed during this session from the screen, which is exactly
+  what ADR-0017 says the seed does after first start. The way back if it is lost is the master
+  password, and nothing else.
+
+### What was built, and where
+
+- **`migrations/005_core_hours.sql`** - seven rows keyed by ISO weekday, `opens_at` and `closes_at`
+  nullable together, seeded with exactly what the constant held. Two structural constraints; the
+  06:00-20:00 window deliberately **not** in SQL, because `grid.ts` owns it and a copy in a `CHECK`
+  is a second place for it to disagree.
+- **`server/hours.ts`** - the only reader and writer of that table. `readWeek`, `writeWeek` (all
+  seven in one transaction), and `hoursOn`, which folds ADR-0016's holiday rule in so
+  `Day.coreHours` is one answer rather than two rules a client has to combine.
+- **`GET /api/day` gained `coreHours`**; `GET`/`PUT /api/settings/hours` sit behind the PIN guard.
+- **`src/ui/Board.tsx`** draws `day.coreHours` and computes nothing. `Settings.tsx` gained the
+  `Kernzeiten` section. `CoreHours` moved to `types.ts`, `germanWeekday` was added to `dates.ts`.
+
+### What the owner decided, and what I decided
+
+Six things the ADR had not said were asked, and all six are written into ADR-0018: one continuous
+band per weekday rather than a lunch gap; quarter hours from a dropdown; one `Speichern` for the
+whole week; a backwards or equal range refused by weekday name rather than read as closed; a German
+line saying the hours colour the board and refuse nothing; and the stale open tab accepted.
+
+Mine, also in ADR-0018: the server applies the holiday rule, 06:00-20:00 is checked against
+`grid.ts` and not copied into SQL, and `germanWeekday` is formatted from a reference Monday so
+there is no second spelling of `Mittwoch`.
+
+**And then the owner changed the shading from red to grey on their own screen**, plus the settings
+hint that had promised a red board. Red said "something is wrong with this day" about perfectly
+ordinary hours. Four other statements were made untrue by that and were corrected; the holiday name
+stays red on purpose, because grey on grey loses the one word standing between a fully shaded board
+and "is the software broken".
+
+### What was verified, and how
+
+- On `main` after both merges: fresh `npm ci` with 0 vulnerabilities, `npm run verify` green (112
+  unit), `npm run test:db` green (137), `npm run test:e2e` green (90). CI green on all three jobs.
+- **Against the running server on the real database.** The migration seeded exactly the seven
+  values the deleted constant held. Saturday changed to 08:00-12:00 and the band moved from row 31
+  to row 25 on a real board, screenshotted; a Saturday in 2017 moved with it; Karfreitag came back
+  null on a Friday whose row says 09:00-18:00; the backwards range, the off-quarter time and a
+  wrong PIN were refused 400, 400 and 403. Saturday was put back.
+- **Every new guard mutation-tested.** A `closedBands` that keeps its own 09:00-18:00 fails both
+  shading tests; deleting the holiday check fails the holiday test; reverting the review fix sends
+  the refusal back off the top of the page and fails its test. The board test asks for 10:00-17:00,
+  which no constant ever held.
+- **The owner drove the whole thing on their own screen** and accepted it, then changed the colour.
+
+### What was NOT verified
+
+- **The fix commits answering the review went in unreviewed.** Roughly 110 lines written after the
+  verdicts, plus the colour commit. The owner was asked directly and chose to merge - a decision,
+  not an oversight. This is the fourth session running where that has been the shape of it.
+- **The settings screen could not be re-checked on merged `main`**, because the PIN changed. The
+  board half was verified; the hours endpoints answered 403, which is the guard working.
+- **Nobody but the author and the owner has used this section**, and no second browser was pointed
+  at the same database - the logic reviewer's own suggested next step, not taken.
+- **Two people editing the week is last-write-wins.** No version stamp, considered and not built,
+  recorded in ADR-0018 so it is not rediscovered as a bug.
+- The grey wash has not been seen on a bright salon monitor, and no screen reader has heard the new
+  section.
+
+### Unfinished, and what comes next
+
+1. **Polling**, which is now the oldest thing on this list and closes the stale-shading case for
+   free. It still carries the two warnings from earlier reviews about a client holding a stale day.
+2. The remaining navigation aids: date picker, month steps, arrow keys.
+3. The container and the VPS, behind the brief's blocking backup gate - and the deploy where
+   `COOKIE_SECURE` and `trust proxy` start to matter.
+4. Two things named in the ADRs and deliberately not fixed: an appointment can still be booked
+   against a deactivated stylist through the API, and guessing the PIN starves the thread pool.
+
+### What surprised me
+
+- **The blocker was invisible to me because I looked at the section, not at the page.** I opened the
+  real screen, screenshotted it, and saw the Kernzeiten rows render correctly - with the whole page
+  in view. The reviewer put six staff rows above it at 1280x720 and measured the refusal landing
+  373px above the viewport. Every test passed, the live check passed, and the primary control of the
+  feature gave no feedback in either direction from where a person actually stands.
+- **I wrote a test that asserted the right outcome and proved half the mechanism.** "Changes nothing
+  when it refuses" passes because validation runs before the first `UPDATE`, not because of the
+  transaction I wrote it to cover. Caught by asking what would still pass if the transaction went.
+- **A browser test can only ever prove its own fixture.** The holiday shading test looked like it
+  proved the Hessen list and proved the stub instead, the moment the decision moved to the server.
+  It was deleted rather than left there looking green.
+- **ADR-0015 was superseded twelve hours after it was written, and its colour changed the next day.**
+  The ruling survived both, because it was never about the colour.
+
 ## 2026-08-13, sixth session - the salon can manage its own staff
 
 ADR-0018's staff and credentials halves, built and merged. **The core hours are the part that is
