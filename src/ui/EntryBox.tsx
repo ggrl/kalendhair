@@ -89,11 +89,13 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         {tight ? (
           <span className="entry__line">
             <span className="entry__time">{shown.startsAt}</span>
-            {/* Beside the start time, because a one-line box has no corner to spare and no end
-                time to subtract from - which is exactly the box where the length is hardest to
-                read off the grid. */}
-            <span className="entry__duration">{duration}</span>
             <span className="entry__label">{label}</span>
+            {/* Held to the right of the line rather than pinned to the corner: a one-line box has
+                no corner that is not also the line, and pushing it there with `margin-left: auto`
+                means the label shrinks around it rather than running underneath a reserved gap. */}
+            <span className="entry__meta entry__meta--line">
+              <span className="entry__duration">{duration}</span>
+            </span>
           </span>
         ) : (
           <>
@@ -129,6 +131,28 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
     .filter(Boolean)
     .join(' ')
 
+  // How long this runs, and a dot if something is written about it. Top right on a box tall enough
+  // to have a corner; held to the right of the single line when it is not, which is the same place
+  // to the eye and one less thing to reserve room for.
+  //
+  // The dot replaced the word `Notiz`, which was the widest thing in the corner and the reason the
+  // duration had nowhere to go. The word survives for a screen reader, out of sight: a bare `•` is
+  // announced as "bullet" or as nothing at all depending on the reader, and losing it would take
+  // away the only signal a blind user has that a note exists - the note's text itself is
+  // deliberately not on the board, because a tooltip over the box once revealed an allergy to
+  // whoever was standing at the desk.
+  const meta = (
+    <span className={compact ? 'entry__meta entry__meta--line' : 'entry__meta'}>
+      <span className="entry__duration">{duration}</span>
+      {entry.notes !== null && (
+        <>
+          <span aria-hidden="true"> •</span>
+          <span className="visually-hidden">Notiz</span>
+        </>
+      )}
+    </span>
+  )
+
   return (
     <button
       type="button"
@@ -140,13 +164,21 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
       data-entry-id={entry.id}
       onClick={onOpen}
     >
+      {/* How long this runs, and a dot if something is written about it. Top right on a box tall
+          enough to have a corner; held to the right of the single line when it is not, which is
+          the same place to the eye and one less thing to reserve room for.
+
+          The dot replaced the word `Notiz`, which was the widest thing in the corner and the
+          reason the duration had nowhere to go. The word survives for a screen reader, out of
+          sight: a bare `•` is announced as "bullet" or as nothing at all depending on the reader,
+          and losing it would take away the only signal a blind user has that a note exists - the
+          note's text itself is deliberately not on the board, because a tooltip over the box once
+          revealed an allergy to whoever was standing at the desk. */}
       {compact ? (
         <span className="entry__line">
           <span className="entry__time">{shown.startsAt}</span>
-          {/* Beside the start time on the short boxes: there is no corner to spare, and no end
-              time on the line to subtract from either. */}
-          <span className="entry__duration">{duration}</span>
           <span className="entry__customer">{entry.customer}</span>
+          {meta}
         </span>
       ) : (
         <>
@@ -155,26 +187,7 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         </>
       )}
       {!oneLine && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
-      {/* The top-right corner: how long this runs, and a dot if something is written about it.
-          The dot replaced the word `Notiz`, which was the widest thing in the corner and the
-          reason the duration had nowhere to go.
-
-          The word survives for a screen reader, out of sight. A bare `•` is announced as "bullet"
-          or as nothing at all depending on the reader, and losing it would take away the only
-          signal a blind user has that a note exists - the note's text itself is deliberately not
-          on the board, because a tooltip over the box once revealed an allergy to whoever was
-          standing at the desk. */}
-      {(!compact || entry.notes !== null) && (
-        <span className="entry__meta">
-          {!compact && <span className="entry__duration">{duration}</span>}
-          {entry.notes !== null && (
-            <>
-              <span aria-hidden="true"> •</span>
-              <span className="visually-hidden">Notiz</span>
-            </>
-          )}
-        </span>
-      )}
+      {!compact && meta}
       <Grips />
     </button>
   )

@@ -231,11 +231,72 @@ test('every box says how long it lasts', async ({ page }) => {
   expect(await durationOf('Anna Schmidt')).toBe('1h')
   expect(await durationOf('Bea Wolff')).toBe('45m')
   expect(await durationOf('Eva Sommer')).toBe('1h30')
-  // A 15-minute box: one line tall, so the duration is on the line rather than in a corner.
+  // A 15-minute box is one line tall, so the duration rides the line - but it still sits on the
+  // right, where it is on every other box. `11:00 Tobi     15m •`, not `11:00 15m Tobi`.
   expect(await durationOf('Felix Rau')).toBe('15m')
-  await expect(page.locator('.entry', { hasText: 'Felix Rau' }).locator('.entry__line .entry__duration')).toBeVisible()
+  const short = page.locator('.entry', { hasText: 'Felix Rau' }).first()
+  const line = (await short.locator('.entry__line').boundingBox())!
+  const meta = (await short.locator('.entry__meta').boundingBox())!
+  const name = (await short.locator('.entry__customer').boundingBox())!
+  expect(meta.x).toBeGreaterThan(name.x + name.width - 1)
+  expect(meta.x + meta.width).toBeGreaterThanOrEqual(line.x + line.width - 2)
   // Blocks too, which was the owner's call against my recommendation.
   expect(await page.locator('.entry--block').first().locator('.entry__duration').textContent()).toBe('1h')
+})
+
+test('a long name on a short box never pushes the duration off it', async ({ page }) => {
+  // Measured while writing this, and worth knowing before touching the line: a long name does NOT
+  // get an ellipsis here. `.board__scroller` is `width: max-content`, so the column grows to fit
+  // the name and the board scrolls sideways instead - ADR-0021 choosing scrolling over squeezing.
+  // The ellipsis rules on `.entry__line .entry__customer` are from an earlier layout and this
+  // arrangement cannot reach them.
+  //
+  // So what is pinned here is the thing that can still go wrong: however wide the name makes the
+  // box, the duration stays inside it and to the right of the name.
+  //
+  // Its own day and its own stub: no fixture has a fifteen-minute box with a name long enough.
+  await page.route('**/api/day*', async (route) => {
+    await route.fulfill({
+      json: {
+        date: '2026-08-19',
+        today: TODAY,
+        coreHours: { from: '09:00', to: '18:00' },
+        employees: [{ id: MARCO, name: 'Marco' }, { id: JANA, name: 'Jana' }],
+        entries: [
+          {
+            id: 'long',
+            version: 1,
+            employeeId: MARCO,
+            kind: 'appointment',
+            startsAt: '11:00',
+            endsAt: '11:15',
+            customer: 'Katharina Bergmann-Schweitzer',
+            treatment: 'Pony',
+            notes: 'x',
+            reason: null,
+            colour: '#f4b8b8',
+          },
+        ],
+      },
+    })
+  })
+
+  await page.setViewportSize({ width: 400, height: 800 })
+  await page.goto('/?date=2026-08-19')
+  await page.waitForSelector('.board__grid')
+
+  const box = page.locator('.entry').first()
+  const outline = (await box.boundingBox())!
+  const name = (await box.locator('.entry__customer').boundingBox())!
+  const meta = (await box.locator('.entry__meta').boundingBox())!
+
+  // After the name, and still inside the box that grew to hold it.
+  expect(name.x + name.width).toBeLessThanOrEqual(meta.x + 1)
+  expect(meta.x + meta.width).toBeLessThanOrEqual(outline.x + outline.width)
+  // Whole, not half a number: the box is what gives way, never the duration.
+  await expect(box.locator('.entry__duration')).toHaveText('15m')
+  const cut = await box.locator('.entry__meta').evaluate((span) => span.scrollWidth > span.clientWidth)
+  expect(cut).toBe(false)
 })
 
 test('a note is a dot on the board and still a word to a screen reader', async ({ page }) => {

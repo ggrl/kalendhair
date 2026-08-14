@@ -613,13 +613,9 @@ body {
   white-space: nowrap;
 }
 
-/* Room for the corner, which is absolutely positioned and reserves none itself - a long name in a
-   short box would otherwise run underneath it. 2.9rem while the corner said `Notiz`; a dot needs
-   far less, and the width it gives back goes to the name. The duration is on the line itself on
-   these boxes, so it needs no reserve of its own. */
-.entry--has-notes .entry__line {
-  padding-right: 0.9rem;
-}
+/* The 2.9rem reserve that used to sit here is gone. It existed because the `Notiz` marker was
+   absolutely positioned and a long name ran underneath it; on these boxes the corner is now part
+   of the line, so the flex row keeps them apart and no width has to be guessed. */
 
 /* One row of grid is one line of text: the time and the name share it and the treatment does not
    fit at all. The same trim applies to a one-row block, whose reason shares the line with its
@@ -679,17 +675,22 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* On a box one or two lines tall there is no corner that is not also the line, so this rides the
+   line instead - pushed hard right, where the eye already looks for it on the taller boxes.
+
+   `margin-left: auto` rather than a reserved `padding-right` on the line: the name then shrinks
+   around this instead of stopping short of a gap that is the wrong size at every width but one.
+   It never shrinks itself - the name gets the ellipsis, because half a name still says who while
+   half a duration says nothing. */
+.entry__meta--line {
+  position: static;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .entry__duration {
   font-variant-numeric: tabular-nums;
   color: #3f3f46;
-}
-
-/* On the short boxes it sits on the line beside the start time rather than in a corner there is
-   no room for. Never shrinks - the name gets the ellipsis, because a half-drawn duration says
-   nothing while half a name still says who. */
-.entry__line .entry__duration {
-  flex: 0 0 auto;
-  font-size: 0.66rem;
 }
 
 /* Out of sight, in the accessible name. Not `display: none`, which would take it out of the name
