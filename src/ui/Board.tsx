@@ -40,6 +40,16 @@ interface Props {
   onGesturing: (active: boolean) => void
 }
 
+/**
+ * How narrow a stylist's column may get before the board scrolls sideways instead. ADR-0021.
+ *
+ * Applied at every width with no breakpoint, so it only ever bites when there is not enough room:
+ * on a laptop with six stylists the columns are `1fr` exactly as before, and the minimum is what
+ * stops a phone - or a salon that grows to ten people - squeezing them into something unreadable.
+ * Measured: at 150px a customer name and a treatment both render in full.
+ */
+const MIN_COLUMN = '150px'
+
 interface Undrawn {
   entry: Entry
   reason: string
@@ -235,6 +245,21 @@ export function Board({
 
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
     if (gesture === null) return
+
+    // A finger never moves a booking. ADR-0021.
+    //
+    // The gesture still starts on touch, because a tap is how the form is opened and that runs
+    // through the same machinery - a press that never travels is a click.
+    //
+    // **What this actually prevents is noise, not a lost appointment**, and the difference was
+    // measured rather than assumed. Chromium claims a touch drag for panning and sends
+    // `pointercancel` - one `pointermove` arrives first, then the cancel, and that holds even when
+    // nothing on the page can scroll. So the write was never reachable. But that single move is
+    // already past the drag threshold, so without this line every attempt to scroll the board that
+    // began on top of a box would flash a preview and then raise "Die Bewegung wurde abgebrochen"
+    // on release - a refusal, in German, for something nobody tried to do, on every scroll.
+    if (event.pointerType === 'touch') return
+
     const slot = slotFrom(event.clientY)
     const farEnough = gesture.travelled || Math.abs(event.clientY - gesture.fromY) >= dragStartsAfter()
 
@@ -326,7 +351,7 @@ export function Board({
       {/* Sticky, because 56 rows is taller than a laptop screen: scrolled to the evening, the
           board was four unlabelled pastel columns and a wrong-column booking waiting to
           happen. */}
-      <div className="board__heads" style={{ gridTemplateColumns: `4rem repeat(${day.employees.length}, 1fr)` }}>
+      <div className="board__heads" style={{ gridTemplateColumns: `4rem repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))` }}>
         <div className="board__corner" />
         {day.employees.map((employee) => {
           const blocked = wholeDayBlock(day, employee.id)
@@ -363,7 +388,7 @@ export function Board({
         className="board__grid"
         ref={grid}
         style={{
-          gridTemplateColumns: `4rem repeat(${day.employees.length}, 1fr)`,
+          gridTemplateColumns: `4rem repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))`,
           gridTemplateRows: `repeat(${SLOT_COUNT}, var(--slot-height))`,
         }}
         // One set of handlers for the whole grid, not one per column, because a move crosses
@@ -384,6 +409,16 @@ export function Board({
           setGesture(null)
         }}
       >
+        {/* An opaque backdrop for the hour scale, behind the labels and in front of the boxes.
+            Without it the frozen column has gaps: a label exists only once an hour, so between
+            them an appointment scrolled sideways shows through the gap and the scale looks torn.
+            Aria-hidden because it says nothing - the labels are the content. */}
+        <div
+          className="board__scale"
+          style={{ gridColumn: 1, gridRow: `1 / span ${SLOT_COUNT}` }}
+          aria-hidden="true"
+        />
+
         {labels.map((label, index) => {
           // The last label marks the end of the final row, not the start of one after it. Placing
           // it at `index * 4 + 1` put 20:00 on row 57 of a 56-row grid, which grew the grid past

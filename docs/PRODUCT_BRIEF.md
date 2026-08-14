@@ -208,7 +208,11 @@ Deliberately not doing, and each one will feel missing before it is missed:
 - reminders by SMS or email
 - recurring appointments
 - prices, payments or till
-- mobile or touch support
+- ~~mobile or touch support~~ **Reversed on 2026-08-14 by ADR-0021.** Staff can read the board on a
+  phone and add an appointment there through a form. The board keeps a 150px minimum per column and
+  scrolls sideways rather than squeezing; a finger scrolls and taps and never drags. This was a
+  non-goal because dragging is the interaction and it does not suit a thumb - which is still true,
+  and is why touch gets a form instead of a gesture rather than getting nothing
 - printing, which is worth naming given they are coming from paper
 - the iOS app itself, and any offline capability in it. Expected later, planned for in
   the schema only, and nothing in this build waits for it

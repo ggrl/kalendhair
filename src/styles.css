@@ -40,6 +40,37 @@ body {
   padding: 0.75rem;
 }
 
+/* The board scrolls inside itself rather than scrolling the page: ADR-0021.
+   That is what lets the column headings stay pinned while the board also scrolls sideways - a
+   horizontally scrollable ancestor becomes the scrollport for `position: sticky` in *both* axes,
+   so with the page as the scroller the headings simply stopped pinning. Measured at 220px down
+   the board instead of under the top bar.
+   The shell owns the viewport height and hands the board whatever the top bar did not take, so
+   nothing here depends on knowing how tall that bar is. */
+.shell:not(.settings) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Everything above the board keeps its own height. A column flex container shrinks its children
+   by default, which squashed the top bar back to its `min-height` and let the content overflow
+   again - the very defect the `min-height` was meant to end. A pixel probe over the headings
+   caught it; a bounding-box check could not, because the box was the right size and the paint
+   was not. */
+.shell:not(.settings) > .topbar,
+.shell:not(.settings) > .shell__failure,
+.shell:not(.settings) > .shell__notice {
+  flex: 0 0 auto;
+}
+
+.shell:not(.settings) .shell__board {
+  flex: 1 1 auto;
+  /* Without this a flex child refuses to shrink below its content, so the board would push the
+     page taller instead of scrolling inside its own box. */
+  min-height: 0;
+}
+
 /* Top bar: date and week in the middle, week steps either side, today below. Sticky with the
    column headings, because a board scrolled to the evening otherwise shows neither the date
    nor whose column is whose. */
@@ -54,7 +85,13 @@ body {
     'today today today';
   align-items: center;
   gap: 0.3rem 1rem;
-  height: var(--topbar-height);
+  /* `height` until ADR-0021, and it was a promise the content could not keep. On a phone the date
+     wraps to three lines and the buttons to two, so the content overflowed its own 6.5rem box -
+     and because this is z-index 10 with an opaque background over headings at z-index 9, the
+     overflow painted straight over the stylists' names. `min-height` keeps the desktop bar exactly
+     the size it was and lets a narrow one grow instead of spilling.
+     Nothing depends on this number any more: the headings now pin to the board's own scrollport. */
+  min-height: var(--topbar-height);
   padding-bottom: 0.5rem;
   background: var(--paper);
 }
@@ -166,6 +203,10 @@ body {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
+  /* Both axes. `overflow-x: auto` alone is not a thing a browser will do - setting one axis to
+     auto makes the other a scrollport too - and this is the element the headings and the hour
+     scale stick to. */
+  overflow: auto;
 }
 
 /* A click has to change something immediately, or the natural response is to click again - and a
@@ -216,6 +257,10 @@ body {
 .board__heads,
 .board__grid {
   display: grid;
+  /* As wide as the columns need, and never narrower than the pane. Without `max-content` the grid
+     would shrink to the pane and the column minimum would have nothing to push against. */
+  width: max-content;
+  min-width: 100%;
 }
 
 .board__grid {
@@ -231,7 +276,10 @@ body {
    stylist's day. */
 .board__heads {
   position: sticky;
-  top: var(--topbar-height);
+  /* Zero, because the scrollport is now the board's own box and its top edge is already below the
+     bar. This used to be `var(--topbar-height)`, which is what tied the headings to a number the
+     top bar could not keep at narrow widths. */
+  top: 0;
   z-index: 9;
   background: var(--paper);
   box-shadow: 0 2px 5px rgb(0 0 0 / 12%);
@@ -249,7 +297,21 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* The frozen hour column, as one piece. Above the boxes and below the labels that sit on it. */
+.board__scale {
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  background: var(--paper);
+}
+
 .board__hour {
+  /* Held against the left edge while the board scrolls sideways: a column of times you have
+     scrolled away from tells you nothing, and the board is unreadable without them. */
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: var(--paper);
   padding-right: 0.4rem;
   font-size: 0.75rem;
   color: var(--muted);

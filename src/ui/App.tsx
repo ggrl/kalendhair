@@ -593,6 +593,20 @@ export function App() {
         // `Date.UTC(50, 0, 1)` would silently read as 1950 rather than failing. An impossible
         // date goes nowhere, exactly as a step off the end of the calendar already does.
         onPick={(picked) => goTo(isSalonDate(picked) ? picked : null)}
+        // ADR-0021. The same form a drag opens, with nothing pre-filled from a gesture: the first
+        // stylist and the first hour of the salon's day are a starting point to change, not a
+        // proposal. `day.date` and not `pending`, because the form saves onto the day it captured
+        // and that has to be the day whose board is underneath it.
+        onAdd={
+          day.employees.length === 0
+            ? null
+            : () =>
+                setEditor({
+                  date: day.date,
+                  editing: null,
+                  draft: { employeeId: day.employees[0].id, startsAt: '09:00', endsAt: '10:00' },
+                })
+        }
         onSettings={() => {
           window.history.pushState(null, '', urlFor(shown, true))
           setSettings(true)

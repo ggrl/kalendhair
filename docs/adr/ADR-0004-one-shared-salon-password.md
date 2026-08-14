@@ -4,8 +4,10 @@
   first, and [ADR-0017](ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md)
   supersedes the environment-variable password: it is a hash in the database that the salon can
   change, with a PIN reserved for the settings screen and a master password in the environment.
-  One shared password for the salon, the session cookie, and the warning below about personal
-  phones all stand.
+  One shared password for the salon and the session cookie stand. **The warning below about
+  personal phones stopped being hypothetical on 2026-08-14**: ADR-0021 puts the board on staff
+  phones. It was accepted knowingly, and the response - change the salon password on the settings
+  screen, which ends every session including the lost phone's - is written down there.
 - Date: 2026-08-12
 
 ## Revisit before building
