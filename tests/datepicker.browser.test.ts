@@ -26,20 +26,84 @@ async function stubDay(page: Page): Promise<string[]> {
   return asked
 }
 
-/** The picker, by its screen reader name - it has no visible label to click. */
-function picker(page: Page) {
-  return page.getByLabel('Datum wählen')
+/** The control: a glyph beside the date, named for a screen reader. ADR-0020. */
+function pickButton(page: Page) {
+  return page.getByRole('button', { name: 'Datum wählen' })
+}
+
+/** The input the browser hangs its calendar from. In the page, never seen. */
+function pickInput(page: Page) {
+  return page.locator('.topbar__pick-input')
+}
+
+/**
+ * Choosing a date, as the native picker does it.
+ *
+ * The popup is browser chrome and cannot be driven from here, so this does what it does on the way
+ * out: set the value and let the change reach React. The native setter is needed because React
+ * tracks the value it wrote and would swallow an assignment it did not see - a plain `el.value =`
+ * fires nothing.
+ */
+async function choose(page: Page, value: string): Promise<void> {
+  await pickInput(page).evaluate((element, next) => {
+    const input = element as HTMLInputElement
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(input, next)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  }, value)
 }
 
 test('the picker opens on the day being looked at, not on today', async ({ page }) => {
   await stubDay(page)
   await page.goto('/?date=2026-08-13')
-  await expect(picker(page)).toHaveValue('2026-08-13')
+  await expect(pickInput(page)).toHaveValue('2026-08-13')
 
   // And it follows the board when the board moves by other means.
   await page.getByRole('button', { name: 'Nächste Woche' }).click()
   await expect(page.getByRole('heading', { name: 'Donnerstag, 20. August 2026' })).toBeVisible()
-  await expect(picker(page)).toHaveValue('2026-08-20')
+  await expect(pickInput(page)).toHaveValue('2026-08-20')
+})
+
+test('the glyph is the only control, and it opens the browser picker', async ({ page }) => {
+  // The popup is browser chrome, so what can be proved here is that pressing the glyph asks for
+  // it. `showPicker` is recorded before the page runs rather than after, because the click and
+  // the call happen in the same tick.
+  await page.addInitScript(() => {
+    const win = window as unknown as { __picked: number }
+    win.__picked = 0
+    HTMLInputElement.prototype.showPicker = function showPicker() {
+      win.__picked += 1
+    }
+  })
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+
+  await expect(pickButton(page)).toBeVisible()
+
+  // The field that used to say the date a second time shows nothing now. Not `toBeHidden`, which a
+  // 1px transparent element passes as visible - and not `display: none` either, which would be
+  // simpler and would stop `showPicker` working. What is asserted is what a person would see.
+  const shown = await pickInput(page).evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return { opacity: getComputedStyle(element).opacity, width: Math.round(box.width) }
+  })
+  expect(shown.opacity).toBe('0')
+  expect(shown.width).toBeLessThanOrEqual(2)
+
+  await pickButton(page).click()
+  expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(1)
+})
+
+test('the hidden input is not a second stop for the keyboard', async ({ page }) => {
+  // Two tab stops for one control is clutter somebody has to walk through, so the input is out of
+  // the tab order and out of the accessibility tree. The button carries the name.
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+
+  expect(await pickInput(page).getAttribute('tabindex')).toBe('-1')
+  expect(await pickInput(page).getAttribute('aria-hidden')).toBe('true')
+  await expect(page.getByRole('textbox', { name: 'Datum wählen' })).toHaveCount(0)
 })
 
 test('picking a date moves the board, the heading and the address bar', async ({ page }) => {
@@ -47,7 +111,7 @@ test('picking a date moves the board, the heading and the address bar', async ({
   await page.goto('/?date=2026-08-13')
 
   // Months away, which is the reason this exists: eight week-clicks or sixty day-clicks otherwise.
-  await picker(page).fill('2026-10-14')
+  await choose(page, '2026-10-14')
 
   await expect(page.getByRole('heading', { name: 'Mittwoch, 14. Oktober 2026' })).toBeVisible()
   expect(new URL(page.url()).searchParams.get('date')).toBe('2026-10-14')
@@ -57,12 +121,12 @@ test('picking a date moves the board, the heading and the address bar', async ({
 test('a picked date survives a reload, because it is in the address bar', async ({ page }) => {
   await stubDay(page)
   await page.goto('/?date=2026-08-13')
-  await picker(page).fill('2027-01-01')
+  await choose(page, '2027-01-01')
   await expect(page.getByRole('heading', { name: 'Freitag, 1. Januar 2027' })).toBeVisible()
 
   await page.reload()
   await expect(page.getByRole('heading', { name: 'Freitag, 1. Januar 2027' })).toBeVisible()
-  await expect(picker(page)).toHaveValue('2027-01-01')
+  await expect(pickInput(page)).toHaveValue('2027-01-01')
 
   // ADR-0010's boundary, and the reason that date was chosen: 1 January 2027 is in ISO week 53
   // of 2026, so the week number and the year in the date disagree and the header must not "fix" it.
@@ -79,7 +143,7 @@ test('clearing the picker moves nothing', async ({ page }) => {
   await page.waitForTimeout(300)
   const before = asked.length
 
-  await picker(page).fill('')
+  await choose(page, '')
 
   // Settled rather than asserted instantly: "nothing happened" is the assertion that passes for
   // free before anything has had a chance to happen.
@@ -99,7 +163,7 @@ test('a year the calendar cannot represent moves nothing', async ({ page }) => {
   await page.waitForTimeout(300)
   const before = asked.length
 
-  await picker(page).fill('0050-03-15')
+  await choose(page, '0050-03-15')
 
   await page.waitForTimeout(300)
   await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()

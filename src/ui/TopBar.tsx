@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { isoWeek, longGermanDate } from '../calendar/dates'
 import { holidayName } from '../calendar/opening'
 
@@ -40,6 +41,27 @@ export function TopBar({
   const { week } = isoWeek(date)
   const holiday = holidayName(date)
 
+  /**
+   * The date input, which is in the page but never seen. ADR-0020 keeps the browser's own picker;
+   * what changed is only how it is opened - a glyph beside the date rather than a second copy of
+   * the date in a field.
+   *
+   * It has to stay *rendered*: `showPicker()` throws on a `display: none` element. It is therefore
+   * transparent and sits exactly under the button, which is also what makes the popup appear under
+   * the button rather than somewhere else on the page.
+   */
+  const picker = useRef<HTMLInputElement>(null)
+
+  function openPicker(): void {
+    const input = picker.current
+    if (input === null) return
+    // `showPicker` needs a user gesture, which a click is. Older browsers without it fall back to
+    // focusing the field - which is worse than a picker and better than a control that does
+    // nothing when pressed.
+    if (typeof input.showPicker === 'function') input.showPicker()
+    else input.focus()
+  }
+
   return (
     <header className="topbar">
       <button type="button" className="topbar__step" onClick={() => onStep(-1)}>
@@ -47,7 +69,38 @@ export function TopBar({
       </button>
 
       <div className="topbar__date">
-        <h1>{longGermanDate(date)}</h1>
+        <div className="topbar__heading">
+          <h1>{longGermanDate(date)}</h1>
+
+          {/* ADR-0020, moved here from the button row. The field beside `Heute` said the date a
+              second time, two inches from the heading that already said it; this is the same
+              control with the duplicate removed. */}
+          <button type="button" className="topbar__pick" onClick={openPicker} aria-label="Datum wählen">
+            {/* Drawn rather than an emoji: `AGENTS.md` forbids one, and a glyph that renders as a
+                different picture on every platform is not a control anybody learns. */}
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+              <rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" stroke="currentColor" />
+              <path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" fill="none" stroke="currentColor" />
+            </svg>
+          </button>
+
+          <input
+            ref={picker}
+            type="date"
+            className="topbar__pick-input"
+            value={date}
+            // Out of the tab order and out of the accessibility tree: the button above is the one
+            // control, and two stops for one thing is clutter a keyboard user has to walk through.
+            tabIndex={-1}
+            aria-hidden="true"
+            // Every change is passed on, including the empty string a browser hands back for a
+            // cleared or half-typed field. It is not checked here: `App.tsx` refuses anything
+            // `isSalonDate` rejects, and an empty string is one of those. A guard here as well
+            // would be a second copy of one rule, and the copy that is never the authority is the
+            // one that drifts.
+            onChange={(event) => onPick(event.target.value)}
+          />
+        </div>
         <p className="topbar__week">
           {/* ADR-0010: the ISO week number, whose year is not always the year in the date.
               Only the number is shown - "KW 53" on a date reading 2027 is correct, and a
@@ -86,27 +139,6 @@ export function TopBar({
           Heute
         </button>
 
-        {/* ADR-0020: the browser's own picker, not one of ours.
-            Chrome opens the month grid this was asked for, and a phone opens the native wheel -
-            neither of which we could match, and both of which arrive with the German locale, the
-            keyboard and a screen reader name already working. The label is here rather than
-            visible because the top bar has no room for a word and the control is self-evident.
-
-            `value` is the day on screen, so the picker always opens on the day being looked at
-            rather than on today. A cleared field moves nothing: see `onChange`. */}
-        <label className="topbar__pick">
-          <span className="topbar__pick-label">Datum wählen</span>
-          <input
-            type="date"
-            value={date}
-            // Every change is passed on, including the empty string a browser hands back for a
-            // cleared or half-typed field. It is not checked here: `App.tsx` refuses anything
-            // `isSalonDate` rejects, and an empty string is one of those. A guard here as well
-            // would be a second copy of one rule, and the copy that is never the authority is the
-            // one that drifts.
-            onChange={(event) => onPick(event.target.value)}
-          />
-        </label>
         {/* `Aktualisieren` was here until ADR-0019 and is gone with it. It existed because nothing
             polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
             back on its own within thirty seconds of the network doing the same. The owner chose

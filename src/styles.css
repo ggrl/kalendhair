@@ -167,30 +167,51 @@ body {
   background: #f3f4f6;
 }
 
-/* The date picker. Styled to sit with the buttons beside it rather than to look like a form
-   field, because it is navigation and not data entry: ADR-0020. */
-.topbar__pick input {
-  padding: 0.35rem 0.5rem;
-  font: inherit;
-  color: inherit;
-  background: #fff;
-  border: 1px solid var(--rule-hour);
-  border-radius: 0.4rem;
+/* The date, and the glyph that opens the picker beside it. Relative, because the input the
+   picker belongs to is positioned against this. */
+.topbar__heading {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+/* Quiet next to the date rather than a control competing with it: this is a way to leave the day
+   you are on, and the day you are on is the thing worth reading. It darkens on hover and focus so
+   it is findable once somebody is looking for it. ADR-0020. */
+.topbar__pick {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
   cursor: pointer;
 }
 
-/* Named for a screen reader, invisible on screen: the top bar has no room for a word and the
-   control says what it is. Not `display: none`, which would take it out of the accessibility
-   tree along with the pixels. */
-.topbar__pick-label {
+.topbar__pick:hover,
+.topbar__pick:focus-visible {
+  color: var(--ink);
+  border-color: var(--rule-hour);
+}
+
+/* In the page, never seen, and exactly under the glyph.
+   It must stay rendered - `showPicker()` throws on a `display: none` element - and it must sit
+   where the button is, because the native popup anchors to the input rather than to whatever
+   opened it. Transparent and untouchable: the button is the control, and this is only the thing
+   the browser hangs its calendar from. */
+.topbar__pick-input {
   position: absolute;
+  right: 0;
+  bottom: 0;
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The board, flanked by the day steps. */
