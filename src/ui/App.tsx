@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Day, Entry } from '../calendar/types'
 import { DAY_ENDS_AT, DAY_STARTS_AT } from '../calendar/grid'
 import { addDays, addWeeks, shortGermanDate } from '../calendar/dates'
@@ -62,6 +62,24 @@ interface Failure {
 
 const CLOCK = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' })
 
+/**
+ * How often the board asks again for the day it is already showing. ADR-0019.
+ *
+ * Thirty seconds, chosen against a board whose unit of change is a fifteen-minute slot. Faster
+ * buys nothing anybody can act on and multiplies by every machine in the salon; slower starts to
+ * feel like the photograph this product exists to replace.
+ */
+const POLL_INTERVAL_MS = 30_000
+
+/**
+ * How many polls in a row must fail before the board stops claiming to be current.
+ *
+ * Two, so a single dropped request - the commonest failure on salon wifi - says nothing and
+ * recovers on the next tick. A board that cried stale on every blip would train everybody to
+ * ignore the one line that matters when the network is actually gone.
+ */
+const FAILURES_BEFORE_STALE = 2
+
 export function App() {
   const [target, setTarget] = useState<Target>(() => ({ date: dateFromUrl(), attempt: 0 }))
   const [day, setDay] = useState<Day | null>(null)
@@ -105,6 +123,31 @@ export function App() {
   /** Something that happened to the data, as opposed to something that failed to load. */
   const [notice, setNotice] = useState<string | null>(null)
 
+  /** How many polls have failed in a row. Reset by any success, including a navigation. */
+  const [pollFailures, setPollFailures] = useState(0)
+  /** Whether a drag is in flight on the board. Board owns the gesture; this is only told about it. */
+  const [gesturing, setGesturing] = useState(false)
+
+  /**
+   * A polled day that arrived while somebody was busy, waiting for them to stop.
+   *
+   * The brief's own awkward case: an update must not yank the box out from under the cursor, and
+   * it must not redraw the board under a half-typed customer name. A ref rather than state because
+   * nothing renders from it - it is a parcel left by the door, and the effect below picks it up.
+   */
+  const deferred = useRef<Day | null>(null)
+
+  /**
+   * Whether a swap would land on top of something somebody is doing.
+   *
+   * Read through a ref by the poll, so that starting a drag does not tear down and rebuild the
+   * timer - which would reset the interval every time anybody touched the board, and on a busy
+   * front desk could mean it never fires at all.
+   */
+  const busy = editor !== null || gesturing
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+
   useEffect(() => {
     // Back and forward have to move the board, or the address bar is decoration. That includes
     // stepping back out of the settings screen, which is a history entry like any other.
@@ -121,6 +164,15 @@ export function App() {
     setLoading(true)
     setFailure(null)
 
+    // Any held poll is void from here. A review pass reproduced what happens without this: the
+    // parcel is only dropped when it is applied, so while somebody keeps the form open it survives
+    // Back and Forward, and a navigation that re-fetches the same date brings genuinely newer data
+    // that the older parcel then clobbers on close - stamped with a fresh `Stand`, so the board
+    // claims to be current while showing an appointment that had already been drawn and removed.
+    // The same effect runs after every write, which covers the milder version: saving with a day
+    // held used to apply the pre-save board before the reload arrived.
+    deferred.current = null
+
     fetchDay(target.date)
       .then((loaded) => {
         if (!current) return
@@ -128,6 +180,9 @@ export function App() {
         setDay(loaded)
         setLoadedAt(CLOCK.format(new Date()))
         setLoading(false)
+        // A navigation that worked is proof the server is reachable, so the board stops calling
+        // itself stale here too - not only on a successful poll.
+        setPollFailures(0)
 
         // When a load settles, the address bar names the day on screen. Unconditionally.
         //
@@ -179,6 +234,133 @@ export function App() {
       current = false
     }
   }, [target])
+
+  /**
+   * A day that arrived from a poll rather than from a navigation.
+   *
+   * Deliberately does NOT touch `loading`, `failure` or the address bar. Those belong to a
+   * navigation somebody asked for: dimming the board and showing "Termine werden geladen" every
+   * thirty seconds would make the screen flicker on its own, and `inert` would take the keyboard
+   * away mid-sentence. A poll replaces the boxes and says when, and nothing else.
+   */
+  const applyPolled = useCallback((fresh: Day) => {
+    setDay(fresh)
+    setLoadedAt(CLOCK.format(new Date()))
+  }, [])
+
+  /**
+   * The poll. ADR-0019.
+   *
+   * Keyed on the day being shown, so navigating restarts it against the new day and a response
+   * for the day somebody just left cannot land. Chained `setTimeout` rather than `setInterval`,
+   * because an interval fires on a schedule regardless of whether the previous request came back -
+   * on a slow connection that stacks requests until one of them wins a race and the board flickers
+   * between two answers. The next tick is scheduled when the last one finishes, so there is never
+   * more than one in flight.
+   */
+  const shownDate = day?.date ?? null
+  useEffect(() => {
+    // Nothing to poll for: no day yet, nobody logged in, the settings screen is what is on screen,
+    // or a navigation is already in flight. The last one matters - polling during a load would put
+    // two answers for two different days in the air at once, and `setDay` has no ordering guard.
+    if (shownDate === null || needsLogin || settings || loading) return
+
+    let stopped = false
+    let timer: number | undefined
+    /**
+     * Whether a request is open right now.
+     *
+     * Not decoration, and not the same thing as "a timer is pending". A security pass measured
+     * what happens without it: hide and show the tab while a request is in flight and
+     * `clearTimeout` has nothing to clear, so the visibility handler opens a *second* request.
+     * Both then schedule, the second overwrites `timer`, and the first chain is orphaned - never
+     * cleared, never cancelled again. Twenty hide/show cycles during a slow response measured 21
+     * concurrent requests against a designed two per minute, and two overlapping answers resolve
+     * in whatever order the network gives them, which is the flicker the chained timeout exists
+     * to prevent.
+     */
+    let inFlight = false
+
+    // Never while the tab is hidden. A board left open overnight on the front desk machine makes
+    // no requests at all rather than about 2,800, and a tab nobody is looking at is by definition
+    // showing nobody anything.
+    //
+    // Clears before it sets, so no path through here can leave a timer nothing owns.
+    const schedule = () => {
+      window.clearTimeout(timer)
+      if (!stopped && !document.hidden) timer = window.setTimeout(tick, POLL_INTERVAL_MS)
+    }
+
+    const tick = () => {
+      if (stopped || inFlight) return
+      inFlight = true
+
+      fetchDay(shownDate).then(
+        (fresh) => {
+          inFlight = false
+          if (stopped) return
+          setPollFailures(0)
+          // Held rather than dropped: whoever is dragging or typing gets it the moment they
+          // finish, so the board is at most one gesture behind rather than one whole interval.
+          if (busyRef.current) deferred.current = fresh
+          else applyPolled(fresh)
+          schedule()
+        },
+        (error: unknown) => {
+          inFlight = false
+          if (stopped) return
+          // A session that ended is not a flaky network, and polling it again every thirty
+          // seconds would be a lock-out that hammers the server. The login screen is the answer,
+          // through the same one fact the rest of this component uses.
+          if (error instanceof Unauthenticated) {
+            setNeedsLogin(true)
+            // And the form goes with it, exactly as it does when a navigation finds the 401. A
+            // review pass forced that line on the other path and named the reason; this is a
+            // second door onto the same bug, and it is worse, because a poll interrupts somebody
+            // who is mid-sentence rather than somebody who pressed a button. Without it the
+            // dialogue returns after the login with the typing gone and a captured date pointing
+            // at a day nobody is looking at.
+            setEditor(null)
+            return
+          }
+          setPollFailures((count) => count + 1)
+          schedule()
+        },
+      )
+    }
+
+    const onVisibility = () => {
+      window.clearTimeout(timer)
+      // Straight away on return, not in thirty seconds. Somebody switching back to this tab is
+      // about to read the board, and that is the moment it is most likely to be wrong. `tick`
+      // refuses if a request is already open, so switching back and forth costs at most one
+      // request per response rather than one per switch.
+      if (!document.hidden) tick()
+    }
+
+    schedule()
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      stopped = true
+      window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [shownDate, needsLogin, settings, loading, applyPolled])
+
+  /**
+   * The held day, applied the moment the drag ends or the form closes.
+   *
+   * Guarded on the date because somebody can navigate while the form is open: the parcel would
+   * then be yesterday's board, and applying it would change the day on screen with nobody asking -
+   * which is the one thing the brief forbids outright.
+   */
+  useEffect(() => {
+    if (busy) return
+    const held = deferred.current
+    deferred.current = null
+    if (held !== null && held.date === shownDate) applyPolled(held)
+  }, [busy, shownDate, applyPolled])
 
   const goTo = useCallback((next: string | null) => {
     // null is the edge of the representable calendar. The step goes nowhere, rather than
@@ -396,10 +578,16 @@ export function App() {
         date={shown}
         isToday={shown === day.today}
         loadedAt={loadedAt}
-        stale={failure !== null}
+        // The poll, and only the poll. Folding a failed navigation in here was my idea and a
+        // review pass reproduced why it is wrong: `failure` is cleared only by asking for another
+        // day, so one failed day step pinned `nicht aktuell` on indefinitely - while the poll went
+        // on succeeding against the day actually on screen, moving the boxes and the timestamp
+        // beside it. A line that says "not current" next to data demonstrably arriving is how
+        // people learn to ignore the one line that matters. The failure banner below already says
+        // which day did not load, in a whole sentence.
+        stale={pollFailures >= FAILURES_BEFORE_STALE}
         onStep={(weeks) => goTo(addWeeks(pending, weeks))}
         onToday={goToday}
-        onReload={reload}
         onSettings={() => {
           window.history.pushState(null, '', urlFor(shown, true))
           setSettings(true)
@@ -467,6 +655,9 @@ export function App() {
               onToggleWholeDay={(employeeId, existing) => toggleWholeDay(employeeId, existing, day.date)}
               onDragged={(entry, target) => dragged(entry, target, day.date)}
               onRefused={setNotice}
+              // The board owns the gesture; this is the poll being told not to redraw underneath
+              // one. ADR-0019.
+              onGesturing={setGesturing}
             />
           </div>
         </div>

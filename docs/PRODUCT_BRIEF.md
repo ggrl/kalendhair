@@ -119,6 +119,15 @@ enough. Updating data must never change which day is on screen, and the date liv
 the URL so a refresh, a crash or a redeploy returns to the day the person was actually
 on.
 
+**Built on 2026-08-14 and ruled on in ADR-0019**, which settled everything this paragraph left
+open. Every thirty seconds, for the day on screen and no other. A poll never dims the board or
+takes the keyboard, because it is not a navigation. Nothing swaps while a drag is in flight or the
+form is open - the day is held and applied the moment the hand comes off. It stops entirely while
+the tab is hidden and asks once on return. After two failures in a row the board stops claiming to
+be current and says `nicht aktuell` beside `Stand HH:MM`, which is the line that keeps this honest:
+a board whose polling had silently stopped would be the photograph problem again, looking alive.
+`Aktualisieren` is gone with it - the timer never stops trying, so there is nothing to press.
+
 An iOS app is expected later, showing the same calendar. It is not built here and
 nothing waits for it, but two schema decisions are made now because they are the
 expensive ones to reverse afterwards.

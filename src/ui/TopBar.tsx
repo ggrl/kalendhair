@@ -6,15 +6,18 @@ interface Props {
   isToday: boolean
   /** Wall clock time of the last successful load, or null before the first one. */
   loadedAt: string | null
-  /** True when the last load failed, so what is on screen is not what was asked for. */
+  /**
+   * True when what is on screen is not current: either the day somebody asked for never arrived,
+   * or the poll has failed twice running. ADR-0019 makes those one idea deliberately - they mean
+   * the same thing to the person reading the board, and only the wording of the cause differs.
+   */
   stale: boolean
   onStep: (weeks: number) => void
   onToday: () => void
-  onReload: () => void
   onSettings: () => void
 }
 
-export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onReload, onSettings }: Props) {
+export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onSettings }: Props) {
   const { week } = isoWeek(date)
   const holiday = holidayName(date)
 
@@ -38,15 +41,15 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onRelo
               rather than in the heading because the heading is the date and nothing else, and
               because this line already reads as a list of things about the day. */}
           {holiday !== null && <span className="topbar__holiday"> · {holiday}</span>}
-          {/* The board loads once and nothing polls yet, so at 14:00 it looks exactly like a
-              live board loaded at 09:00. The brief's whole premise is that nobody can tell how
-              stale a photograph is; a screen that cannot say either has the same fault with
-              better typography. */}
+          {/* The board polls, so this normally moves on its own every half minute. It stays
+              because polling can stop: the brief's whole premise is that nobody can tell how stale
+              a photograph is, and a board that silently stopped updating would be exactly that
+              with better typography. `nicht aktuell` is the board declining to claim otherwise. */}
           {loadedAt !== null && (
             <span className={stale ? 'topbar__stand topbar__stand--stale' : 'topbar__stand'}>
               {' '}
               · Stand {loadedAt}
-              {stale && ' (nicht aktualisiert)'}
+              {stale && ' · nicht aktuell'}
             </span>
           )}
         </p>
@@ -63,9 +66,10 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onRelo
         <button type="button" className="topbar__today" onClick={onToday}>
           Heute
         </button>
-        <button type="button" className="topbar__today" onClick={onReload}>
-          Aktualisieren
-        </button>
+        {/* `Aktualisieren` was here until ADR-0019 and is gone with it. It existed because nothing
+            polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
+            back on its own within thirty seconds of the network doing the same. The owner chose
+            removing it over keeping it as a way to skip that wait. */}
         {/* Last, and styled like the others rather than louder. It is the thing somebody needs
             twice a year, and the PIN behind it is what makes reaching it by accident harmless. */}
         <button type="button" className="topbar__today" onClick={onSettings}>

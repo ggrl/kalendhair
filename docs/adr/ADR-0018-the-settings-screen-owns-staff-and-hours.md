@@ -125,6 +125,10 @@ this ruling did not say, five of them asked of the owner:
   closes this today**; polling will, when it is built, and the tab that made the change is already
   correct because leaving the settings screen reloads the board.
 
+  > Closed on 2026-08-14 by [ADR-0019](ADR-0019-the-board-polls-and-says-when-it-cannot.md). Polling
+  > is built, so an idle tab picks up changed hours within thirty seconds without anybody touching
+  > it. The sentence above is kept because it named the condition, and then the condition happened.
+
 And three that are mine:
 
 - **The server applies the holiday rule, not the client.** `Day.coreHours` is one answer rather
