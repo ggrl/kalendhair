@@ -64,15 +64,23 @@ export function TopBar({
 
   return (
     <header className="topbar">
+      {/* The words are hidden on a narrow screen, where five controls do not fit one row - so the
+          name is an `aria-label` rather than the text inside. Without it the button would announce
+          itself as "«" on a phone, which is not a thing anybody can act on. */}
+      <button type="button" className="topbar__step" onClick={() => onStep(-1)} aria-label="Vorige Woche">
+        <span aria-hidden="true">&laquo;</span>
+        <span className="topbar__step-words"> Vorige Woche</span>
+      </button>
+
       {/* Settings, today, add - in that order, with the day you are on in the middle and the two
           things that leave it either side. The icons carry an `aria-label` because an icon has no
           text to be named by, and a button a screen reader announces as "Schaltfläche" is a button
           nobody can use.
 
-          First in the markup because it is now first on the screen: the grid could put this row on
-          top on its own, and then a keyboard would still have tabbed through the week steps and the
-          date picker before reaching the row above them. Tab order follows the markup, not the
-          grid. */}
+          Between the two week steps in the markup because that is where it is on the screen: one
+          row of controls, read left to right. The grid alone could place them that way and leave
+          the markup in any order at all - and then Tab would walk the row in an order nobody can
+          see. Tab follows the markup, not the grid, which is also why the date block is last. */}
       <div className="topbar__actions">
         {/* A cog rather than three dots. Three dots promise a menu that opens under the finger,
             and this opens a whole screen - a small promise the button would not keep. The PIN
@@ -138,8 +146,9 @@ export function TopBar({
           </button>
         )}
       </div>
-      <button type="button" className="topbar__step" onClick={() => onStep(-1)}>
-        &laquo; Vorige Woche
+      <button type="button" className="topbar__step" onClick={() => onStep(1)} aria-label="Nächste Woche">
+        <span className="topbar__step-words">Nächste Woche </span>
+        <span aria-hidden="true">&raquo;</span>
       </button>
 
       <div className="topbar__date">
@@ -200,10 +209,6 @@ export function TopBar({
           )}
         </p>
       </div>
-
-      <button type="button" className="topbar__step" onClick={() => onStep(1)}>
-        Nächste Woche &raquo;
-      </button>
 
     </header>
   )

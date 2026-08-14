@@ -698,15 +698,31 @@ test('the action row reads settings, today, add - and the icons are named', asyn
   expect(shape.width).toBe(shape.height)
 })
 
-test('the action row sits above the date, and the keyboard agrees', async ({ page }) => {
-  // The owner swapped the two rows: the buttons on top, the date and its week line underneath.
+test('every control is on the top row and the date is underneath', async ({ page }) => {
+  // The owner's arrangement: one row of controls - week back, settings, Heute, add, week forward -
+  // and below it only what day it is.
   await stubApi(page)
   await page.goto(`/?date=${TODAY}`)
   await page.waitForSelector('.board__grid')
 
   const actions = (await page.locator('.topbar__actions').boundingBox())!
   const date = (await page.locator('.topbar__date').boundingBox())!
+  const prev = (await page.locator('.topbar__step').first().boundingBox())!
+  const next = (await page.locator('.topbar__step').nth(1).boundingBox())!
+
   expect(actions.y + actions.height).toBeLessThanOrEqual(date.y)
+
+  // The week steps share that row rather than flanking the date. Compared by centre, because the
+  // buttons are not the same height as the icons beside them and never were.
+  const middleOf = (box: { y: number; height: number }): number => box.y + box.height / 2
+  expect(Math.abs(middleOf(prev) - middleOf(actions))).toBeLessThan(4)
+  expect(Math.abs(middleOf(next) - middleOf(actions))).toBeLessThan(4)
+  expect(prev.y + prev.height).toBeLessThanOrEqual(date.y)
+  expect(next.y + next.height).toBeLessThanOrEqual(date.y)
+
+  // Left, middle, right - and the date centred under all three.
+  expect(prev.x).toBeLessThan(actions.x)
+  expect(next.x).toBeGreaterThan(actions.x + actions.width)
 
   // And the eye and the keyboard read the same order. A grid can put a row on top while the markup
   // leaves it last, and then Tab reaches the week steps and the date picker before the row above
@@ -716,10 +732,44 @@ test('the action row sits above the date, and the keyboard agrees', async ({ pag
   // the top of the page here: the board scrolls itself to 08:00 on load, and scrolling moves the
   // browser's sequential focus starting point, so the first press continues from inside the board.
   // That is ordinary browser behaviour and has nothing to do with these two rows.
-  const markupOrder = await page.evaluate(() => {
-    const actions = document.querySelector('.topbar__actions')!
-    const date = document.querySelector('.topbar__date')!
-    return (actions.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  const markupOrder = await page.evaluate(() =>
+    [...document.querySelectorAll('.topbar__step, .topbar__actions, .topbar__date')].map(
+      (element) => element.className,
+    ),
+  )
+  expect(markupOrder).toEqual(['topbar__step', 'topbar__actions', 'topbar__step', 'topbar__date'])
+})
+
+test('a narrow screen keeps the week steps on the row and drops their words, not their names', async ({ page }) => {
+  // Five controls do not fit one row at 390px. The words go and the chevrons stay - and the thing
+  // being defended is not the look: the row overflowing made the whole PAGE scroll sideways, which
+  // ADR-0021 gives to the board alone.
+  await stubApi(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  await expect(page.locator('.topbar__step-words').first()).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 700 })
+  await expect(page.locator('.topbar__step-words').first()).toBeHidden()
+
+  const narrow = await page.evaluate(() => {
+    const bar = document.querySelector('.topbar')!
+    return {
+      barOverflows: bar.scrollWidth > bar.clientWidth,
+      pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    }
   })
-  expect(markupOrder).toBe(true)
+  expect(narrow.barOverflows).toBe(false)
+  expect(narrow.pageScrollsSideways).toBe(false)
+
+  // The name does not change with the width of the glass. Hiding the words without this would
+  // leave a button announcing itself as "«", which is not a thing anybody can act on.
+  await expect(page.getByRole('button', { name: 'Vorige Woche', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Nächste Woche', exact: true })).toBeVisible()
+
+  // And it still steps a week, with no words on it.
+  await page.getByRole('button', { name: 'Nächste Woche', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Mittwoch, 19. August 2026' })).toBeVisible()
 })

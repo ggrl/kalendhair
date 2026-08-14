@@ -84,12 +84,13 @@ body {
   z-index: 10;
   display: grid;
   grid-template-columns: auto 1fr auto;
-  /* The actions first, then the date with the week steps either side. The area is still called
-     `today` after the one word in it. Both rows keep their own contents: only which is on top
-     changed. */
+  /* One row of controls, then the date. The week steps sit either side of the settings, Heute and
+     add group rather than beside the date, so everything that changes the day is on one line and
+     the line below is only what day it is. The area is still called `today` after the one word in
+     it. */
   grid-template-areas:
-    'today today today'
-    'prev date next';
+    'prev today next'
+    'date date date';
   align-items: center;
   gap: 0.3rem 1rem;
   /* `height` until ADR-0021, and it was a promise the content could not keep. On a phone the date
@@ -149,6 +150,20 @@ body {
      padding or the font size moves. */
   border-radius: 999px;
   cursor: pointer;
+}
+
+/* On a narrow screen the week steps keep their chevron and drop their words: five controls do not
+   fit one row at 390px, and the row overflowing made the whole PAGE scroll sideways - which is the
+   one thing ADR-0021 gives to the board alone.
+
+   The words go rather than the row splitting, which is the owner's call. Both buttons keep an
+   `aria-label`, so what a screen reader announces does not change with the width of the glass. The
+   cost is named here because it is real: « and » in the bar are a week, ‹ and › at the board's
+   edges are a day, and on a phone those are four similar glyphs. */
+@media (max-width: 700px) {
+  .topbar__step-words {
+    display: none;
+  }
 }
 
 .topbar__step:first-of-type {
