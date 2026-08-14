@@ -99,6 +99,49 @@ test('the strip stays narrow when space is tight and widens when there is room',
   expect(roomy.width).toBeLessThan(1920 / 6)
 })
 
+test('the chevron grows with the strip, and only with the strip', async ({ page }) => {
+  // The owner wanted a bigger chevron and no space lost on a phone, so the glyph is tied to the
+  // same measure as the width: it is 1.5rem wherever the strip is 1.75rem, and 3rem where the
+  // strip is 144px.
+  await stub(page)
+
+  const measure = async (): Promise<{ font: number; overflows: boolean; width: number }> =>
+    page.locator('.edge--prev').evaluate((edge) => ({
+      font: parseFloat(window.getComputedStyle(edge).fontSize),
+      // The glyph must stay inside its own strip. A bigger font in a narrow strip is the one way
+      // this change could cost the space the owner asked to keep.
+      overflows: edge.scrollWidth > edge.clientWidth,
+      width: edge.getBoundingClientRect().width,
+    }))
+
+  await page.setViewportSize({ width: 390, height: 700 })
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+  const phone = await measure()
+  expect(phone.font).toBe(24)
+  expect(Math.round(phone.width)).toBe(28)
+  expect(phone.overflows).toBe(false)
+
+  await page.setViewportSize({ width: 1180, height: 800 })
+  const tight = await measure()
+  expect(tight.font).toBe(24)
+  expect(tight.overflows).toBe(false)
+
+  // Halfway up, where both are still growing. A sanity check across the range rather than a proof
+  // of the divisor: a gentler or steeper growth is taste and passes this, but a formula that ran
+  // away in the middle - a glyph wider than the strip holding it - does not.
+  await page.setViewportSize({ width: 1352, height: 800 })
+  const between = await measure()
+  expect(between.font).toBeGreaterThanOrEqual(24)
+  expect(between.font).toBeLessThanOrEqual(between.width)
+  expect(between.overflows).toBe(false)
+
+  await page.setViewportSize({ width: 1920, height: 900 })
+  const roomy = await measure()
+  expect(roomy.font).toBe(48)
+  expect(roomy.overflows).toBe(false)
+})
+
 test('a phone keeps the narrow strips, so the board keeps its width', async ({ page }) => {
   // The growth is written against viewport width with no breakpoint, so the small end is worth
   // pinning: a phone must not lose 288px to two navigation strips.
