@@ -30,7 +30,8 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | The salon's core hours and Hessen's holidays shaded on the board, refusing nothing | done |
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
 | Navigation: a date picker, using the browser's own | done |
-| Navigation: month steps, arrow keys | not started |
+| Navigation: arrow keys for a day, `Umschalt`+arrow for a week | done |
+| Navigation: month steps | not started |
 | Live updates, by polling the day on screen every 30 seconds | done |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |

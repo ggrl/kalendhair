@@ -85,8 +85,15 @@ the same weekday.
 Also in the top bar, in this build order rather than all at once: a today button first,
 because once week steps exist somebody will be six weeks out and need one click back;
 then a date picker, month steps, and left and right arrow keys for day movement. **The date
-picker was built on 2026-08-14 and is the browser's own `<input type="date">`: ADR-0020.** Month
-steps and arrow keys are still unbuilt, and the picker does not replace them - a week or month
+picker was built on 2026-08-14 and is the browser's own `<input type="date">`: ADR-0020.** The
+arrow keys followed the same day: left and right move a day, with `Umschalt` a week, and nothing
+is advertised on screen - the owner chose to tell the staff rather than spend a line of the top
+bar on it. They do nothing while the form, the settings screen or the login screen is up, nothing
+while a drag is in flight, and nothing when a field has focus; up and down still scroll the board
+through the day, which since it opens at 08:00 is the only keyboard route to the evening. Month
+steps are still unbuilt, and were deliberately left out of the arrow keys: ADR-0010's clamp from
+31 January does not reverse, and a modifier nobody can see is the wrong place to learn that. The
+picker does not replace a step either - a week or month
 step keeps the weekday, which is what makes "the same slot in four weeks" four clicks. Week and
 month steps keep the weekday; month steps clamp the day of the month, which is not
 reversible. Week numbers are ISO 8601, whose year is not always the year in the date. See
@@ -196,7 +203,9 @@ Awkward, each needing an answer in code:
 - 1 January 2027, which is in ISO week 53 of 2026, so the header must read KW 53 on a date
   that says 2027
 - stepping a month forward from 31 January, and stepping back again, which does not return
-- arrow keys pressed while a box is selected or the modal is open
+- arrow keys pressed while a box is selected or the modal is open: answered on 2026-08-14. The
+  modal, the settings screen, the login screen, a drag in flight and any focused field all swallow
+  the press, and a held key moves one day rather than one per repeat
 
 ## Non-goals
 
