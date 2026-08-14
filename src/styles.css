@@ -126,6 +126,32 @@ body {
   background: #f3f4f6;
 }
 
+/* The date picker. Styled to sit with the buttons beside it rather than to look like a form
+   field, because it is navigation and not data entry: ADR-0020. */
+.topbar__pick input {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color: inherit;
+  background: #fff;
+  border: 1px solid var(--rule-hour);
+  border-radius: 0.4rem;
+  cursor: pointer;
+}
+
+/* Named for a screen reader, invisible on screen: the top bar has no room for a word and the
+   control says what it is. Not `display: none`, which would take it out of the accessibility
+   tree along with the pixels. */
+.topbar__pick-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The board, flanked by the day steps. */
 .shell__board {
   display: flex;

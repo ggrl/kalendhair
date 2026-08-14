@@ -14,10 +14,12 @@ interface Props {
   stale: boolean
   onStep: (weeks: number) => void
   onToday: () => void
+  /** A date chosen outright rather than stepped to. ADR-0020. */
+  onPick: (date: string) => void
   onSettings: () => void
 }
 
-export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onSettings }: Props) {
+export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onPick, onSettings }: Props) {
   const { week } = isoWeek(date)
   const holiday = holidayName(date)
 
@@ -66,6 +68,28 @@ export function TopBar({ date, isToday, loadedAt, stale, onStep, onToday, onSett
         <button type="button" className="topbar__today" onClick={onToday}>
           Heute
         </button>
+
+        {/* ADR-0020: the browser's own picker, not one of ours.
+            Chrome opens the month grid this was asked for, and a phone opens the native wheel -
+            neither of which we could match, and both of which arrive with the German locale, the
+            keyboard and a screen reader name already working. The label is here rather than
+            visible because the top bar has no room for a word and the control is self-evident.
+
+            `value` is the day on screen, so the picker always opens on the day being looked at
+            rather than on today. A cleared field moves nothing: see `onChange`. */}
+        <label className="topbar__pick">
+          <span className="topbar__pick-label">Datum wählen</span>
+          <input
+            type="date"
+            value={date}
+            // Every change is passed on, including the empty string a browser hands back for a
+            // cleared or half-typed field. It is not checked here: `App.tsx` refuses anything
+            // `isSalonDate` rejects, and an empty string is one of those. A guard here as well
+            // would be a second copy of one rule, and the copy that is never the authority is the
+            // one that drifts.
+            onChange={(event) => onPick(event.target.value)}
+          />
+        </label>
         {/* `Aktualisieren` was here until ADR-0019 and is gone with it. It existed because nothing
             polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
             back on its own within thirty seconds of the network doing the same. The owner chose
