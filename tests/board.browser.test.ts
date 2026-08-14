@@ -697,3 +697,114 @@ test('the action row reads settings, today, add - and the icons are named', asyn
   })
   expect(shape.width).toBe(shape.height)
 })
+
+test('every control is on the top row and the date is underneath', async ({ page }) => {
+  // The owner's arrangement: one row of controls - week back, settings, Heute, add, week forward -
+  // and below it only what day it is.
+  await stubApi(page)
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const actions = (await page.locator('.topbar__actions').boundingBox())!
+  const date = (await page.locator('.topbar__date').boundingBox())!
+  const prev = (await page.locator('.topbar__step').first().boundingBox())!
+  const next = (await page.locator('.topbar__step').nth(1).boundingBox())!
+
+  expect(actions.y + actions.height).toBeLessThanOrEqual(date.y)
+
+  // The week steps share that row rather than flanking the date. Compared by centre, because the
+  // buttons are not the same height as the icons beside them and never were.
+  const middleOf = (box: { y: number; height: number }): number => box.y + box.height / 2
+  expect(Math.abs(middleOf(prev) - middleOf(actions))).toBeLessThan(4)
+  expect(Math.abs(middleOf(next) - middleOf(actions))).toBeLessThan(4)
+  expect(prev.y + prev.height).toBeLessThanOrEqual(date.y)
+  expect(next.y + next.height).toBeLessThanOrEqual(date.y)
+
+  // Left, middle, right - and the date centred under all three.
+  expect(prev.x).toBeLessThan(actions.x)
+  expect(next.x).toBeGreaterThan(actions.x + actions.width)
+
+  // And the eye and the keyboard read the same order. A grid can put a row on top while the markup
+  // leaves it last, and then Tab reaches the week steps and the date picker before the row above
+  // them - the half of this change a screenshot cannot show.
+  //
+  // Asserted as document order rather than by pressing Tab, because a real Tab does not start at
+  // the top of the page here: the board scrolls itself to 08:00 on load, and scrolling moves the
+  // browser's sequential focus starting point, so the first press continues from inside the board.
+  // That is ordinary browser behaviour and has nothing to do with these two rows.
+  const markupOrder = await page.evaluate(() =>
+    [...document.querySelectorAll('.topbar__step, .topbar__actions, .topbar__date')].map(
+      (element) => element.className,
+    ),
+  )
+  expect(markupOrder).toEqual(['topbar__step', 'topbar__actions', 'topbar__step', 'topbar__date'])
+})
+
+test('the hour scale takes what the times need and gives the rest to the columns', async ({ page }) => {
+  // Narrowed from 4rem to 2.5rem once the day-step buttons lost their boxes. Asserted as slack
+  // rather than as a number of pixels: the point is that "06:00" fits with room to spare, which is
+  // what a system font a fraction wider than this one would eat first.
+  await stubApi(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const scale = await page.evaluate(() => {
+    const label = document.querySelector('.board__hour') as HTMLElement
+    const range = document.createRange()
+    range.selectNodeContents(label)
+    const style = window.getComputedStyle(label)
+    const heads = window.getComputedStyle(document.querySelector('.board__heads')!).gridTemplateColumns
+    const grid = window.getComputedStyle(document.querySelector('.board__grid')!).gridTemplateColumns
+    return {
+      cell: Math.round(label.getBoundingClientRect().width),
+      text: range.getBoundingClientRect().width,
+      room: label.clientWidth - parseFloat(style.paddingRight),
+      // One line, not two: too narrow and the label wraps instead of clipping.
+      lines: Math.round(label.getBoundingClientRect().height / parseFloat(style.fontSize)),
+      firstColumnOfHeads: heads.split(' ')[0],
+      firstColumnOfGrid: grid.split(' ')[0],
+    }
+  })
+
+  expect(scale.cell).toBe(40)
+  expect(scale.text).toBeLessThan(scale.room)
+  expect(scale.lines).toBe(1)
+  // The pair that must never disagree: sizing the two grids apart is what once put every heading
+  // over the wrong stylist, and this is the column they share.
+  expect(scale.firstColumnOfHeads).toBe(scale.firstColumnOfGrid)
+})
+
+test('a narrow screen keeps the week steps on the row and drops their words, not their names', async ({ page }) => {
+  // Five controls do not fit one row at 390px. The words go and the chevrons stay - and the thing
+  // being defended is not the look: the row overflowing made the whole PAGE scroll sideways, which
+  // ADR-0021 gives to the board alone.
+  await stubApi(page)
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  await expect(page.locator('.topbar__step-words').first()).toBeVisible()
+
+  await page.setViewportSize({ width: 390, height: 700 })
+  await expect(page.locator('.topbar__step-words').first()).toBeHidden()
+
+  const narrow = await page.evaluate(() => {
+    const bar = document.querySelector('.topbar')!
+    return {
+      barOverflows: bar.scrollWidth > bar.clientWidth,
+      pageScrollsSideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    }
+  })
+  expect(narrow.barOverflows).toBe(false)
+  expect(narrow.pageScrollsSideways).toBe(false)
+
+  // The name does not change with the width of the glass. Hiding the words without this would
+  // leave a button announcing itself as "«", which is not a thing anybody can act on.
+  await expect(page.getByRole('button', { name: 'Vorige Woche', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Nächste Woche', exact: true })).toBeVisible()
+
+  // And it still steps a week, with no words on it.
+  await page.getByRole('button', { name: 'Nächste Woche', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Mittwoch, 19. August 2026' })).toBeVisible()
+})

@@ -51,6 +51,18 @@ interface Props {
 const MIN_COLUMN = '150px'
 
 /**
+ * The width of the hour scale down the left.
+ *
+ * 4rem until the day-step buttons lost their boxes: the scale was sized to sit beside a control
+ * and now sits beside nothing, so it keeps what "08:00" at 0.75rem actually needs plus its own
+ * 0.4rem of padding, and gives the rest back to the columns.
+ *
+ * One constant because two grids use it - the headings and the board - and they are the pair that
+ * must never disagree. Sizing them apart is what once put every heading over the wrong stylist.
+ */
+const SCALE_WIDTH = '2.5rem'
+
+/**
  * The hour the board is scrolled to when it opens.
  *
  * The bookable day starts at 06:00 and the salon almost never uses the first two hours: the
@@ -405,7 +417,7 @@ export function Board({
       {/* Sticky, because 56 rows is taller than a laptop screen: scrolled to the evening, the
           board was four unlabelled pastel columns and a wrong-column booking waiting to
           happen. */}
-      <div className="board__heads" style={{ gridTemplateColumns: `4rem repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))` }}>
+      <div className="board__heads" style={{ gridTemplateColumns: `${SCALE_WIDTH} repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))` }}>
         <div className="board__corner" />
         {day.employees.map((employee) => {
           const blocked = wholeDayBlock(day, employee.id)
@@ -442,7 +454,7 @@ export function Board({
         className="board__grid"
         ref={grid}
         style={{
-          gridTemplateColumns: `4rem repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))`,
+          gridTemplateColumns: `${SCALE_WIDTH} repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))`,
           gridTemplateRows: `repeat(${SLOT_COUNT}, var(--slot-height))`,
         }}
         // One set of handlers for the whole grid, not one per column, because a move crosses
