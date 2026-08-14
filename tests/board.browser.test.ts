@@ -697,3 +697,29 @@ test('the action row reads settings, today, add - and the icons are named', asyn
   })
   expect(shape.width).toBe(shape.height)
 })
+
+test('the action row sits above the date, and the keyboard agrees', async ({ page }) => {
+  // The owner swapped the two rows: the buttons on top, the date and its week line underneath.
+  await stubApi(page)
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  const actions = (await page.locator('.topbar__actions').boundingBox())!
+  const date = (await page.locator('.topbar__date').boundingBox())!
+  expect(actions.y + actions.height).toBeLessThanOrEqual(date.y)
+
+  // And the eye and the keyboard read the same order. A grid can put a row on top while the markup
+  // leaves it last, and then Tab reaches the week steps and the date picker before the row above
+  // them - the half of this change a screenshot cannot show.
+  //
+  // Asserted as document order rather than by pressing Tab, because a real Tab does not start at
+  // the top of the page here: the board scrolls itself to 08:00 on load, and scrolling moves the
+  // browser's sequential focus starting point, so the first press continues from inside the board.
+  // That is ordinary browser behaviour and has nothing to do with these two rows.
+  const markupOrder = await page.evaluate(() => {
+    const actions = document.querySelector('.topbar__actions')!
+    const date = document.querySelector('.topbar__date')!
+    return (actions.compareDocumentPosition(date) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+  })
+  expect(markupOrder).toBe(true)
+})

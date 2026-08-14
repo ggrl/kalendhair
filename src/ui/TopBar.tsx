@@ -64,6 +64,80 @@ export function TopBar({
 
   return (
     <header className="topbar">
+      {/* Settings, today, add - in that order, with the day you are on in the middle and the two
+          things that leave it either side. The icons carry an `aria-label` because an icon has no
+          text to be named by, and a button a screen reader announces as "Schaltfläche" is a button
+          nobody can use.
+
+          First in the markup because it is now first on the screen: the grid could put this row on
+          top on its own, and then a keyboard would still have tabbed through the week steps and the
+          date picker before reaching the row above them. Tab order follows the markup, not the
+          grid. */}
+      <div className="topbar__actions">
+        {/* A cog rather than three dots. Three dots promise a menu that opens under the finger,
+            and this opens a whole screen - a small promise the button would not keep. The PIN
+            behind it is what makes reaching it by accident harmless. */}
+        <button
+          type="button"
+          className="topbar__icon"
+          onClick={onSettings}
+          aria-label="Einstellungen"
+          title="Einstellungen"
+        >
+          {/* A cog needs a body with teeth outside it. The first attempt drew spokes radiating
+              from the centre with no ring, which at 18px is a sun - and a sun is not a promise
+              about settings. The hub, the ring, then eight teeth standing off it. */}
+          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+            <path
+              d="M10 2.4v1.7M10 15.9v1.7M2.4 10h1.7M15.9 10h1.7M4.6 4.6l1.2 1.2M14.2 14.2l1.2 1.2M15.4 4.6l-1.2 1.2M5.8 14.2l-1.2 1.2"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+
+        {/* Never disabled, and it always asks the server which day today is. The cached answer
+            goes stale at midnight, and a disabled button on a board insisting yesterday is
+            today is the one state with no way out.
+
+            The one word left in this row: it is the thing pressed most often, and a house symbol
+            or an arrow would both be guesses about which day it means. */}
+        <button type="button" className="topbar__today" onClick={onToday}>
+          Heute
+        </button>
+
+        {/* `Aktualisieren` was here until ADR-0019 and is gone with it. It existed because nothing
+            polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
+            back on its own within thirty seconds of the network doing the same. The owner chose
+            removing it over keeping it as a way to skip that wait. */}
+        {/* ADR-0021. Put here for a phone, where there is no dragging - and it closes a gap that
+            has nothing to do with phones: ADR-0013 records that there is deliberately no keyboard
+            gesture for creating an appointment, so until now somebody who cannot use a mouse could
+            not make one at all. This is their first way in, on every screen.
+
+            Absent rather than disabled when nobody is on the board: the form's first field is the
+            person, and there is nothing to put in it. The board already says so in words.
+
+            Named `Neuer Termin` and not `+ Termin`: the label is what a screen reader reads out,
+            and "plus Termin" is not a thing anybody says. */}
+        {onAdd !== null && (
+          <button
+            type="button"
+            className="topbar__icon topbar__icon--add"
+            onClick={onAdd}
+            aria-label="Neuer Termin"
+            title="Neuer Termin"
+          >
+            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+              <path d="M10 4.5v11M4.5 10h11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+      </div>
       <button type="button" className="topbar__step" onClick={() => onStep(-1)}>
         &laquo; Vorige Woche
       </button>
@@ -131,75 +205,6 @@ export function TopBar({
         Nächste Woche &raquo;
       </button>
 
-      {/* Settings, today, add - in that order, with the day you are on in the middle and the two
-          things that leave it either side. The icons carry an `aria-label` because an icon has no
-          text to be named by, and a button a screen reader announces as "Schaltfläche" is a button
-          nobody can use. */}
-      <div className="topbar__actions">
-        {/* A cog rather than three dots. Three dots promise a menu that opens under the finger,
-            and this opens a whole screen - a small promise the button would not keep. The PIN
-            behind it is what makes reaching it by accident harmless. */}
-        <button
-          type="button"
-          className="topbar__icon"
-          onClick={onSettings}
-          aria-label="Einstellungen"
-          title="Einstellungen"
-        >
-          {/* A cog needs a body with teeth outside it. The first attempt drew spokes radiating
-              from the centre with no ring, which at 18px is a sun - and a sun is not a promise
-              about settings. The hub, the ring, then eight teeth standing off it. */}
-          <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-            <circle cx="10" cy="10" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            <circle cx="10" cy="10" r="6" fill="none" stroke="currentColor" strokeWidth="1.4" />
-            <path
-              d="M10 2.4v1.7M10 15.9v1.7M2.4 10h1.7M15.9 10h1.7M4.6 4.6l1.2 1.2M14.2 14.2l1.2 1.2M15.4 4.6l-1.2 1.2M5.8 14.2l-1.2 1.2"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.9"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-
-        {/* Never disabled, and it always asks the server which day today is. The cached answer
-            goes stale at midnight, and a disabled button on a board insisting yesterday is
-            today is the one state with no way out.
-
-            The one word left in this row: it is the thing pressed most often, and a house symbol
-            or an arrow would both be guesses about which day it means. */}
-        <button type="button" className="topbar__today" onClick={onToday}>
-          Heute
-        </button>
-
-        {/* `Aktualisieren` was here until ADR-0019 and is gone with it. It existed because nothing
-            polled; now the timer never stops trying, so a board that says `nicht aktuell` comes
-            back on its own within thirty seconds of the network doing the same. The owner chose
-            removing it over keeping it as a way to skip that wait. */}
-        {/* ADR-0021. Put here for a phone, where there is no dragging - and it closes a gap that
-            has nothing to do with phones: ADR-0013 records that there is deliberately no keyboard
-            gesture for creating an appointment, so until now somebody who cannot use a mouse could
-            not make one at all. This is their first way in, on every screen.
-
-            Absent rather than disabled when nobody is on the board: the form's first field is the
-            person, and there is nothing to put in it. The board already says so in words.
-
-            Named `Neuer Termin` and not `+ Termin`: the label is what a screen reader reads out,
-            and "plus Termin" is not a thing anybody says. */}
-        {onAdd !== null && (
-          <button
-            type="button"
-            className="topbar__icon topbar__icon--add"
-            onClick={onAdd}
-            aria-label="Neuer Termin"
-            title="Neuer Termin"
-          >
-            <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
-              <path d="M10 4.5v11M4.5 10h11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-          </button>
-        )}
-      </div>
     </header>
   )
 }

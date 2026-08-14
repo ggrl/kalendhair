@@ -84,9 +84,12 @@ body {
   z-index: 10;
   display: grid;
   grid-template-columns: auto 1fr auto;
+  /* The actions first, then the date with the week steps either side. The area is still called
+     `today` after the one word in it. Both rows keep their own contents: only which is on top
+     changed. */
   grid-template-areas:
-    'prev date next'
-    'today today today';
+    'today today today'
+    'prev date next';
   align-items: center;
   gap: 0.3rem 1rem;
   /* `height` until ADR-0021, and it was a promise the content could not keep. On a phone the date
