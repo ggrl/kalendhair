@@ -230,11 +230,11 @@ test.describe('on a phone', () => {
     await expect(page.getByRole('alert')).toHaveCount(0)
   })
 
-  test('+ Termin opens an empty form and books what is typed into it', async ({ page }) => {
+  test('Neuer Termin opens an empty form and books what is typed into it', async ({ page }) => {
     const sent = await stub(page)
     await page.goto(`/?date=${TODAY}`)
 
-    await page.getByRole('button', { name: '+ Termin' }).click()
+    await page.getByRole('button', { name: 'Neuer Termin' }).click()
     await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
 
     await page.getByLabel('Kundin / Kunde').fill('Telefon Kundin')
@@ -248,14 +248,14 @@ test.describe('on a phone', () => {
     expect(body.employeeId).toBe(STAFF[0].id)
   })
 
-  test('+ Termin is not live while a day is on its way', async ({ page }) => {
+  test('Neuer Termin is not live while a day is on its way', async ({ page }) => {
     // The top bar sits outside the `inert` subtree, which covers the board only. During a day step
     // the header names one day and the board underneath is another - and a review pass clicked
     // this button in that window and booked onto the day it had just left, with the form showing
     // no date at all to say otherwise.
     const sent = await stub(page)
     await page.goto(`/?date=${TODAY}`)
-    await expect(page.getByRole('button', { name: '+ Termin' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toBeVisible()
 
     let release = () => {}
     await page.route('**/api/day*', async (route) => {
@@ -265,10 +265,10 @@ test.describe('on a phone', () => {
 
     await page.getByRole('button', { name: 'Nächster Tag' }).click()
     await expect(page.locator('.shell__loading')).toBeVisible()
-    await expect(page.getByRole('button', { name: '+ Termin' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toHaveCount(0)
 
     release()
-    await expect(page.getByRole('button', { name: '+ Termin' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toBeVisible()
     expect(sent.filter((request) => request.method === 'POST')).toHaveLength(0)
   })
 
@@ -278,7 +278,7 @@ test.describe('on a phone', () => {
     await stub(page, STAFF, 'Farbe', { from: '10:00', to: '16:00' })
     await page.goto(`/?date=${TODAY}`)
 
-    await page.getByRole('button', { name: '+ Termin' }).click()
+    await page.getByRole('button', { name: 'Neuer Termin' }).click()
     await expect(page.getByLabel('Von')).toHaveValue('10:00')
     await expect(page.getByLabel('Bis')).toHaveValue('11:00')
   })
@@ -298,12 +298,12 @@ test.describe('on a phone', () => {
     await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toHaveCount(0)
   })
 
-  test('+ Termin is not offered on a day with nobody on the board', async ({ page }) => {
+  test('Neuer Termin is not offered on a day with nobody on the board', async ({ page }) => {
     // Its first field is the person, and there is nobody to be.
     await stub(page, [])
     await page.goto(`/?date=${TODAY}`)
     await expect(page.getByText('Für diesen Tag ist niemand eingeteilt.')).toBeVisible()
-    await expect(page.getByRole('button', { name: '+ Termin' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toHaveCount(0)
   })
 })
 
