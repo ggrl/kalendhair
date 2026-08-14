@@ -332,6 +332,31 @@ test('a release during a slow day change still writes to the day it started on',
   expect(seen[0].body).toMatchObject({ date: TODAY, startsAt: '11:00', endsAt: '12:00' })
 })
 
+test('the duration follows the edge being dragged, before the release', async ({ page }) => {
+  // The box already reads out the time it is being dragged to rather than the one it still has,
+  // so that somebody sees the appointment they are about to have. The length is part of that: it
+  // is computed from the slots being drawn and not from the entry's own times, and a resize that
+  // said `1h` all the way down would be the box arguing with itself.
+  await stub(page, [ANNA])
+  await page.goto(`/?date=${TODAY}`)
+
+  const entry = page.locator('.entry[data-entry-id="a1"]')
+  await expect(entry.locator('.entry__duration')).toHaveText('1h')
+
+  const grip = await entry.locator('.entry__grip--bottom').boundingBox()
+  if (grip === null) throw new Error('no bottom grip')
+
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  const to = await at(page, 0, '10:45')
+  await page.mouse.move(to.x, to.y, { steps: 8 })
+
+  // Mid-drag, with the button still down: 09:00 to 11:00.
+  await expect(entry.locator('.entry__duration')).toHaveText('2h')
+
+  await page.mouse.up()
+})
+
 test('dragging the bottom edge changes the end and leaves the start alone', async ({ page }) => {
   const seen = await stub(page, [ANNA, BEA])
   await page.goto(`/?date=${TODAY}`)

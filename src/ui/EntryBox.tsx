@@ -1,5 +1,5 @@
 import type { Entry } from '../calendar/types'
-import { rangeFromSlots, slotFromWallClock } from '../calendar/grid'
+import { SLOT_MINUTES, formatDuration, rangeFromSlots, slotFromWallClock } from '../calendar/grid'
 
 interface Props {
   entry: Entry
@@ -47,6 +47,9 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
   const slots = end - start
   const shown = drag === undefined ? entry : rangeFromSlots(drag.startSlot, drag.endSlot)
   const timeRange = `${shown.startsAt}–${shown.endsAt}`
+  // From the slots being drawn, not from the entry's own times: mid-drag the box shows the
+  // appointment somebody is about to have, and its length is part of that.
+  const duration = formatDuration(slots * SLOT_MINUTES)
 
   const placement = { gridColumn: column, gridRow: `${start + 1} / span ${slots}` }
   // Both classes are pure feedback: the drag is decided by where the pointer is, never by what
@@ -87,11 +90,18 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
           <span className="entry__line">
             <span className="entry__time">{shown.startsAt}</span>
             <span className="entry__label">{label}</span>
+            {/* Held to the right of the line rather than pinned to the corner: a one-line box has
+                no corner that is not also the line, and pushing it there with `margin-left: auto`
+                means the label shrinks around it rather than running underneath a reserved gap. */}
+            <span className="entry__meta entry__meta--line">
+              <span className="entry__duration">{duration}</span>
+            </span>
           </span>
         ) : (
           <>
             <span className="entry__time">{timeRange}</span>
             <span className="entry__label">{label}</span>
+            <span className="entry__meta"><span className="entry__duration">{duration}</span></span>
           </>
         )}
         <Grips />
@@ -121,6 +131,28 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
     .filter(Boolean)
     .join(' ')
 
+  // How long this runs, and a dot if something is written about it. Top right on a box tall enough
+  // to have a corner; held to the right of the single line when it is not, which is the same place
+  // to the eye and one less thing to reserve room for.
+  //
+  // The dot replaced the word `Notiz`, which was the widest thing in the corner and the reason the
+  // duration had nowhere to go. The word survives for a screen reader, out of sight: a bare `•` is
+  // announced as "bullet" or as nothing at all depending on the reader, and losing it would take
+  // away the only signal a blind user has that a note exists - the note's text itself is
+  // deliberately not on the board, because a tooltip over the box once revealed an allergy to
+  // whoever was standing at the desk.
+  const meta = (
+    <span className={compact ? 'entry__meta entry__meta--line' : 'entry__meta'}>
+      <span className="entry__duration">{duration}</span>
+      {entry.notes !== null && (
+        <>
+          <span aria-hidden="true"> •</span>
+          <span className="visually-hidden">Notiz</span>
+        </>
+      )}
+    </span>
+  )
+
   return (
     <button
       type="button"
@@ -132,10 +164,21 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
       data-entry-id={entry.id}
       onClick={onOpen}
     >
+      {/* How long this runs, and a dot if something is written about it. Top right on a box tall
+          enough to have a corner; held to the right of the single line when it is not, which is
+          the same place to the eye and one less thing to reserve room for.
+
+          The dot replaced the word `Notiz`, which was the widest thing in the corner and the
+          reason the duration had nowhere to go. The word survives for a screen reader, out of
+          sight: a bare `•` is announced as "bullet" or as nothing at all depending on the reader,
+          and losing it would take away the only signal a blind user has that a note exists - the
+          note's text itself is deliberately not on the board, because a tooltip over the box once
+          revealed an allergy to whoever was standing at the desk. */}
       {compact ? (
         <span className="entry__line">
           <span className="entry__time">{shown.startsAt}</span>
           <span className="entry__customer">{entry.customer}</span>
+          {meta}
         </span>
       ) : (
         <>
@@ -144,9 +187,7 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
         </>
       )}
       {!oneLine && entry.treatment !== null && <span className="entry__treatment">{entry.treatment}</span>}
-      {/* Still a signal that there is something written about this customer, even though the
-          text now lives in the form rather than popping out of the box. */}
-      {entry.notes !== null && <span className="entry__notes-marker">Notiz</span>}
+      {!compact && meta}
       <Grips />
     </button>
   )

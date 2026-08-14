@@ -220,14 +220,126 @@ test('the shortest bookable box still shows who it is for', async ({ page }) => 
   await expect(short).toContainText('14:00')
 })
 
-test('the notes marker sits on its own box, not somewhere else on the board', async ({ page }) => {
+test('every box says how long it lasts', async ({ page }) => {
+  // The stylists asked for it: reading a length off the grid means counting quarter-hour lines or
+  // subtracting one time from another, and the box can do both.
+  await page.goto('/?date=2026-08-13')
+
+  const durationOf = async (text: string): Promise<string | null> =>
+    page.locator('.entry', { hasText: text }).first().locator('.entry__duration').textContent()
+
+  expect(await durationOf('Anna Schmidt')).toBe('1h')
+  expect(await durationOf('Bea Wolff')).toBe('45m')
+  expect(await durationOf('Eva Sommer')).toBe('1h30')
+  // A 15-minute box is one line tall, so the duration rides the line - but it still sits on the
+  // right, where it is on every other box. `11:00 Tobi     15m •`, not `11:00 15m Tobi`.
+  expect(await durationOf('Felix Rau')).toBe('15m')
+  const short = page.locator('.entry', { hasText: 'Felix Rau' }).first()
+  const line = (await short.locator('.entry__line').boundingBox())!
+  const meta = (await short.locator('.entry__meta').boundingBox())!
+  const name = (await short.locator('.entry__customer').boundingBox())!
+  expect(meta.x).toBeGreaterThan(name.x + name.width - 1)
+  expect(meta.x + meta.width).toBeGreaterThanOrEqual(line.x + line.width - 2)
+  // Blocks too, which was the owner's call against my recommendation.
+  expect(await page.locator('.entry--block').first().locator('.entry__duration').textContent()).toBe('1h')
+})
+
+test('a long name on a short box never pushes the duration off it', async ({ page }) => {
+  // Measured while writing this, and worth knowing before touching the line: a long name does NOT
+  // get an ellipsis here. `.board__scroller` is `width: max-content`, so the column grows to fit
+  // the name and the board scrolls sideways instead - ADR-0021 choosing scrolling over squeezing.
+  // The ellipsis rules on `.entry__line .entry__customer` are from an earlier layout and this
+  // arrangement cannot reach them.
+  //
+  // So what is pinned here is the thing that can still go wrong: however wide the name makes the
+  // box, the duration stays inside it and to the right of the name.
+  //
+  // Its own day and its own stub: no fixture has a fifteen-minute box with a name long enough.
+  await page.route('**/api/day*', async (route) => {
+    await route.fulfill({
+      json: {
+        date: '2026-08-19',
+        today: TODAY,
+        coreHours: { from: '09:00', to: '18:00' },
+        employees: [{ id: MARCO, name: 'Marco' }, { id: JANA, name: 'Jana' }],
+        entries: [
+          {
+            id: 'long',
+            version: 1,
+            employeeId: MARCO,
+            kind: 'appointment',
+            startsAt: '11:00',
+            endsAt: '11:15',
+            customer: 'Katharina Bergmann-Schweitzer',
+            treatment: 'Pony',
+            notes: 'x',
+            reason: null,
+            colour: '#f4b8b8',
+          },
+        ],
+      },
+    })
+  })
+
+  await page.setViewportSize({ width: 400, height: 800 })
+  await page.goto('/?date=2026-08-19')
+  await page.waitForSelector('.board__grid')
+
+  const box = page.locator('.entry').first()
+  const outline = (await box.boundingBox())!
+  const name = (await box.locator('.entry__customer').boundingBox())!
+  const meta = (await box.locator('.entry__meta').boundingBox())!
+
+  // After the name, and still inside the box that grew to hold it.
+  expect(name.x + name.width).toBeLessThanOrEqual(meta.x + 1)
+  expect(meta.x + meta.width).toBeLessThanOrEqual(outline.x + outline.width)
+  // Whole, not half a number: the box is what gives way, never the duration.
+  await expect(box.locator('.entry__duration')).toHaveText('15m')
+  const cut = await box.locator('.entry__meta').evaluate((span) => span.scrollWidth > span.clientWidth)
+  expect(cut).toBe(false)
+})
+
+test('a note is a dot on the board and still a word to a screen reader', async ({ page }) => {
+  // The word `Notiz` was the widest thing in the corner and it is what the duration replaced. It
+  // survives out of sight, because a bare dot is announced as "bullet" or as nothing, and it is
+  // the only signal a blind user gets that a note exists - the note's text is deliberately not on
+  // the board at all, after a tooltip once showed an allergy to whoever stood at the desk.
+  await page.goto('/?date=2026-08-13')
+
+  const withNote = page.locator('.entry', { hasText: 'Anna Schmidt' }).first()
+  const withoutNote = page.locator('.entry', { hasText: 'Bea Wolff' }).first()
+
+  await expect(withNote.locator('.entry__meta')).toContainText('•')
+  await expect(withoutNote.locator('.entry__meta')).not.toContainText('•')
+
+  // Gone from sight - measured, not asserted with `toBeHidden`, which passes a clipped element
+  // this size: it has a bounding box, so Playwright calls it visible. One pixel, clipped, is what
+  // a person does not see.
+  const word = withNote.locator('.visually-hidden')
+  await expect(word).toHaveText('Notiz')
+  const occupied = await word.boundingBox()
+  // Not null: `display: none` would hide it from the accessible name too, which is the one way of
+  // hiding this word that defeats its entire purpose.
+  expect(occupied).not.toBeNull()
+  expect(occupied!.width).toBeLessThanOrEqual(1)
+  expect(occupied!.height).toBeLessThanOrEqual(1)
+
+  // And still in the name the button announces.
+  const spoken = await withNote.evaluate((box) => box.textContent ?? '')
+  expect(spoken).toContain('Notiz')
+  const quiet = await withoutNote.evaluate((box) => box.textContent ?? '')
+  expect(quiet).not.toContain('Notiz')
+})
+
+test('the corner sits on its own box, not somewhere else on the board', async ({ page }) => {
   // It used to anchor to .board__grid, so a marker for the first column appeared over the
-  // last one. Asserted as containment rather than pixels.
+  // last one. Asserted as containment rather than pixels. The corner now carries the duration
+  // as well as the note dot, and the same anchoring has to hold for both.
   await page.goto('/?date=2026-08-13')
 
   const withNotes = page.getByRole('button', { name: /Anna Schmidt/ }).first()
   const box = await withNotes.boundingBox()
-  const marker = await withNotes.locator('.entry__notes-marker').boundingBox()
+  const marker = await withNotes.locator('.entry__meta').boundingBox()
 
   expect(box).not.toBeNull()
   expect(marker).not.toBeNull()

@@ -613,11 +613,9 @@ body {
   white-space: nowrap;
 }
 
-/* Room for the "Notiz" marker, which is absolutely positioned and reserves none itself - a long
-   name in a short box would otherwise run underneath the word. */
-.entry--has-notes .entry__line {
-  padding-right: 2.9rem;
-}
+/* The 2.9rem reserve that used to sit here is gone. It existed because the `Notiz` marker was
+   absolutely positioned and a long name ran underneath it; on these boxes the corner is now part
+   of the line, so the flex row keeps them apart and no width has to be guessed. */
 
 /* One row of grid is one line of text: the time and the name share it and the treatment does not
    fit at all. The same trim applies to a one-row block, whose reason shares the line with its
@@ -664,7 +662,9 @@ body {
 
 /* A word, not a glyph. An empty 9px square outline read as a rendering artefact rather than
    as "there is something written about this customer". */
-.entry__notes-marker {
+/* The top-right corner: how long the entry runs, and a dot when there is a note. This was the
+   `Notiz` marker's place, and the word is what used to fill it. */
+.entry__meta {
   position: absolute;
   top: 0;
   right: 0.2rem;
@@ -672,6 +672,39 @@ body {
   font-weight: 600;
   color: #3f3f46;
   letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* On a box one or two lines tall there is no corner that is not also the line, so this rides the
+   line instead - pushed hard right, where the eye already looks for it on the taller boxes.
+
+   `margin-left: auto` rather than a reserved `padding-right` on the line: the name then shrinks
+   around this instead of stopping short of a gap that is the wrong size at every width but one.
+   It never shrinks itself - the name gets the ellipsis, because half a name still says who while
+   half a duration says nothing. */
+.entry__meta--line {
+  position: static;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.entry__duration {
+  font-variant-numeric: tabular-nums;
+  color: #3f3f46;
+}
+
+/* Out of sight, in the accessible name. Not `display: none`, which would take it out of the name
+   as well and defeat the point. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .board__empty {
