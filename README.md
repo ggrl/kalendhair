@@ -144,7 +144,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Twenty-one decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Twenty-two decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -172,6 +172,7 @@ re-decide.
 | [0019](docs/adr/ADR-0019-the-board-polls-and-says-when-it-cannot.md) | The board polls every 30 seconds, holds the swap under a hand, and says when it is not current |
 | [0020](docs/adr/ADR-0020-the-date-picker-is-the-browsers-own.md) | The date picker is the browser's own, and one place decides whether a date is real |
 | [0021](docs/adr/ADR-0021-the-board-on-a-phone.md) | The board on a phone: a 150px column minimum, sideways scrolling, `+ Termin`, and no dragging by touch |
+| [0022](docs/adr/ADR-0022-the-day-steps-are-quiet-strips-not-hot-zones.md) | The day steps are quiet strips with an arrow cursor - not hot zones laid over the board |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

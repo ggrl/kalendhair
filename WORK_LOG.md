@@ -2,6 +2,119 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-15, tenth session - six interface changes, and none of them reviewed
+
+The owner's GUI list, worked through one change at a time: they name it, I price it, they decide.
+Six merged. **Read the "what was NOT verified" section before trusting any of it** - this session
+shipped more unreviewed code than every previous one put together, deliberately and on the record.
+
+### Where things stand
+
+- **`main` is at `362c19d`** and is the only branch anywhere. PRs #29 through #35 merged in order;
+  #29 was the previous session's log entry, which had never been opened as a pull request. Working
+  tree clean, no open pull requests, remote branches pruned.
+- **Twenty-two ADRs.** ADR-0022 is new and records what the day-step strips are - and, more
+  usefully, the hot-zone design that was priced and ruled out.
+- **The blocker on real customer names has not moved**: no backup, no tested restore.
+
+### What was built, and where
+
+Six changes, oldest first:
+
+- **The board opens at 08:00** (#30). `Board.tsx`: `OPENS_AT`, a ref on that hour label, a
+  once-guarded effect calling `scrollIntoView`. The bookable day starts at 06:00 and the salon
+  rarely works before eight, so every session began by scrolling past two empty hours. It scrolls
+  and refuses nothing: 06:00 is one scroll up and still bookable.
+- **Round ends on the word buttons** (#31). `Heute` and the two week steps, `border-radius: 999px`.
+  A radius past half the height rather than a number to re-tune.
+- **Arrow keys** (#32). `App.tsx`: one `keydown` listener calling the same `goTo` the edge buttons
+  call. Left and right a day, `Umschalt` a week. `tests/keyboard.browser.test.ts`, nine tests.
+- **The day steps lost their boxes** (#33, ADR-0022). Only the chevron, a one-way arrow cursor
+  drawn as an inline SVG, and a strip that grows from 28px to 144px with the screen.
+- **A bigger chevron** (#34), tied to the same measure as the strip so a phone keeps what it had.
+- **The top bar rearranged, and the hour scale narrowed** (#35). One control row - week back,
+  settings, `Heute`, add, week forward - with the date and `KW`/`Stand` line beneath it. The scale
+  went 4rem to 2.5rem and gave 24px to the columns.
+
+### What the owner decided
+
+- **08:00 fixed, not each day's core hours.** Their reasoning, and it was right: per-day would put
+  Tuesday at 09:00 and Saturday at 08:00, moving the board between days.
+- **Arrow keys: a day, Shift a week.** Navigation beats the board's own sideways scrolling; up and
+  down are left alone; a held key moves one day, not sixty; no month steps.
+- **Nothing on screen says the arrow keys exist**, against my recommendation of a tooltip. Their
+  call: they will tell the staff. The cost is that only staff who are told will ever use them.
+- **The hot-zone design was dropped** once priced - see ADR-0022 for why.
+- **Strips grow inside the 1600px shell**, not out to the glass.
+- **On a phone the week buttons lose their words rather than taking a second line.** Chosen over my
+  recommendation. The cost, recorded in the stylesheet: `«` `»` in the bar mean a week and `‹` `›`
+  at the board's edges mean a day - four similar glyphs on a small screen.
+- **No review passes at all.** Asked three times, including separately for the arrow keys because
+  that one is behaviour rather than appearance. Declined each time.
+
+### What was verified, and how
+
+- On merged `main`, at the end of the session: `npm run verify` green (112 unit),
+  `npm run test:e2e` green (**149**, up from 126), `npm run test:db` green (144). CI green on all
+  three jobs for every one of the six pull requests.
+- **About thirty mutations across the six changes. Six survived their first run**, and those six
+  are the reason this section is worth reading: four were my own tests being unable to fail, and
+  two survive on purpose. The four:
+  - The modifier guard on the arrow keys. My test pressed right then left - a day forward and back
+    land where they started, so it could not fail. It presses twice one way now.
+  - The form guard. The form opens with a field focused, so the *field* guard caught the press and
+    the form guard was invisible. There is now a press from `Abbrechen`, plus a separate test that
+    presses an arrow mid-drag.
+  - The field guard itself, until a test focused the hidden date input directly - the state
+    `TopBar.openPicker` leaves the page in on a browser without `showPicker`.
+  And the two that survive on purpose, both recorded where they live rather than papered over with
+  an assertion invented to kill them:
+
+  - `preventDefault` on the arrow keys. With focus on an appointment box, Chromium does not scroll
+    the pane sideways even without it. It stays as insurance for the browsers the suite cannot run,
+    and both the code and the test say so.
+  - The chevron growing at a third of the strip's rate rather than at the strip's own rate. That is
+    a bigger glyph sooner - taste, not a defect.
+- **Measured rather than assumed:** an iPhone reports `hover: false` and `pointer: fine` false, so
+  `@media (hover: hover)` cleanly separates a mouse from a finger; the top bar at 1440, 701, 700,
+  390 and 320 after the rearrangement, for sideways overflow; `06:00` at 33.89px against a 33.6px
+  content box, which is why the label padding shrank with the scale.
+- Screenshotted at 1440px and 390px after every visual change.
+
+### What was NOT verified
+
+- **Nobody has reviewed any of this.** Six changes, `f625d9a..362c19d`, no logic pass and no
+  security pass. The two agents can read the whole span at once, which is cheaper than six passes
+  and sees the top bar's three rearrangements as one shape.
+- **How the arrow cursor actually looks.** Playwright cannot screenshot a cursor. The owner judged
+  it on their screen and accepted it; nothing in the suite would catch it changing on another
+  platform.
+- **Nobody but the owner has judged how any of it looks**, which is the right way round, but
+  "better" here is still one person's word.
+- **The salon has not run a day on any of it.** Every measurement is a stub or a fixture.
+
+### Unfinished, and what comes next
+
+1. **The review**, if the owner wants it: `f625d9a..362c19d` in one pass each.
+2. **Then deployment** - the container and the VPS, still blocked by the brief's backup gate: a
+   backup that leaves the machine on a schedule and one restore actually performed.
+3. **Month steps**, still unbuilt and deliberately kept out of the arrow keys: ADR-0010's clamp from
+   31 January does not reverse, and a modifier nobody can see is the wrong place to learn that.
+4. The items named and deliberately not fixed in ADR-0018, ADR-0019 and ADR-0021.
+
+### What surprised me
+
+- **My own 08:00 scroll moved where the keyboard starts.** `scrollIntoView` sets the browser's
+  sequential focus navigation starting point, so the first Tab after a load continues from inside
+  the board and lands on the next-day strip rather than in the top bar. Ordinary browser behaviour,
+  found while testing something else, and left alone.
+- **A drag test of mine passed for the wrong reason for exactly one change.** The board opening at
+  08:00 moved the grid under the coordinates it was pressing, so the press landed on the sticky
+  column headings and started no gesture at all. It anchors to a visible hour now.
+- **Three of my own tests could not fail when first written**, and all three looked green. That is
+  the whole argument for mutating a test before trusting it, and it is the third session running in
+  which the mutations found more than the tests did.
+
 ## 2026-08-14, ninth session - the first pass over the interface
 
 Small, and a different way of working: **the owner names a change, I price it, they decide.** Two
