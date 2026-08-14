@@ -30,7 +30,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | The salon's core hours and Hessen's holidays shaded on the board, refusing nothing | done |
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
 | Navigation: date picker, month steps, arrow keys | not started |
-| Live updates, by polling the day on screen | not started |
+| Live updates, by polling the day on screen every 30 seconds | done |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
@@ -141,7 +141,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Eighteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Nineteen decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -166,6 +166,7 @@ re-decide.
 | [0016](docs/adr/ADR-0016-hessen-holidays-are-a-list-in-the-code.md) | Hessen's holidays are a list in the code, and it expires loudly |
 | [0017](docs/adr/ADR-0017-a-changeable-salon-password-a-pin-and-a-master-key.md) | A changeable salon password, a PIN, and a master key - built, except the PIN check, which has nothing to guard yet |
 | [0018](docs/adr/ADR-0018-the-settings-screen-owns-staff-and-hours.md) | The settings screen owns staff and hours - all three built |
+| [0019](docs/adr/ADR-0019-the-board-polls-and-says-when-it-cannot.md) | The board polls every 30 seconds, holds the swap under a hand, and says when it is not current |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:

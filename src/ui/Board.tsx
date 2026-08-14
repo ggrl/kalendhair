@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { CoreHours, Day, Entry } from '../calendar/types'
 import {
@@ -30,6 +30,14 @@ interface Props {
   onDragged: (entry: Entry, target: { employeeId: string; startsAt: string; endsAt: string }) => void
   /** A gesture this board refused before sending it, and the German sentence saying why. */
   onRefused: (reason: string) => void
+  /**
+   * Whether a drag is in flight, told to whoever needs to leave the board alone while it is.
+   *
+   * ADR-0019: the poll must not redraw the board under a moving box. The gesture lives here and
+   * nowhere else, so this is the only honest way for anything outside to know about it - and it
+   * is a notification, not a control. Nothing here changes because of what the listener does.
+   */
+  onGesturing: (active: boolean) => void
 }
 
 interface Undrawn {
@@ -90,12 +98,28 @@ function wholeDayBlock(day: Day, employeeId: string): Entry | undefined {
   )
 }
 
-export function Board({ day, onOpenEntry, onOpenSlot, onToggleWholeDay, onDragged, onRefused }: Props) {
+export function Board({
+  day,
+  onOpenEntry,
+  onOpenSlot,
+  onToggleWholeDay,
+  onDragged,
+  onRefused,
+  onGesturing,
+}: Props) {
   const columnOf = new Map(day.employees.map((employee, index) => [employee.id, index + 2]))
 
   const grid = useRef<HTMLDivElement>(null)
   const columns = useRef<(HTMLDivElement | null)[]>([])
   const [gesture, setGesture] = useState<Gesture | null>(null)
+
+  // Reported from an effect rather than from each place that sets a gesture, so there is one
+  // announcement per actual change and no path through this file can forget to make it. A drag
+  // ends in several ways - dropped, refused, cancelled - and each one used to be its own chance
+  // to leave the poll thinking a gesture was still in flight.
+  useEffect(() => {
+    onGesturing(gesture !== null)
+  }, [gesture, onGesturing])
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
   // entries used to be painted at the same fixed position, hiding each other and any real 06:00
