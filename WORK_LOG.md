@@ -2,6 +2,115 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-14, eighth session - polling, a date picker, and the board on a phone
+
+Three features and three ADRs, and **seven review passes between them - five returned findings and
+three returned NO-SHIP**. The board is now live-updating, reachable by date, and usable on a phone.
+Deployment is the next thing, and the backup gate still blocks it.
+
+### Where things stand
+
+- **`main` is at `60d176c`** and is the only branch that matters. PRs #24 (polling), #25 (the date
+  picker) and #26 (the phone board) merged in that order; #26 was rebased onto #25 by hand.
+  Working tree clean, no open pull requests.
+- **`docs/session-log-head` still exists, pushed and unmerged, and is superseded.** It carried a
+  one-line correction to the entry below, which this entry makes redundant. Delete it.
+- **Twenty-one ADRs.** ADR-0019 polls, ADR-0020 is the date picker, ADR-0021 puts the board on a
+  phone - and ADR-0021 amends **ADR-0017** (the PIN now has a rate limit) and **reverses the
+  brief's `mobile or touch support` non-goal**.
+- **The PIN in `.env` is still a dead seed** - carried forward from the entry below, still true.
+- **The blocker on real customer names has not moved**: no backup, no tested restore.
+
+### What was built, and where
+
+- **ADR-0019, polling.** `src/ui/App.tsx` gained a 30-second chained `setTimeout` for the day on
+  screen, a held day applied when a drag or the form ends, and a failure counter; `TopBar.tsx` says
+  `nicht aktuell` after two failures and lost `Aktualisieren`; `Board.tsx` reports whether a gesture
+  is in flight. `tests/polling.browser.test.ts` drives it on a controlled clock.
+- **ADR-0020, the date picker.** `<input type="date">` in the top bar. One place decides whether a
+  date is real - `isSalonDate` in `App.tsx` - and the picker itself checks nothing.
+- **ADR-0021, the phone.** `minmax(150px, 1fr)` columns with sideways scrolling, the board as its
+  own scrollport, a `.board__scroller` wrapper giving both grids one width, a top bar that no longer
+  declares a height it cannot keep, `+ Termin`, no dragging by touch, and a rate limit on the PIN in
+  `server/app.ts`.
+
+### What the owner decided, and what I recommended against
+
+Three interviews. **Four of their answers went against my recommendation, and three of those were
+better:**
+
+- **Remove `Aktualisieren`** rather than keep it as an escape hatch. Right - the timer never stops
+  trying, so it only ever saved thirty seconds.
+- **A minimum column width with sideways scrolling** - their idea, not offered in any of my
+  options. It removed the entire reason I was pushing a separate list view for phones.
+- **150px rather than my 110**, and **one change rather than splitting the repairs out**.
+- **Ten wrong PINs per five minutes, forgiving**, with their own framing: a bump, not a measure -
+  "that is the login".
+
+### What was verified, and how
+
+- On merged `main`: fresh `npm ci` at 0 vulnerabilities, `npm run verify` green (112 unit),
+  `npm run test:db` green (144), `npm run test:e2e` green (123). CI green on all three PRs.
+- **Against the real server, not only the suite.** Two browsers on one day picked up an
+  appointment neither of them made, in ~30s, with the date unchanged and no dimming. The picker
+  jumped from 13.08 to `Mittwoch, 14. Oktober 2026` with the URL following. On an iPhone 13
+  viewport: **24 of 24 boxes clipped before this session and 2 after**, columns 55px before and
+  150px after, headings readable, zero drift, and both new controls driven together at both sizes.
+- **Every fix has a test that fails without it**, checked one at a time.
+
+### What was NOT verified
+
+- **Nobody has held a real phone.** Everything is an iPhone viewport in Chromium with CDP touch
+  events. Safari is not Chromium and iOS is not a viewport, and the iOS edge-swipe gesture
+  competing with a sideways-scrolling board has not been observed.
+- **The PIN limit is per address, and that is untested here.** `trust proxy` is deliberately unset,
+  so the harness has one address to offer. When a proxy arrives it must be set to the specific hop
+  or the limit becomes one budget for the whole salon.
+- **The limiter is itself a way to hold the salon out of its own revocation screen**, which is what
+  ADR-0021 names as the remedy for a lost phone. The master password is the way back.
+- **The fix commits answering the reviews went in unreviewed - again, including the last one**,
+  which was security machinery written after the pass that demanded it. The owner was told and
+  chose to merge. Fifth session running.
+- The picker's date format is the machine's and nobody has seen it on a salon machine; a 30-minute
+  box still clips its third line by 2px on every screen and always did; the write path still does
+  not check `active`.
+
+### Unfinished, and what comes next
+
+1. **Deployment** - the container and the VPS, which the owner named as the next thing. The brief's
+   backup gate blocks it: a backup that leaves the machine on a schedule and one restore actually
+   performed. That deploy is also when `COOKIE_SECURE` and `trust proxy` start to matter, and
+   `trust proxy` is now load-bearing for two limiters rather than one.
+2. Month steps and arrow keys - the last of the navigation aids. The picker does not replace them:
+   a week or month step keeps the weekday.
+3. The items named and deliberately not fixed, now in ADR-0018, ADR-0019 and ADR-0021.
+
+### What surprised me
+
+- **An assertion that something is absent proves nothing, and it caught me at least five times.**
+  `toHaveCount(0)` and `not.toContainText` succeed the instant they are evaluated, so a board that
+  had not yet received a response passed exactly as well as one correctly withholding it. Three
+  polling tests, two phone tests and one login test all had to be rewritten before they could fail.
+  **The rule this session earned: after asserting absence, wait for the thing that would have
+  caused the presence.**
+- **Two of my own mutation tests were broken and reported success.** One inserted a CSS declaration
+  that a later one in the same rule overrode; one measured a full-width shell whose centre is the
+  viewport's whatever happens to it. A mutation that does not mutate is worse than no mutation,
+  because it certifies the test.
+- **A review pass found a regression worse than the defect I was fixing.** The old phone board cut
+  a stylist's name in half; my first fix labelled every column with the previous stylist's name.
+- **Serial tests cannot see a concurrency hole.** My PIN limiter read its counter before the scrypt
+  derive and wrote it after; a burst of 500 concurrent guesses performed 131 derives against a
+  limit of ten. Five tests passed throughout.
+- **A bounding box cannot see what is painted over it.** The top bar overlapped the headings by
+  overflowing its own box, so geometry said everything was fine; `elementFromPoint` said otherwise.
+- **A synthetic pointer event cannot drive `setPointerCapture`** - the pointerId is one the browser
+  has never seen, so it throws and no gesture starts. A touch test built on `dispatchEvent` passed
+  with the rule under test deleted.
+- **I claimed a rule prevented a lost appointment and it prevented a message.** Chromium cancels
+  touch drags itself, so the write was never reachable. Two failed mutations forced me to measure
+  instead of assert, and ADR-0021 records the smaller true claim.
+
 ## 2026-08-14, seventh session - the salon sets its own core hours
 
 ADR-0018 is finished. `CORE_HOURS` no longer exists, the hours are seven rows the salon edits
@@ -10,8 +119,8 @@ the logic pass again returned NO-SHIP on something no test and no live check of 
 
 ### Where things stand
 
-- **`main` is at `434d1b3`** and is the only branch. PR #22 merged the hours (`c7bf109`); PR #21
-  merged the previous session's log. Nothing in flight, working tree clean.
+- **`main` was at `6586d7a`** when this session ended: PR #22 merged the hours (`c7bf109`), PR #21
+  the previous session's log, PR #23 this entry. It has moved on since - see the entry above.
 - **Eighteen ADRs, and ADR-0018 is now fully built.** ADR-0015's "core hours are a constant"
   paragraph is dead prose kept for its reasoning; its consequence about silent staleness is closed.
   Both gained notes rather than being rewritten.
