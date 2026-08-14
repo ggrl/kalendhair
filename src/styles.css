@@ -313,7 +313,14 @@ body {
    to squeezing. */
 .edge {
   flex: 0 0 clamp(1.75rem, 100vw - 1280px, 9rem);
-  font-size: 1.5rem;
+  /* The chevron grows with the strip and never on its own, which is what keeps a phone exactly
+     where it was: below 1280px this is 1.5rem, the size it has always been, and 1.5rem fits the
+     1.75rem strip as it always did.
+
+     Divided by three so the glyph stays inside the strip at every width in between, rather than
+     only at the two ends. The strip is `100vw - 1280px` once it starts growing, so a third of that
+     is a third of the strip - and it reaches the 3rem cap at 1424px, where the strip is 144px. */
+  font-size: clamp(1.5rem, (100vw - 1280px) / 3, 3rem);
   line-height: 1;
   color: var(--muted);
   background: none;
