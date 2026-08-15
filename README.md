@@ -1,4 +1,4 @@
-# Salon appointment board
+# kalendhair
 
 A single-day appointment board for a hair salon. One page per day, one column per
 employee, 06:00 to 20:00 down the side in 15-minute steps.
