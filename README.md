@@ -78,9 +78,11 @@ The server refuses to start if any of them is missing, and names the one it want
 
 One optional name, and the day it matters: `COOKIE_SECURE`. The session cookie follows `HOST`
 by default - loopback means not `Secure`, anything else means `Secure`. **Set it to `true` the
-day a proxy terminates TLS in front of this**, because that deployment leaves `HOST` on
-loopback and the guess would send the session cookie in clear text. The startup log says which
-way it went, every time.
+day a proxy terminates TLS in front of a server started this way**, with `npm start` on the
+host, because that deployment leaves `HOST` on loopback and the guess would send the session
+cookie in clear text. Under `docker compose` the question does not arise the same way:
+compose sets `HOST` to `0.0.0.0`, so the guess already lands on `Secure`. The startup log says
+which way it went, every time.
 
 ```bash
 npm run db:up      # Postgres in a container, bound to 127.0.0.1 only
@@ -139,6 +141,13 @@ front of it.
 npm run verify     # typecheck, lint, unit tests, build - no database needed
 npm run test:e2e   # browser tests (Playwright)
 ```
+
+**Start the database with `npm run db:up`, not `docker compose up -d`.** That script adds
+`docker-compose.dev.yml`, which publishes the port these tests need and creates the
+`salon_test` database. Postgres only runs that creation script when the data directory is
+empty, so a volume first created another way never gets `salon_test`, and adding the file
+afterwards does not help: the tests fail with `database "salon_test" does not exist` until
+`docker compose down -v` and `npm run db:up`, which deletes whatever was in that volume.
 
 The database tests need Postgres and its URL. Vitest does not read `.env` into
 `process.env`, so pass it explicitly:

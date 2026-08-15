@@ -73,6 +73,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      # Because TCP stays refused for the whole of initdb, the first run on a fresh volume
+      # would otherwise spend its entire retry budget there and be declared unhealthy - which
+      # aborts `docker compose up` before the app is created. Failures inside start_period do
+      # not count against retries, so this buys the first boot room without slowing later
+      # ones: a healthy answer ends start_period immediately.
+      start_period: 60s
 
 volumes:
   db-data:

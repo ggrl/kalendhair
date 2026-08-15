@@ -52,7 +52,9 @@ That day arrived. `docker-compose.yml` now runs the server beside the database a
 
 Half of the exception's stated reason expired with it and half did not: the server no longer
 runs on the host, but `npm run test:db` still does, and it still cannot reach an unpublished
-port. So the exception survives, narrowed to the test suite, and it moved to
+port. So the exception survives, narrowed to the test suite - the published port and, with
+it, the script that creates `salon_test`, which has no business on the salon's machine
+either. Both moved to
 `docker-compose.dev.yml` - a second file that the server never loads and that the deployment
 never names.
 

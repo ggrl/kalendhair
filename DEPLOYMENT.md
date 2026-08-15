@@ -143,9 +143,9 @@ Firewall first, then services, so nothing is ever listening before the rules exi
 **And know what this firewall does not cover.** Docker publishes ports by writing its own
 iptables DNAT rules, which are evaluated before `ufw`'s chain - so `ufw` does **not** filter
 a container port published to `0.0.0.0`. That is not a problem in this deployment, because
-both published ports are bound to `127.0.0.1` and never to a public address, which is what
-actually keeps them private. It matters the day somebody drops the `127.0.0.1:` prefix from
-a `ports:` entry and assumes `ufw` is still covering them. It would not be.
+the only port it publishes is the app's, bound to `127.0.0.1` and never to a public address,
+which is what actually keeps it private. It matters the day somebody drops the `127.0.0.1:`
+prefix from a `ports:` entry and assumes `ufw` is still covering them. It would not be.
 
 Open only 22, 80 and 443:
 
@@ -166,7 +166,8 @@ not in the NSG does nothing, and the reverse is the more dangerous mistake.
 
 **Never open 5432.** `docker-compose.yml` publishes no database port at all, which is
 ADR-0006's rule: the server reaches Postgres over the compose network and nothing else can
-reach it from anywhere. The loopback publish that local development needs lives in
+reach it from anywhere. The two things only a development machine needs - that loopback
+publish, and the script that creates the `salon_test` database - both live in
 `docker-compose.dev.yml`, a file the server never loads.
 
 ---
@@ -181,8 +182,13 @@ distribution, then confirm:
 
 ```bash
 docker --version
-docker compose version
+docker compose version    # must be 2.24 or newer
 ```
+
+**Compose 2.24 is a real floor, not a suggestion.** `docker-compose.yml` uses the
+`env_file: - path: ... required: false` long form, which older plugins reject outright. A
+distribution's own `docker-compose` package is often well behind, which is why this says to
+install from Docker rather than from `apt` by default.
 
 ---
 
@@ -278,19 +284,44 @@ is refused forever. Editing `.env` afterwards fixes nothing, because ADR-0017 ma
 seed a one-time act: the row exists now. And `MASTER_PASSWORD`, the documented way back in,
 is truncated by the same rule if it also contains a `$`.
 
-**So: single-quote every value a person chose.** In practice that is `SALON_PASSWORD`, and
-`SALON_PIN` if you ever quote it:
+**And `$` is not the only character they disagree about.** Measured through both loaders:
+
+| `.env` line | Compose delivers | Node delivers |
+| --- | --- | --- |
+| `X=pass#word` | `pass#word` | **`pass`** |
+| `X='pass#word'` | `pass#word` | `pass#word` |
+| `X="Sommer2026$Salon"` | **`Sommer2026`** | `Sommer2026$Salon` |
+
+So `#` breaks it in the **opposite** direction from `$`, and **double quotes do not protect
+you** - they leave compose expanding exactly as if they were not there.
+
+**So: single-quote every value a person chose, whatever is in it.** Not because of `$`
+specifically, but because you should not have to know which characters two parsers disagree
+about. In practice that is `SALON_PASSWORD`:
 
 ```
-SALON_PASSWORD='Sommer2026$Salon'
+SALON_PASSWORD='dein$Passwort'
 ```
 
-Single quotes are the one form both loaders agree on. Do **not** escape it as `$$`: compose
-reads that correctly and Node hands you a literal `$$`. The generated secrets above are
-hex and base64, neither of which can contain a `$`, so they are safe either way - quoting
-them anyway costs nothing and is the simpler rule to remember.
+Three things that are not the rule:
 
-Now edit `/srv/kalendhair/.env` and set every value:
+- **Not double quotes.** They are not equivalent and they fail silently.
+- **Not `$$`.** Compose reads that correctly and Node hands you a literal `$$`.
+- **Not an apostrophe in the value.** `O'Brien2026` cannot be single-quoted, and compose
+  then refuses the whole project with `unexpected character "'" in variable name`. That one
+  is at least loud. Choose a password without an apostrophe.
+
+The generated secrets above are hex and base64, neither of which can contain any of these,
+so they are safe either way. Quoting them anyway costs nothing and is the simpler rule.
+
+Now edit it. It is `600` and owned by `kalendhair`, so your own account cannot open it -
+use `sudo`:
+
+```bash
+sudo -e /srv/kalendhair/.env      # or: sudo nano /srv/kalendhair/.env
+```
+
+Set every value:
 
 | Name | What to put | Notes |
 | --- | --- | --- |
@@ -367,7 +398,8 @@ sudo -u kalendhair docker compose ps
 ```
 
 Note there is no `-f docker-compose.dev.yml` here, and there must not be. That override
-exists only to publish the database port for the test suite on a development machine.
+exists only for a development machine: it publishes the database port the host-side test
+suite needs, and creates the `salon_test` database. Neither belongs on the salon's server.
 
 The database lives in a named Docker volume called `db-data`, which survives
 `docker compose down` but **not** `docker compose down -v`. Learn the difference now rather
@@ -462,9 +494,10 @@ are set, and read the next section either way.
 
 **Open the board in a real browser at `https://board.example.com` and log in.** Not curl,
 a browser. If the login screen accepts the password and then bounces you straight back to
-it, the cause is the cookie: either `COOKIE_SECURE` is `true` and the page is not actually
-being served over HTTPS, or it is `false` and the browser is discarding it. The startup log
-says which mode the process chose.
+it, the cause is the cookie, and there is only one way round it can be: `COOKIE_SECURE` is
+`true` while the page is not actually on HTTPS, so the browser refuses to store a `Secure`
+cookie and has nothing to send back. The reverse does not happen - a browser on an HTTPS
+page accepts a cookie that is not marked `Secure` and returns it quite happily.
 
 Then confirm the certificate is real, from your laptop rather than the server:
 
@@ -510,21 +543,62 @@ sudo chown kalendhair:kalendhair /srv/kalendhair-backups
 sudo chmod 700 /srv/kalendhair-backups
 ```
 
-Then take a dump:
+Then write the backup as a script rather than a one-liner, because it needs to fail loudly
+and a pipeline does not do that by default. Create `/srv/kalendhair/backup.sh`:
 
 ```bash
+#!/bin/bash
+# Fail on error, on an unset name, and - the one that matters here - on any
+# failing stage of a pipeline, not just the last one.
+set -euo pipefail
+umask 077
+
+# cron does not get your login PATH, and docker is the thing it will not find.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 cd /srv/kalendhair
-sudo -u kalendhair sh -c 'umask 077 && docker compose exec -T db \
-  pg_dump -U salon -d salon --clean --if-exists \
-  | gzip > /srv/kalendhair-backups/kalendhair-$(date +%F-%H%M).sql.gz'
+dest="/srv/kalendhair-backups/kalendhair-$(date +%F-%H%M).sql.gz"
+
+# Write beside the real name, then move into place. A dump that dies halfway
+# never gets the name a restore would reach for.
+docker compose exec -T db pg_dump -U salon -d salon --clean --if-exists \
+  | gzip > "$dest.part"
+mv "$dest.part" "$dest"
 ```
 
-**`umask 077` is not decoration.** Without it the shell redirect creates the file `0644`
-under the default umask, readable by every account on the box. `/var/backups`, the obvious
-place to put it, is `0755 root:root` on Debian and Ubuntu, so the default would leave
-customer data readable by anyone with a local shell.
+```bash
+sudo chown kalendhair:kalendhair /srv/kalendhair/backup.sh
+sudo chmod 700 /srv/kalendhair/backup.sh
+sudo -u kalendhair /srv/kalendhair/backup.sh && echo "backup ok"
+```
 
-Put that in a script and run it from cron nightly.
+**Three lines in that script are there because of specific ways this goes wrong**, and none
+of them is theoretical:
+
+- **`set -o pipefail`.** Without it the pipeline's exit status is `gzip`'s, and `gzip`
+  succeeds at compressing nothing. Measured with the database stopped: exit `0`, a
+  correctly named file, correct `600` permissions, a *valid* gzip archive - containing zero
+  bytes. Cron mails nothing. You get a directory of plausible backups holding nothing at
+  all, which is precisely the belief this section opens by warning about. **Note it must be
+  `bash`, not `sh`:** on Debian and Ubuntu `/bin/sh` is dash, which answers `set -o
+  pipefail` with `Illegal option`.
+- **`umask 077`.** Without it the redirect creates the file `0644` under the default umask,
+  readable by every account on the box. `/var/backups`, the obvious place to put it, is
+  `0755 root:root` on Debian and Ubuntu.
+- **`.part` then `mv`.** Belt and braces with `pipefail`: a half-written dump never carries
+  the name a restore would reach for. **A leftover `.part` file is the trace of a failed
+  run** - worth grepping for occasionally, since it is the one thing a silent failure leaves
+  behind.
+
+Measured, with the dump made to fail: exit `1`, no file carrying the final name, one
+`.part` left behind. On success: exit `0`, mode `600`, real content.
+
+Then run it from cron nightly, as the same account:
+
+```bash
+sudo crontab -u kalendhair -e
+# 20 3 * * * /srv/kalendhair/backup.sh
+```
 
 **Then copy it off the machine, and think about where.** A backup that only exists on the
 server it is backing up is not a backup: the disk that dies takes both. But this is the one
@@ -539,14 +613,32 @@ encrypt the dump before it leaves.
 
 ```bash
 cd /srv/kalendhair
-# prove the dump can actually be read back
+
+# 0. the backup directory is 700 and owned by kalendhair, so read it as kalendhair.
+#    Every command below runs as that account, the gunzip included - see the note after.
+sudo -u kalendhair ls -l /srv/kalendhair-backups
+
+# 1. a dump of zero bytes is the failure this drill exists to catch. Check before restoring.
+sudo -u kalendhair sh -c 'gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz | wc -c'
+
+# 2. restore it into a scratch database
 sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'CREATE DATABASE restore_drill;'
-gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz \
+sudo -u kalendhair sh -c 'gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz' \
   | sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill
+
+# 3. prove the data is really there
 sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c '\dt'
 sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c 'SELECT count(*) FROM appointment;'
 sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'DROP DATABASE restore_drill;'
 ```
+
+**The `sudo -u kalendhair` on the `gunzip` is not redundant.** `/srv/kalendhair-backups` is
+`700` and owned by that account, which is what keeps the dumps private - so reading them as
+your own admin account fails with `Permission denied`, and the pipe then feeds an empty
+stream into `psql`, which reports success on zero input. That is the same shape of false
+confidence as an empty backup, arriving at the one moment you are trying to disprove it.
+Step 1 above is the cheap guard: a byte count of `0` means the backup is worthless no
+matter what the restore says.
 
 If the table list and the count look right, you have a backup. Write the date you did this
 in `WORK_LOG.md`, because the brief's condition is about a restore having happened, and
@@ -600,11 +692,16 @@ real use.** It is not urgent on a test box.
 memory to run a TypeScript build. Building in CI and pushing to a registry is the tidier end
 state, and it would also let a deploy be a pull rather than a compile.
 
-It is **not** as risky as it looks: a failed build leaves the running version untouched,
-because `docker compose up -d --build` builds before it converges. Measured by breaking the
-`Dockerfile` deliberately against a running stack - the build failed, the old container
-stayed up, and the board still answered 200. So a bad commit costs you a deploy, not an
-outage.
+A failed **build** is safe: `docker compose up -d --build` builds before it converges, so
+the running version is untouched. Measured by breaking the `Dockerfile` deliberately against
+a running stack - the build failed, the old container stayed up, and the board still
+answered 200.
+
+**That safety stops at the build.** A commit that compiles and then fails at runtime - a
+migration with a bad statement is the obvious one - is a real outage: compose has already
+stopped the old container, the new one throws on startup, and `restart: unless-stopped`
+crash-loops it. Compose does not put the old one back. Rolling back the code does not roll
+back a migration that half-applied either, which is why the backup comes first.
 
 **No health endpoint, so the app container has no healthcheck, and nothing here notices a
 dead database.** There is no `/health`. Worse, there is no unauthenticated request that
