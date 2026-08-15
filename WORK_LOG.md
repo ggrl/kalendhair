@@ -2,6 +2,126 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-16, twelfth session - it deploys with one command, and three review rounds to get there
+
+Continues the entry below, which is now history rather than current state: everything it
+called unmerged is merged, and the repository is `kalendhair`.
+
+### Where things stand
+
+- **`main` is at `c65f50e`**, working tree clean, no open pull requests, only `main` exists
+  local and remote. PRs #42 and #43 merged today.
+- **The repository is `github.com/ggrl/kalendhair`**, still **private**. The old `calendar`
+  URL redirects.
+- **Twenty-five ADRs.** ADR-0025 is new: the proxy is Caddy and stays on the host.
+- **Deployment is `docker compose up -d --build`.** The server needs Docker and git and
+  **no Node** - the image builds itself.
+- **The blocker on real customer names has not moved**: no backup that leaves the machine,
+  no tested restore. `DEPLOYMENT.md` step 10 now tells you exactly how to close it.
+
+### What was built, and where
+
+- **`DEPLOYMENT.md`** (#42) - server deployment start to finish with TLS, provider neutral,
+  written from this code rather than from a template. Includes a section on running the
+  Azure test box without buying a domain.
+- **`Dockerfile`, `.dockerignore`, an `app` service in `docker-compose.yml`** (#42) -
+  implementing ADR-0005, which always specified two services and only ever had one.
+- **`docker-compose.dev.yml`** (#42) - the loopback database port and the `salon_test` seed,
+  the two things only a development machine needs. `npm run db:up` passes both files.
+  ADR-0006 amended to record it.
+- **`docs/adr/ADR-0024`** (#43) - what gets published and why. **`ADR-0025`** - this session.
+
+### What the owner decided
+
+- **`kalendhair`**, their own wordplay, and rename in place rather than a fresh repository.
+- **Compose profiles for the database port** - which turned out not to be implementable as
+  asked (profiles gate whole services, not one `ports:` entry), so the same outcome was built
+  with an override file. Said out loud rather than silently substituted.
+- **The proxy stays on the host** rather than joining compose. ADR-0025.
+- **Merge #41 without review**, after being told it had none.
+- **Three full review rounds** on the deployment branch, then merge.
+
+### The review rounds, because the shape of them is the useful part
+
+| Round | Logic | Security |
+| --- | --- | --- |
+| 1 | NO-SHIP - 2 blockers, 3 false claims | SHIP, 2 conditions |
+| 2 | NO-SHIP - 2 blockers, **both introduced by round 1's fixes** | SHIP |
+| 3 | SHIP | SHIP |
+
+- **The `$` trap, and it was mine.** `env_file` expands `$` in a value; `node --env-file`
+  does not. `SALON_PASSWORD=Sommer2026$Salon` seeded as `Sommer2026`, passed the length
+  rule, and printed the same success line a correct start prints. ADR-0017 makes seeding
+  one-time, so the salon would have been locked out permanently and `MASTER_PASSWORD` -
+  the way back in - truncates the same way. Single quotes are the only form both loaders
+  agree on. `#` breaks it in the opposite direction and double quotes do not protect at all.
+- **Round 2's blockers were in round 1's fixes**, both in the backup section the brief makes
+  blocking. The dump could not fail visibly (no `pipefail`, so a stopped database produced
+  exit 0 and a *valid* gzip holding zero bytes), and the restore drill could not read its own
+  backups (the directory was correctly made `700`, and the `gunzip` left running as the
+  admin).
+- **A reviewer's own fix was wrong and testing caught it.** It proposed `set -o pipefail`
+  inside `sh -c`; `/bin/sh` is dash on Debian and Ubuntu, which answers `Illegal option`.
+- **I disagreed with a finding and was right.** It said a compose override *replaces* the
+  volumes list. `docker compose config` shows it appends and dedupes by target.
+
+### What was verified, and how
+
+- On merged `main` at `c65f50e`: `npm run verify` green (**116 unit**), `npm run test:db`
+  green (**144**). CI green on all three jobs for #42 and #43 before merge.
+- **The stack was run, repeatedly, not reasoned about.** Five migrations apply to a fresh
+  volume, credentials seed, board `200`, unauthenticated day `401`, login `204` and wrong
+  password `401`, cookie `HttpOnly Secure SameSite=Lax`, production database holds only
+  `salon`. Always under a throwaway project name so the dev volume was never touched.
+- **The backup script was extracted from `DEPLOYMENT.md` with `awk` and run as documented**:
+  cannot be modified by the account that runs it, exit 1 and no final-named file when the
+  dump fails, exit 0 at mode `600` when it works, and it fires from a real cron daemon for a
+  `nologin` account.
+- **Step 4's failure and its fix were both reproduced on `ubuntu:24.04`.**
+- **A nonexistent `HOME` does not break `docker compose` on Linux** - the reviewer could only
+  reproduce that on macOS, so it was settled with Docker's own packages on Ubuntu. The plugin
+  lives in `/usr/libexec/docker/cli-plugins` and returns exit 0.
+
+### What was NOT verified, and why not
+
+- **Nothing has run on a real server.** Every deployment step was tested on macOS with Docker
+  Desktop or in an `ubuntu:24.04` container. `DEPLOYMENT.md` has never been executed
+  end to end on a VM, and until it has it is a hypothesis.
+- **Caddy has never been put in front of the board.** So the whole TLS section, and the
+  `trust proxy` consequence in particular, is read from code and vendor documentation rather
+  than observed. All three review rounds said the same.
+- **No `iptables` claim was proved.** The reviewers were on macOS too. The guide no longer
+  rests anything on `ufw` for this reason.
+- **Nobody opened the board in a browser this session**, and no `test:e2e` run happened
+  locally. CI ran the browser job green on both PRs, which is a real signal and not the same
+  thing.
+- **PR #41 merged with neither review pass**, on the owner's instruction after being told.
+
+### Unfinished, and the next step
+
+- **`trust proxy` is the one real blocker for production.** `server/app.ts` keeps three
+  counters keyed on `request.ip` - login 20/5min, master-password reset 20/5min, wrong PIN
+  10/5min. Behind a proxy Express is not told to trust, all three become one budget shared by
+  the internet: a stranger holds the salon out of its own board *and* out of the recovery
+  door at about four requests a minute. The fix is `app.set('trust proxy', 1)` and it must be
+  a hop count - `true` makes `X-Forwarded-For` whatever the caller claims, removing all three.
+  **This is the next thing to build.**
+- **Month steps** remain the one navigation piece not started. ADR-0010 already settled the
+  arithmetic.
+- **The backup and one tested restore** still gate real customer data.
+- **The working directory is still `~/Documents/git/calendar`** while the repository is
+  `kalendhair`. Cosmetic; needs doing from outside a session running inside it.
+
+### What surprised me
+
+**Fixing things is how the next defect gets in.** Round 1's fixes carried round 2's blockers,
+and both landed in the backup procedure - the one section the product brief makes blocking
+before real customer data. Then, writing the fix for round 3's "nobody hears the failure"
+finding, I claimed the cron log inherits the script's `umask`. It does not: cron's shell
+creates the file before the script runs, so it landed at `664` while the dumps were `600`.
+Three rounds in, still shipping a false claim in the sentence that fixes a false claim. The
+only thing that caught any of it was running the commands rather than reading them.
+
 ## 2026-08-15, eleventh session - the project has a name, and the history was audited to publish
 
 No application code changed. This session was about preparing to publish, and the useful
