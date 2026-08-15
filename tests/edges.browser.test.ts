@@ -176,6 +176,12 @@ test('four stylists on a wide screen keep wide columns, eight start scrolling', 
   const narrow = (await page.locator('.board__column').first().boundingBox())!
   // Still not squeezed below the minimum - it scrolls instead, which is ADR-0021's whole rule.
   expect(Math.round(narrow.width)).toBeGreaterThanOrEqual(150)
+
+  // And it does scroll. This half was missing: the name of this test and ADR-0022's Consequences
+  // both promised it, and a review pass read the file and found only the column floor above -
+  // which passes just as happily on a board that does not scroll at all.
+  const eightScrolls = await page.locator('.shell__day').evaluate((pane) => pane.scrollWidth > pane.clientWidth)
+  expect(eightScrolls).toBe(true)
 })
 
 test('a keyboard can still see where it is on an invisible control', async ({ page }) => {

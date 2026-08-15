@@ -325,10 +325,13 @@ body {
    gesture, without the presentation app's invisible zone over the board itself.
 
    The width comes off the board, which is why the cap is 9rem: the shell stops at 1600px, so at
-   that width the two strips take 288px and four stylists still have ~330px each. A salon of eight
-   at 1450px is the case where this starts sideways scrolling the board sooner than before - the
-   150px column minimum from ADR-0021 is what gives way, and it gives way to scrolling rather than
-   to squeezing. */
+   that width the two strips take 288px and four stylists still have ~330px each.
+
+   The cost is not monotone, and a review pass measured what this comment used to imply it was. The
+   strips grow twice as fast as the window between 1308px and 1424px, so widening the window in
+   that stretch makes the board NARROWER: with eight stylists, 27px of board are hidden at 1312px
+   and 139px at 1424px - the worst at any size, worse than at 1200px. It recovers by 1568px, where
+   nothing is hidden. Only the 1600px case was written down here before. */
 .edge {
   flex: 0 0 clamp(1.75rem, 100vw - 1280px, 9rem);
   /* The chevron grows with the strip and never on its own, which is what keeps a phone exactly
@@ -662,28 +665,16 @@ body {
   text-overflow: ellipsis;
 }
 
-/* An open note runs past its box, which is the point: a 15-minute box cannot hold a
-   sentence. It also has to win against the boxes below it - every box shares z-index 1. */
-.entry--has-notes:has(.entry__notes) {
-  z-index: 3;
-  overflow: visible;
-}
+/* The yellow note panel that used to open on a box, and the rule that let it spill past its own
+   edges, are deleted here. Nothing has carried `entry__notes` since the note moved into the form,
+   so they styled nothing - and a security pass asked for them to go rather than sit one
+   `className` away from working: what they drew is note text on the board, which is the thing
+   three review passes ruled out after a tooltip showed an allergy to whoever stood at the desk. */
 
-.entry__notes {
-  position: relative;
-  z-index: 2;
-  margin-top: 0.15rem;
-  padding: 0.2rem 0.3rem;
-  white-space: pre-wrap;
-  background: #fffbe8;
-  border: 1px solid #d9c98a;
-  border-radius: 0.2rem;
-}
-
-/* A word, not a glyph. An empty 9px square outline read as a rendering artefact rather than
-   as "there is something written about this customer". */
-/* The top-right corner: how long the entry runs, and a dot when there is a note. This was the
-   `Notiz` marker's place, and the word is what used to fill it. */
+/* The top-right corner: how long the entry runs, and nothing else visible. This was the `Notiz`
+   marker's place - the word filled it, then a dot did, and now the note is a folded corner at the
+   other end of the box. What still lives here besides the duration is that word, out of sight for
+   a screen reader. */
 .entry__meta {
   position: absolute;
   top: 0;

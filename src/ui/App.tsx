@@ -433,6 +433,14 @@ export function App() {
       // hidden `<input type="date">` in the top bar: `TopBar.openPicker` focuses it on a browser
       // without `showPicker`, and arrows are how a native date field is edited.
       //
+      // A review pass reported that the open picker lets the board step behind it, and asked for a
+      // guard on the glyph button as well. Measured before building one, and it does not happen: a
+      // capture-phase listener on `window` sees NO keydown at all while the popup is open - the
+      // native calendar takes the keys, moves its own selection, and the board follows it through
+      // `onPick`, which is ADR-0020 working. The reviewer's own numbers say the same thing on a
+      // second reading: the date moved one day per press and ignored Shift, and this handler makes
+      // Shift a week.
+      //
       // Blunt on purpose - every input, not the subset where arrows mean something. It costs one
       // small thing: focus a column's whole-day checkbox, where arrows do nothing natively, and
       // the day stops moving until you tab away. A list of exceptions is worth more than that.

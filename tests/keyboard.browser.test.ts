@@ -175,6 +175,30 @@ test('a focused date field keeps its own arrow keys', async ({ page }) => {
   expect(new URL(page.url()).searchParams.get('date')).toBe(TODAY)
 })
 
+test('an arrow inside the open picker moves one day, not two', async ({ page }) => {
+  // A review pass reported that the board steps behind the open picker, and asked for a guard on
+  // the glyph button. Measured before building one, and the mechanism is not what it looked like:
+  // a capture-phase listener on `window` sees NO keydown at all while the popup is open. The
+  // native calendar takes the key, moves its own selection, fires `change`, and the board follows
+  // through `onPick` - ADR-0020 working exactly as written.
+  //
+  // The reviewer's own numbers say so on a second reading: the date moved one day per press and
+  // ignored Shift, and the handler in `App.tsx` makes Shift a week.
+  //
+  // So what is worth pinning is not a guard but the absence of a double step: if this handler ever
+  // starts seeing those keys too, the day jumps by two, or by eight on the second press.
+  await page.goto(`/?date=${TODAY}`)
+  await page.waitForSelector('.board__grid')
+
+  await page.getByRole('button', { name: 'Datum wählen' }).click()
+
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+
+  await page.keyboard.press('Shift+ArrowRight')
+  await expect(page.getByRole('heading', { name: 'Samstag, 15. August 2026' })).toBeVisible()
+})
+
 test('with focus inside the board the day moves and the board does not scroll sideways', async ({ page }) => {
   // The conflict the owner settled: six stylists do not fit, so the pane is a horizontal
   // scrollport and arrow keys are what a browser scrolls one with. Navigation wins.
