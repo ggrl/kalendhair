@@ -45,6 +45,22 @@ the data behind it is fake names on one developer's machine, and the binding is 
 the moment the application service joins the compose file. **Stage two publishes nothing.**
 If you find this port bound to anything other than `127.0.0.1`, that is a defect.
 
+#### Amended 2026-08-15, when the application service joined
+
+That day arrived. `docker-compose.yml` now runs the server beside the database and
+**publishes no database port at all**, which is the rule above, met literally.
+
+Half of the exception's stated reason expired with it and half did not: the server no longer
+runs on the host, but `npm run test:db` still does, and it still cannot reach an unpublished
+port. So the exception survives, narrowed to the test suite, and it moved to
+`docker-compose.dev.yml` - a second file that the server never loads and that the deployment
+never names.
+
+The split is the point. `docker compose up -d` on the VPS cannot publish the port even by
+accident, because publishing it now takes a deliberate second `-f`. Keeping one file with a
+port in it and remembering not to use it in production is exactly the arrangement this
+paragraph was written to prevent.
+
 ### The absence of a CORS header is part of this decision
 
 Added after the board landed. The built front end is served from the same origin as the API,

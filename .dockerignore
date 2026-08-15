@@ -1,0 +1,24 @@
+# What must never enter the build context.
+#
+# The first entry is the one that matters: .env holds every secret on the machine, and a
+# file copied into an image is in that image for anybody who can pull it. rules/secrets.md.
+.env
+.env.*
+!.env.example
+
+# Installed inside the image for the target platform instead. Copying a host node_modules
+# in is both slow and wrong - it may hold binaries built for a different libc.
+node_modules
+dist
+dist-server
+*.tsbuildinfo
+
+.git
+.github
+.claude
+.agents
+
+playwright-report
+test-results
+.DS_Store
+*.log

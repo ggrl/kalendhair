@@ -119,10 +119,12 @@ While working on the front end, `npm run dev` gives Vite on
 ## Putting it on a server
 
 [`DEPLOYMENT.md`](DEPLOYMENT.md) is the step by step, provider neutral, with the TLS
-certificate and the reverse proxy. It also names what is not built yet and would bite a
-real deployment: there is no Dockerfile, so the application runs on the host under Node,
-and `trust proxy` is unset, which turns the login rate limiter into one budget shared by
-everybody the moment a proxy is in front of it.
+certificate and the reverse proxy. The stack itself is `docker compose up -d`: the Node
+server and Postgres, as ADR-0005 describes, with only the proxy left on the host.
+
+It also names the gap that would bite a real deployment: `trust proxy` is unset, which
+turns the login rate limiter into one budget shared by everybody the moment a proxy is in
+front of it.
 
 ## The checks
 

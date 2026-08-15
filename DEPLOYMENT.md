@@ -14,11 +14,11 @@ Where something is not built yet, it says so rather than pretending.
 Three facts about the current state of the repository. They change what deployment looks
 like, and none of them is obvious from the outside.
 
-**1. There is no Dockerfile, and no application service in `docker-compose.yml`.** That
-file runs Postgres and nothing else, and says so in its own opening comment: the
-application service "joins when that gate is met". So `docker compose up` does **not**
-start the board. In this guide the database runs in a container and the application runs
-directly on the host under Node. That works today and is the honest shape of it.
+**1. The whole stack is `docker compose up -d`.** Two services, as ADR-0005 describes: the
+Node server that serves the built board and answers the API, and Postgres with its data on
+a named volume. The host needs Docker and git, and **not** Node: the build happens inside
+the image. The reverse proxy that terminates TLS is the one piece that stays on the host,
+because it is the thing holding the certificate.
 
 **2. `trust proxy` is not set, and that matters the moment a proxy exists.** `server/app.ts`
 rate limits login to twenty attempts per address per five minutes. Behind a reverse proxy
@@ -29,10 +29,11 @@ four requests a minute. **This is a code change that has to happen before real u
 [Known gaps](#known-gaps) at the end. It does not block a throwaway test box.
 
 **3. The server uses two relative paths.** `express.static('dist')` and the migration
-runner's `'migrations'` are both relative to the working directory. **The process must be
-started with its working directory set to the project root**, or it serves no board and
-finds no migrations. The systemd unit below does this, and it is the single most likely
-thing to get wrong.
+runner's `'migrations'` are both relative to the working directory, so the process must be
+started with its working directory at the project root or it serves no board and finds no
+migrations. The `Dockerfile` sets `WORKDIR /app` and copies both directories there, so
+inside a container this is already handled. It is written down because it is invisible, and
+because anyone who later runs this outside a container has to know it.
 
 Two things the server does for you on every start, so no manual step exists for either:
 it **runs any unapplied migrations** (under a Postgres advisory lock, so two instances
@@ -54,8 +55,9 @@ the first time only**, ignoring them ever after.
 - Ports 80 and 443 reachable from the internet. Port 80 is needed even though the board is
   HTTPS only, because that is how the certificate challenge arrives.
 
-Size: this is one salon. The smallest instance any provider sells is enough. Postgres and
-Node together sit comfortably in 1GB of RAM.
+Size: this is one salon, and at runtime the smallest instance any provider sells is enough.
+Give it at least 2GB of RAM if you build the image on the box, because `npm ci` plus the
+TypeScript and Vite build needs considerably more memory than serving the result does.
 
 ---
 
@@ -92,7 +94,7 @@ free DNS name label. Set it on the **Public IP** resource, under Configuration, 
 
 for example `kalendhair-test.westeurope.cloudapp.azure.com`. The label only has to be unique
 within that Azure region. It is a real, publicly resolvable name, it survives the underlying
-IP changing, and it needs no DNS record of your own. Put it in the Caddyfile in step 9
+IP changing, and it needs no DNS record of your own. Put it in the Caddyfile in step 8
 exactly as you would a purchased domain and everything else in this guide is unchanged.
 
 **The catch, and it is worth knowing before it bites you.** Let's Encrypt limits certificate
@@ -152,24 +154,20 @@ Network Security Group attached to the VM or its subnet, and it is the one that 
 decides what reaches you. Allow 22, 80 and 443 there too. A rule that exists in `ufw` and
 not in the NSG does nothing, and the reverse is the more dangerous mistake.
 
-**Never open 5432.** The compose file binds Postgres to `127.0.0.1` so it is not reachable
-from the network at all, which is ADR-0006's rule. Nothing outside the box needs it.
+**Never open 5432.** `docker-compose.yml` publishes no database port at all, which is
+ADR-0006's rule: the server reaches Postgres over the compose network and nothing else can
+reach it from anywhere. The loopback publish that local development needs lives in
+`docker-compose.dev.yml`, a file the server never loads.
 
 ---
 
-## Step 3: install Node and Docker
+## Step 3: install Docker
 
-The application needs Node **22.12.0 or newer**, which `package.json` enforces through
-`engines` and `.nvmrc` pins exactly. Distribution packages are usually older than that, so
-install from a source that offers the current release rather than whatever `apt` has by
-default. Check the version you end up with:
+Docker is the only runtime dependency. **You do not need Node on the server** - the build
+happens inside the image, using the Node version the `Dockerfile` pins.
 
-```bash
-node --version    # must be >= v22.12.0
-```
-
-Docker is needed only for Postgres. Install Docker Engine and the Compose plugin from
-Docker's own instructions for your distribution, then confirm:
+Install Docker Engine and the Compose plugin from Docker's own instructions for your
+distribution, then confirm:
 
 ```bash
 docker --version
@@ -235,17 +233,31 @@ Now edit `/srv/kalendhair/.env` and set every value:
 
 | Name | What to put | Notes |
 | --- | --- | --- |
-| `POSTGRES_PASSWORD` | the hex string | |
-| `DATABASE_URL` | `postgres://salon:THE_HEX_STRING@127.0.0.1:5432/salon` | the same password, inline |
-| `TEST_DATABASE_URL` | same, ending `/salon_test` | unused in production, leave it consistent |
+| `POSTGRES_PASSWORD` | the hex string | compose reads this directly, and refuses to start without it |
+| `DATABASE_URL` | leave the example value | **compose overrides it.** See below |
+| `TEST_DATABASE_URL` | leave the example value | development only, never read in this deployment |
 | `SALON_TIMEZONE` | `Europe/Berlin` | ADR-0007. Never left to the server's clock |
-| `HOST` | `127.0.0.1` | keep loopback, the proxy reaches it locally |
-| `PORT` | `3000` | |
+| `HOST` | leave it | **compose overrides it** to `0.0.0.0`. See below |
+| `PORT` | `3000` | must match the port compose publishes |
 | `SESSION_SECRET` | a base64 string | minimum 32 characters, enforced |
 | `MASTER_PASSWORD` | a base64 string | the way back in if password and PIN are both lost |
 | `SALON_PASSWORD` | one the salon will type | at least 8 characters |
 | `SALON_PIN` | four digits | guards the settings screen |
 | `COOKIE_SECURE` | **`true`** | see the warning below |
+
+**Two names in that file are deliberately overridden by `docker-compose.yml`**, because
+`.env` is written for running the server on the host and both values are wrong from inside
+a container:
+
+- **`DATABASE_URL`** becomes `postgres://salon:...@db:5432/salon`. On the compose network
+  Postgres answers to its service name, `db`. The `127.0.0.1` in `.env` would be the app
+  container talking to itself.
+- **`HOST`** becomes `0.0.0.0`. Inside a container `127.0.0.1` means "this container only",
+  so the published port would reach nothing. What keeps the server off the network is the
+  compose file publishing to `127.0.0.1:3000` **on the host**, not this value.
+
+You still set `POSTGRES_PASSWORD` correctly, because compose builds the real
+`DATABASE_URL` from it.
 
 **`COOKIE_SECURE=true` is the one people get wrong, and it is the reason this file exists.**
 When a proxy terminates TLS and forwards to loopback, the board is served over HTTPS while
@@ -268,106 +280,76 @@ permanent.
 
 ---
 
-## Step 6: start Postgres
+## Step 6: bring the whole stack up
+
+One command builds the image, starts Postgres, waits for it to report healthy, then starts
+the server:
 
 ```bash
 cd /srv/kalendhair
-sudo -u kalendhair docker compose up -d db
+sudo -u kalendhair docker compose up -d --build
 sudo -u kalendhair docker compose ps
 ```
 
-Wait for the health check to report healthy. The data lives in a named Docker volume
-called `db-data`, which survives `docker compose down` but **not** `docker compose down -v`.
-Learn the difference now rather than at 19:00 on a Friday.
+Note there is no `-f docker-compose.dev.yml` here, and there must not be. That override
+exists only to publish the database port for the test suite on a development machine.
+
+The database lives in a named Docker volume called `db-data`, which survives
+`docker compose down` but **not** `docker compose down -v`. Learn the difference now rather
+than at 19:00 on a Friday.
 
 ---
 
-## Step 7: build and first run
+## Step 7: read the startup log before you go any further
 
 ```bash
-cd /srv/kalendhair
-sudo -u kalendhair npm ci
-sudo -u kalendhair npm run build
+sudo -u kalendhair docker compose logs -f app
 ```
 
-Then start it once by hand, so you see the startup log before systemd hides it:
+**Four things to confirm**, and this output is exactly what a correct first run looks like:
 
-```bash
-sudo -u kalendhair npm start
+```
+migrate: applied 001_init.sql
+migrate: applied 002_appointment_version.sql
+migrate: applied 003_block_reason.sql
+migrate: applied 004_salon_credential.sql
+migrate: applied 005_core_hours.sql
+salon password and PIN seeded from the environment
+salon calendar api on http://0.0.0.0:3000
+salon timezone: Europe/Berlin
+session cookie: Secure - browsers will send it over HTTPS only
+WARNING: if nothing in front of this terminates TLS, no login will work at all
 ```
 
-**Read the output.** It tells you four things you need to confirm:
+- **The `migrate:` lines.** They appear once, against a fresh database. On later starts
+  there are none, because every migration has already run.
+- **`seeded from the environment`** on a first run only. On later runs it says
+  `SALON_PASSWORD and SALON_PIN are ignored` instead, which is ADR-0017 working correctly
+  and not a fault.
+- **`on http://0.0.0.0:3000`.** Inside a container that is right, and is not a leak.
+  `0.0.0.0` here means "every interface *in this container*"; what limits reach is the
+  compose file publishing the port to `127.0.0.1` on the host.
+- **The cookie decision, stated out loud.** `session cookie: Secure` is what you want. The
+  warning under it is correct and expected right now: the proxy does not exist yet. It is
+  the next step.
 
-- `migrate: ...` lines, showing the migrations applying to a fresh database.
-- `salon password and PIN seeded from the environment` on a first run. On later runs it
-  says they are ignored instead, which is ADR-0017 working correctly, not a fault.
-- `salon calendar api on http://127.0.0.1:3000`.
-- The cookie decision, stated out loud. With `COOKIE_SECURE=true` you should see
-  `session cookie: Secure` followed by a warning that logins will not work at all unless
-  something in front terminates TLS. That warning is correct and expected: the proxy does
-  not exist yet. It is the next step.
-
-Confirm the API answers, from the server itself:
+Confirm the API and the board both answer, from the server itself:
 
 ```bash
-curl -i http://127.0.0.1:3000/api/day?date=2026-08-15
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/          # 200, the board
+curl -i 'http://127.0.0.1:3000/api/day?date=2026-08-15' | head -1        # 401
 ```
 
 A `401` with `{"error":"Bitte anmelden."}` is the **right** answer. ADR-0004 gives an
 unauthenticated request no day at all rather than a filtered one.
 
-Stop it with Ctrl-C. systemd takes over next.
+There is no systemd unit to write. `restart: unless-stopped` in the compose file brings both
+containers back after a crash and after a reboot, as long as Docker itself starts on boot,
+which it does by default.
 
 ---
 
-## Step 8: run it as a service that survives a reboot
-
-Create `/etc/systemd/system/kalendhair.service`:
-
-```ini
-[Unit]
-Description=kalendhair salon board
-After=network-online.target docker.service
-Wants=network-online.target
-Requires=docker.service
-
-[Service]
-Type=simple
-User=kalendhair
-WorkingDirectory=/srv/kalendhair
-ExecStart=/usr/bin/node --env-file-if-exists=.env dist-server/server/index.js
-Restart=on-failure
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Two lines in that file are load-bearing and worth understanding rather than copying:
-
-- **`WorkingDirectory=/srv/kalendhair`.** The server serves the built board with
-  `express.static('dist')` and reads migrations from `'migrations'`, both relative paths.
-  Start it from anywhere else and you get a running API that serves no board and applies no
-  migrations. This is the failure mode that wastes an afternoon.
-- **`ExecStart` uses `--env-file-if-exists=.env`** rather than systemd's `EnvironmentFile`.
-  This is exactly what `npm start` does, so the file is parsed by Node the same way it is
-  in development. systemd's own env file parsing handles quoting differently and a password
-  containing the wrong character can arrive mangled.
-
-Enable and start:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now kalendhair
-sudo systemctl status kalendhair
-sudo journalctl -u kalendhair -f
-```
-
----
-
-## Step 9: the reverse proxy and the TLS certificate
+## Step 8: the reverse proxy and the TLS certificate
 
 This is where HTTPS arrives. Caddy is the recommendation because it obtains and renews
 certificates from Let's Encrypt automatically, with no cron job and no separate client to
@@ -401,7 +383,7 @@ are set, and read the next section either way.
 
 ---
 
-## Step 10: before you call it done
+## Step 9: before you call it done
 
 **Open the board in a real browser at `https://board.example.com` and log in.** Not curl,
 a browser. If the login screen accepts the password and then bounces you straight back to
@@ -428,7 +410,7 @@ nobody is watching.
 
 ---
 
-## Step 11: backups, and the restore that has to actually happen
+## Step 10: backups, and the restore that has to actually happen
 
 **`docs/PRODUCT_BRIEF.md` makes this a blocking condition, not a recommendation:** before
 the salon puts one real appointment in, there must be a backup that leaves the machine on a
@@ -473,19 +455,24 @@ nobody will remember whether it did.
 ```bash
 cd /srv/kalendhair
 sudo -u kalendhair git pull
-sudo -u kalendhair npm ci
-sudo -u kalendhair npm run build
-sudo systemctl restart kalendhair
-sudo journalctl -u kalendhair -n 50
+sudo -u kalendhair docker compose up -d --build
+sudo -u kalendhair docker compose logs -n 50 app
 ```
 
-Migrations apply themselves on start, so there is no separate step. Take a backup before
-an update that includes a new migration, because migrations are not reversible here and
-there is no down path.
+`--build` is the part people forget. Without it compose reuses the existing image and you
+have pulled new source that is not running, which looks exactly like the update having no
+effect.
 
-There is a short outage during the restart. For one salon that is acceptable; if it ever
-is not, that is a load balancer and a second instance, which is a bigger change than this
-document covers.
+Migrations apply themselves on start, so there is no separate step. **Take a backup before
+any update that includes a new migration**, because migrations here have no down path and
+are not reversible.
+
+There is a short outage while the app container is replaced. Postgres is untouched, so it is
+seconds. For one salon that is acceptable; if it ever is not, that is a load balancer and a
+second instance, which is a bigger change than this document covers.
+
+To roll back, check out the previous commit and rebuild the same way. That reverses the
+code and **not** the database, which is the reason the backup above comes first.
 
 ---
 
@@ -501,16 +488,17 @@ Express to trust exactly one hop, and it must be exactly one: trusting everythin
 `X-Forwarded-For` whatever the caller claims, which removes the limiter entirely. **Do this
 before real use.** It is not urgent on a test box.
 
-**No Dockerfile.** The application runs on the host, so the machine carries a Node
-installation and a build step that a fully containerised deploy would not need. Writing a
-Dockerfile and adding the app service to `docker-compose.yml` is the tidier end state, and
-the compose file's own comment says it is waiting for exactly that.
+**The image is built on the server, not in CI.** Simple, and it means the box needs enough
+memory to run a TypeScript build. It also means a deploy can fail at build time with the old
+version already stopped. Building in CI and pushing to a registry is the tidier end state.
 
-**No health endpoint.** There is no `/health`, so an uptime monitor has to watch something
-else. `GET /api/day` answering 401 is a usable signal: it proves the process is alive and
-talking to its session layer. A monitor that treats 401 as failure will page you constantly.
+**No health endpoint, so the app container has no healthcheck.** There is no `/health`, so
+an uptime monitor has to watch something else. `GET /api/day` answering 401 is a usable
+signal: it proves the process is alive and talking to its session layer. A monitor that
+treats 401 as failure will page you constantly.
 
-**No log rotation for the application beyond journald's defaults**, and no metrics.
+**No log rotation beyond Docker's defaults**, and no metrics. `docker compose logs` is the
+whole observability story.
 
 **One shared password, by design.** ADR-0004, with its costs written down. ADR-0004 also
 marks itself to be revisited before an iOS app puts that password on phones that leave the
@@ -525,10 +513,14 @@ ever becomes more than that, it becomes a secret manager.
 
 | Symptom | First thing to check |
 | --- | --- |
-| Board is blank, API answers | Working directory. `express.static('dist')` is relative, and `npm run build` must have run |
-| `... is required and was not set` at startup | That name is missing from `.env`. The message names it |
+| `set POSTGRES_PASSWORD in .env` before anything starts | Compose substitution, not the app. `.env` is missing or not in the directory you ran compose from |
+| `... is required and was not set` in the app log | That name is missing from `.env`. The message names the one it wants |
+| App container restarts in a loop | `docker compose logs app`. Usually the database URL or a missing secret. `depends_on` waits for healthy, so it is rarely a race |
+| App cannot reach the database | `DATABASE_URL` must use host `db`, not `127.0.0.1`. Compose sets this; check you did not override it in `.env` |
 | Login accepted, then bounced back to login | `COOKIE_SECURE` disagrees with whether the page is really on HTTPS. The startup log says which mode it chose |
 | Caddy cannot get a certificate | DNS not resolving to this box yet, or port 80 blocked at the cloud firewall rather than at `ufw` |
 | Everyone locked out of login at once | The `trust proxy` gap above |
-| Board works, then dies after a reboot | `systemctl enable` was never run, or the unit starts before Docker |
+| Update seems to do nothing | `--build` was omitted, so compose reused the old image |
+| Board works, then dies after a reboot | Docker is not enabled at boot. `restart: unless-stopped` cannot help if the daemon never starts |
 | Password in `.env` does not work | Expected after first run. ADR-0017: the environment seeds once, then the settings screen owns it. Use `MASTER_PASSWORD` to reset |
+| `docker compose config` printed all my secrets | It renders `.env` in plain text by design. Never paste that output into an issue or a chat |

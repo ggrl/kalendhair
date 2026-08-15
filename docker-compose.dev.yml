@@ -1,0 +1,22 @@
+# Local development only. Never used on the server.
+#
+# ADR-0006 forbids publishing the database port and says the binding is deleted the moment
+# the application service joins the compose file. That happened. The one thing it leaves
+# unresolved is that `npm run test:db` runs on the HOST and cannot reach an unpublished
+# port, so the exception it granted for the test suite still has to live somewhere.
+#
+# It lives here, in a file the server never loads, rather than in docker-compose.yml where
+# forgetting it would publish the port in production. That is the whole point of the split:
+# `docker compose up -d` on the VPS publishes nothing, and it takes a second -f to change
+# that.
+#
+# It is still loopback only. If you find this bound to anything else, that is a defect.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+#
+# which is what `npm run db:up` does.
+
+services:
+  db:
+    ports:
+      - '127.0.0.1:5432:5432'
