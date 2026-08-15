@@ -20,3 +20,11 @@ services:
   db:
     ports:
       - '127.0.0.1:5432:5432'
+    volumes:
+      # Creates salon_test on first init, for a suite that truncates every table. It has no
+      # business on the salon's server, so it is mounted here rather than in the base file -
+      # a review pass found the production database carrying a salon_test beside it.
+      #
+      # Compose appends to the base file's volumes rather than replacing them, so db-data
+      # stays attached without being named again here. Verified with `docker compose config`.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro

@@ -21,12 +21,16 @@ the image. The reverse proxy that terminates TLS is the one piece that stays on 
 because it is the thing holding the certificate.
 
 **2. `trust proxy` is not set, and that matters the moment a proxy exists.** `server/app.ts`
-rate limits login to twenty attempts per address per five minutes. Behind a reverse proxy
-that Express has not been told to trust, every request appears to come from the proxy, so
-the limit stops being per-visitor and becomes one budget shared by everybody. The code
-comment states the consequence plainly: a stranger can then hold the salon's door shut at
-four requests a minute. **This is a code change that has to happen before real use.** See
-[Known gaps](#known-gaps) at the end. It does not block a throwaway test box.
+keeps **three** counters keyed on the caller's address: login at 20 per 5 minutes, the
+master-password reset at 20 per 5 minutes, and wrong PIN attempts at 10 per 5 minutes.
+Behind a reverse proxy that Express has not been told to trust, every request carries the
+proxy's address, so all three stop being per-visitor and become one budget shared by
+everybody.
+
+A stranger can then hold the salon's front door shut at roughly four requests a minute -
+**and the recovery door with it**, because the master-password reset has its own bucket
+that collapses the same way. **This is a code change that has to happen before real use.**
+See [Known gaps](#known-gaps) at the end. It does not block a throwaway test box.
 
 **3. The server uses two relative paths.** `express.static('dist')` and the migration
 runner's `'migrations'` are both relative to the working directory, so the process must be
@@ -134,8 +138,14 @@ the rate limit is then yours alone, the name is yours if you change provider, an
 
 ## Step 2: close the machine before you open it
 
-Firewall first, then services. The opposite order leaves a window where Postgres is
-listening and unprotected.
+Firewall first, then services, so nothing is ever listening before the rules exist.
+
+**And know what this firewall does not cover.** Docker publishes ports by writing its own
+iptables DNAT rules, which are evaluated before `ufw`'s chain - so `ufw` does **not** filter
+a container port published to `0.0.0.0`. That is not a problem in this deployment, because
+both published ports are bound to `127.0.0.1` and never to a public address, which is what
+actually keeps them private. It matters the day somebody drops the `127.0.0.1:` prefix from
+a `ports:` entry and assumes `ufw` is still covering them. It would not be.
 
 Open only 22, 80 and 443:
 
@@ -181,10 +191,18 @@ docker compose version
 Do not run this as root. Give it its own unprivileged user that owns nothing else:
 
 ```bash
-sudo useradd --system --create-home --home-dir /srv/kalendhair --shell /usr/sbin/nologin kalendhair
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin kalendhair
 sudo mkdir -p /srv/kalendhair
 sudo chown kalendhair:kalendhair /srv/kalendhair
+sudo chmod 755 /srv/kalendhair
 ```
+
+**`--no-create-home` and the explicit `chmod` are both deliberate.** With
+`--create-home --home-dir /srv/kalendhair` the directory arrives holding a copy of
+`/etc/skel`, and `git clone` then refuses it: `destination path already exists and is not
+an empty directory`. That home would also be mode `750`, which makes every `cd
+/srv/kalendhair` later in this guide fail for your own admin account. This is a service
+account that never logs in, so it needs no home at all.
 
 Clone into it. A deploy key or a personal access token is the usual way to read a private
 repository from a server:
@@ -194,12 +212,17 @@ sudo -u kalendhair git clone https://github.com/ggrl/kalendhair.git /srv/kalendh
 cd /srv/kalendhair
 ```
 
-That user must be in the `docker` group to run compose, or you prefix the compose commands
-with `sudo`:
+That user must be in the `docker` group to run compose, or you prefix every compose command
+with `sudo` instead:
 
 ```bash
 sudo usermod -aG docker kalendhair
 ```
+
+**The `docker` group is root on the host**, because anybody in it can start a container that
+mounts `/`. It is an acceptable trade here only because this account has `nologin` and
+nothing else runs as it. If that stops being true, drop the group and use `sudo docker
+compose` throughout.
 
 ---
 
@@ -211,7 +234,12 @@ loud rather than silent. That is deliberate.
 
 ```bash
 sudo -u kalendhair cp /srv/kalendhair/.env.example /srv/kalendhair/.env
+sudo chmod 600 /srv/kalendhair/.env
 ```
+
+**Lock it before you fill it, not after.** `cp` creates the file world-readable, and the
+window that matters is the one where it has secrets in it. Doing the `chmod` now means
+there is no such window.
 
 Generate the machine secrets. **Never type these by hand and never reuse one from another
 machine:**
@@ -225,9 +253,42 @@ openssl rand -base64 24  # MASTER_PASSWORD
 **Why `-hex` for the database password and `-base64` for the others.** `DATABASE_URL`
 embeds the password inside a URL. Base64 output can contain `+`, `/` and `=`, which have
 meaning inside a URL and will either break the connection string or, worse, parse into
-something that is not the password you set. Hex output cannot. `SESSION_SECRET` and
-`MASTER_PASSWORD` are never put in a URL, so base64 is fine for them, and `openssl rand
--base64 24` produces exactly the 32 characters `server/config.ts` demands as its minimum.
+something that is not the password you set: a password ending `@evil.example.com/` would
+send the username and a fragment of the password to somebody else's host on every boot.
+Hex output cannot do either. `SESSION_SECRET` and `MASTER_PASSWORD` are never put in a URL,
+so base64 is fine for them, and `openssl rand -base64 24` produces exactly the 32
+characters `server/config.ts` demands as its minimum.
+
+### Put single quotes around any value you chose yourself
+
+**This one is silent, and it will lock the salon out of its own board.**
+
+Compose expands `$` inside `.env` values. Node, which is how this server has always been
+run outside a container, does not. So the same file means two different things:
+
+| `.env` line | Compose delivers | Node delivers |
+| --- | --- | --- |
+| `SALON_PASSWORD=Sommer2026$Salon` | `Sommer2026` | `Sommer2026$Salon` |
+| `SALON_PASSWORD='Sommer2026$Salon'` | `Sommer2026$Salon` | `Sommer2026$Salon` |
+
+Nothing stops you. `Sommer2026` is longer than eight characters, so the server accepts it,
+seeds it, and prints `salon password and PIN seeded from the environment` - the exact line
+step 7 tells you confirms a correct start. The salon then types the password it chose and
+is refused forever. Editing `.env` afterwards fixes nothing, because ADR-0017 makes the
+seed a one-time act: the row exists now. And `MASTER_PASSWORD`, the documented way back in,
+is truncated by the same rule if it also contains a `$`.
+
+**So: single-quote every value a person chose.** In practice that is `SALON_PASSWORD`, and
+`SALON_PIN` if you ever quote it:
+
+```
+SALON_PASSWORD='Sommer2026$Salon'
+```
+
+Single quotes are the one form both loaders agree on. Do **not** escape it as `$$`: compose
+reads that correctly and Node hands you a literal `$$`. The generated secrets above are
+hex and base64, neither of which can contain a `$`, so they are safe either way - quoting
+them anyway costs nothing and is the simpler rule to remember.
 
 Now edit `/srv/kalendhair/.env` and set every value:
 
@@ -259,24 +320,38 @@ a container:
 You still set `POSTGRES_PASSWORD` correctly, because compose builds the real
 `DATABASE_URL` from it.
 
-**`COOKIE_SECURE=true` is the one people get wrong, and it is the reason this file exists.**
-When a proxy terminates TLS and forwards to loopback, the board is served over HTTPS while
-the Node process still sees a loopback bind. Its own guess therefore says "no TLS here" and
-it does not mark the session cookie `Secure`, so the cookie will travel in clear text on any
-plain HTTP request to the same hostname. `server/config.ts` documents exactly this case.
-Since you are deploying behind a proxy, set it to `true` explicitly and do not rely on the
-guess.
+**Set `COOKIE_SECURE=true`, but understand what it is doing here.** When this value is
+absent the server guesses from `HOST`: loopback means "no TLS in front of me", anything else
+means "assume HTTPS". In **this** deployment compose sets `HOST` to `0.0.0.0`, so the guess
+already lands on `Secure` and the cookie is marked correctly whether or not you set the
+name. Verified: a container started with no `COOKIE_SECURE` at all logs
+`session cookie: Secure`.
 
-Lock the file down. It now holds every secret on the machine:
+So this is belt and braces rather than the thing that saves you, and it is worth setting for
+one reason: the day somebody changes `HOST` back to `127.0.0.1` - to put the app back on the
+host, or to bind it differently - the guess silently flips and the session cookie starts
+travelling in clear text on any plain HTTP request to the same hostname. Setting it
+explicitly means that change cannot quietly downgrade the cookie.
+
+**It follows that the startup log cannot detect a `COOKIE_SECURE` mistake in this
+deployment**, because it prints `Secure` either way. The real check is step 9: log in
+through the browser over HTTPS.
+
+Confirm the permissions stuck, now that the file holds every secret on the machine:
 
 ```bash
-sudo chmod 600 /srv/kalendhair/.env
 sudo chown kalendhair:kalendhair /srv/kalendhair/.env
+ls -l /srv/kalendhair/.env      # must be -rw------- kalendhair kalendhair
 ```
 
 `.env` is gitignored and must never be committed. See `rules/secrets.md`. If one of these
 values ever reaches version control it is burned and has to be replaced, because history is
 permanent.
+
+**Three ordinary debugging commands print every one of these secrets in plain text**, and
+they are exactly what you reach for when something is wrong: `docker compose config`,
+`docker inspect` on the app container, and `docker compose exec app env`. Never paste their
+output into an issue, a chat or a screenshot.
 
 ---
 
@@ -420,28 +495,57 @@ An untested backup is a belief, not a backup.
 You can skip this for a throwaway test box with fake names. You cannot skip it for the real
 one, and this is the gate between the two.
 
-Take a dump:
+**Know what is in the file before you decide where to put it.** A dump of this database
+holds every customer name, every treatment, and the `notes` field - which the code's own
+comment identifies as where a salon writes "allergic to ammonia", meaning health data - plus
+the `salon_credential` table of password hashes, which somebody can grind offline at their
+leisure. It is not encrypted. Treat it as the most sensitive object on the machine, because
+it is.
+
+Make a directory for it that only this account can read:
+
+```bash
+sudo mkdir -p /srv/kalendhair-backups
+sudo chown kalendhair:kalendhair /srv/kalendhair-backups
+sudo chmod 700 /srv/kalendhair-backups
+```
+
+Then take a dump:
 
 ```bash
 cd /srv/kalendhair
-docker compose exec -T db pg_dump -U salon -d salon --clean --if-exists \
-  | gzip > /var/backups/kalendhair-$(date +%F-%H%M).sql.gz
+sudo -u kalendhair sh -c 'umask 077 && docker compose exec -T db \
+  pg_dump -U salon -d salon --clean --if-exists \
+  | gzip > /srv/kalendhair-backups/kalendhair-$(date +%F-%H%M).sql.gz'
 ```
 
-Put that in a script, run it from cron nightly, and **copy the result off the machine**. A
-backup that only exists on the server it is backing up is not a backup: the disk that dies
-takes both. Any object storage or a second host will do.
+**`umask 077` is not decoration.** Without it the shell redirect creates the file `0644`
+under the default umask, readable by every account on the box. `/var/backups`, the obvious
+place to put it, is `0755 root:root` on Debian and Ubuntu, so the default would leave
+customer data readable by anyone with a local shell.
+
+Put that in a script and run it from cron nightly.
+
+**Then copy it off the machine, and think about where.** A backup that only exists on the
+server it is backing up is not a backup: the disk that dies takes both. But this is the one
+instruction in this guide that can hand the salon's data to the internet if you follow it
+carelessly. **The destination must be private** - a storage bucket or container with public
+access disabled, or a host you control reached over SSH. A bucket left world-readable is
+the ordinary way this goes wrong, and the file is unencrypted, so anyone who finds it has
+everything. If the destination is not one you would be comfortable posting the URL of,
+encrypt the dump before it leaves.
 
 **Then rehearse the restore, on a scratch database, before you need it:**
 
 ```bash
+cd /srv/kalendhair
 # prove the dump can actually be read back
-docker compose exec -T db psql -U salon -d postgres -c 'CREATE DATABASE restore_drill;'
-gunzip -c /var/backups/kalendhair-SOMEDATE.sql.gz \
-  | docker compose exec -T db psql -U salon -d restore_drill
-docker compose exec -T db psql -U salon -d restore_drill -c '\dt'
-docker compose exec -T db psql -U salon -d restore_drill -c 'SELECT count(*) FROM appointment;'
-docker compose exec -T db psql -U salon -d postgres -c 'DROP DATABASE restore_drill;'
+sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'CREATE DATABASE restore_drill;'
+gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz \
+  | sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill
+sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c '\dt'
+sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c 'SELECT count(*) FROM appointment;'
+sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'DROP DATABASE restore_drill;'
 ```
 
 If the table list and the count look right, you have a backup. Write the date you did this
@@ -480,22 +584,39 @@ code and **not** the database, which is the reason the backup above comes first.
 
 Things this deployment does not solve, listed so they are decisions rather than surprises.
 
-**`trust proxy` is not set, and the login rate limiter is wrong behind a proxy.** Described
-at the top of this file. Right now, behind Caddy, all twenty login attempts per five
-minutes are shared by every visitor, so one stranger can lock the whole salon out of its own
-board at four requests a minute. The fix is a small code change in `server/app.ts` telling
-Express to trust exactly one hop, and it must be exactly one: trusting everything makes
-`X-Forwarded-For` whatever the caller claims, which removes the limiter entirely. **Do this
-before real use.** It is not urgent on a test box.
+**`trust proxy` is not set, so all three rate limiters are wrong behind a proxy.** Described
+at the top of this file. Behind Caddy, `request.ip` is Caddy's address on every request, so
+the login limiter, the master-password reset limiter and the wrong-PIN counter each become
+one budget shared by the whole internet. A stranger sending 21 login attempts every five
+minutes - about four a minute - locks the salon out of its own board indefinitely, and can
+close the master-password recovery door the same way.
+
+The fix is a small code change in `server/app.ts`: `app.set('trust proxy', 1)`, and it must
+be a specific hop count. `trust proxy: true` makes `X-Forwarded-For` whatever the caller
+claims, which removes all three limiters entirely rather than fixing them. **Do this before
+real use.** It is not urgent on a test box.
 
 **The image is built on the server, not in CI.** Simple, and it means the box needs enough
-memory to run a TypeScript build. It also means a deploy can fail at build time with the old
-version already stopped. Building in CI and pushing to a registry is the tidier end state.
+memory to run a TypeScript build. Building in CI and pushing to a registry is the tidier end
+state, and it would also let a deploy be a pull rather than a compile.
 
-**No health endpoint, so the app container has no healthcheck.** There is no `/health`, so
-an uptime monitor has to watch something else. `GET /api/day` answering 401 is a usable
-signal: it proves the process is alive and talking to its session layer. A monitor that
-treats 401 as failure will page you constantly.
+It is **not** as risky as it looks: a failed build leaves the running version untouched,
+because `docker compose up -d --build` builds before it converges. Measured by breaking the
+`Dockerfile` deliberately against a running stack - the build failed, the old container
+stayed up, and the board still answered 200. So a bad commit costs you a deploy, not an
+outage.
+
+**No health endpoint, so the app container has no healthcheck, and nothing here notices a
+dead database.** There is no `/health`. Worse, there is no unauthenticated request that
+touches Postgres at all: `GET /api/day` with no cookie returns 401 from
+`session === null` before it ever queries, so it answers 401 just as cheerfully with the
+database gone. Serving `/` is `express.static` and touches nothing either.
+
+So an uptime monitor built on either of those proves the Node process is running and
+nothing more. **The failure most worth paging for is the one it cannot see.** Until a real
+health endpoint exists, the honest check is authenticated - log in and fetch a day - or
+external, watching the `db` container rather than the API. A monitor that treats 401 as
+failure will page you constantly, which is the wrong lesson to learn from this.
 
 **No log rotation beyond Docker's defaults**, and no metrics. `docker compose logs` is the
 whole observability story.
@@ -513,6 +634,9 @@ ever becomes more than that, it becomes a secret manager.
 
 | Symptom | First thing to check |
 | --- | --- |
+| Salon cannot log in with the password you set | An unquoted `$` in `.env`. Compose truncated it at the `$`, and ADR-0017 already seeded the short version. Fix `.env` with single quotes, then reset via `MASTER_PASSWORD` - editing `.env` alone will not help |
+| `destination path already exists and is not an empty directory` at step 4 | `useradd --create-home` was used. The account needs no home. See step 4 |
+| `Permission denied` on `cd /srv/kalendhair` | Same cause: the directory is `750` from `--create-home`. It should be `755` and owned by `kalendhair` |
 | `set POSTGRES_PASSWORD in .env` before anything starts | Compose substitution, not the app. `.env` is missing or not in the directory you ran compose from |
 | `... is required and was not set` in the app log | That name is missing from `.env`. The message names the one it wants |
 | App container restarts in a loop | `docker compose logs app`. Usually the database URL or a missing secret. `depends_on` waits for healthy, so it is rarely a race |

@@ -23,7 +23,15 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env
+      # Not required, so that `npm run db:up` and `docker compose down` still work on a
+      # machine that has no .env - which is how this behaved before the app service existed.
+      # Nothing is lost by allowing it: the server refuses to start without its secrets and
+      # names the one it wants, which is a better error than compose's.
+      #
+      # Compose expands `$` in these values and `node --env-file` does not, so any value a
+      # person chose needs single quotes in .env. See DEPLOYMENT.md step 5.
+      - path: .env
+        required: false
     environment:
       # Both of these deliberately override .env, which is written for running the server
       # on the host.
@@ -56,9 +64,12 @@ services:
     # this is the file stage two deploys.
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U salon -d salon']
+      # -h 127.0.0.1 forces TCP. Without it pg_isready uses the unix socket, which the
+      # entrypoint's temporary init server answers while TCP is still refused - so on a first
+      # run the app can be released against a database it cannot yet connect to. TCP is what
+      # the app actually uses, so it is what this should test.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U salon -d salon']
       interval: 5s
       timeout: 5s
       retries: 10

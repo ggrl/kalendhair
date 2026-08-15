@@ -114,7 +114,14 @@ employee exists.
 While working on the front end, `npm run dev` gives Vite on
 [127.0.0.1:4173](http://127.0.0.1:4173) with hot reload, proxying `/api` to the server above.
 
-`npm run db:down` stops the database. Add `-v` by hand if you want to delete its data.
+`npm run db:down` is `docker compose down`, so it stops the whole project: the database and,
+if you started it, the application container beside it. Add `-v` by hand if you want to
+delete the data too.
+
+One rule for `.env` on any machine that runs the containers: **single-quote any value you
+chose yourself**, such as `SALON_PASSWORD='meins$2026'`. Compose expands `$` inside `.env`
+and `node --env-file` does not, so an unquoted `$` gives you a different password depending
+on how the server was started. `DEPLOYMENT.md` explains what that costs.
 
 ## Putting it on a server
 
