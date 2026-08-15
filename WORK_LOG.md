@@ -2,7 +2,114 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-15, tenth session, second half - the boxes say more, and the review found a blocker
+
+Continues the entry below, which stopped at six changes and said none of them had been reviewed.
+Both statements have since expired: three more changes went in, then **both review passes ran over
+the whole span and the logic pass returned NO-SHIP**. Everything it found is fixed and merged. So
+is a tenth thing it did not find, which the owner did, by opening the date picker.
+
+### Where things stand
+
+- **`main` is at `8d2996e`** and is the only branch anywhere. PRs #37, #38 and #39 merged after the
+  ones listed below. Working tree clean, no open pull requests, remote branches pruned.
+- **Twenty-three ADRs.** ADR-0023 is new: what a box says about itself.
+- **The blocker on real customer names has not moved**: no backup, no tested restore.
+
+### What was built, and where
+
+- **Every box says how long it lasts** (#37). `formatDuration` in `src/calendar/grid.ts` - `15m`,
+  `45m`, `1h`, `1h15` - and `src/ui/EntryBox.tsx` draws it top right, or on the line when the box is
+  too short to have a corner. Computed from the slots being *drawn*, so it follows a drag.
+- **A note is a folded corner** (#38). `.entry__fold`, 15px, `--ink`, bottom right. It replaced a
+  dot, which replaced the word `Notiz`. The word survives as `visually-hidden` text, because a
+  shape says nothing to a screen reader.
+- **Everything the review passes found** (#39), listed below.
+
+### What the owner decided
+
+- **A dot for the note, then a fold instead** after seeing the dot on the running board: "very
+  small and no good visual clue". 15px was their number, and they accepted that it clips the tail
+  of `15m` on the shortest box after seeing that at four times scale.
+- **Blocks show a duration too**, against my recommendation of appointments only.
+- **The duration on the right of every box**, including the short ones - a correction after seeing
+  it beside the start time first.
+- **The whole span reviewed at once** rather than nine separate passes.
+
+### What the review passes found
+
+The logic pass: **NO-SHIP**. The security pass: **SHIP**, having checked the one rule that matters
+most here - `entry.notes` reaches neither the DOM, nor the `title`, nor the accessible name.
+
+- **The blocker, and it was mine.** The 08:00 landing used `scrollIntoView`, which sets the
+  browser's sequential focus navigation starting point to the element it scrolls to. So the first
+  Tab after every load continued from the hour scale *inside* the board: Tab, Enter opened a
+  customer's form, and the entire top bar was unreachable by tabbing forward. **I had seen the
+  symptom while building it and written it off in a test comment as ordinary browser behaviour.**
+  `Board.tsx` now sets `scrollTop` directly and subtracts the measured height of the headings.
+- **A day with nobody on it cost the next day its landing.** Grid unmounts, scroll resets, flag
+  survives: staffed day, empty day, staffed day arrived at 06:00.
+- **One finding refuted with evidence.** The pass said the open date picker lets the board step
+  behind it. A capture-phase listener on `window` sees *no* keydown at all while the popup is open -
+  the native calendar takes the key and the board follows through `onPick`. Their own numbers agreed
+  on a second reading: one day per press, Shift ignored, and the handler makes Shift a week. A guard
+  was written, measured, and reverted.
+- ADR-0022 promised an assertion that was not in the file; the strip-width comment recorded a best
+  case when **widening the window from 1308px to 1424px actually narrows the board** by 112px;
+  three comments described a dot that had been deleted, one duplicated verbatim; `formatDuration`
+  claimed a length it can exceed; one assertion could not fail; and the dead yellow note-panel
+  stylesheet - which draws note text on the board - was deleted at the security pass's request.
+
+### What the passes did not find, and the owner did
+
+**The date picker opened 573px to the right of its own glyph**, and off the edge of a narrow
+window. The browser hangs its calendar off the hidden `<input>`, which was positioned against
+`.topbar__heading` - fine while that was the middle column of a three-column bar, wrong the moment
+this session made it span the whole width. The glyph and the field share a wrapper now, asserted at
+five widths.
+
+That is the shape of the gap `rules/what-checks-prove.md` describes: a green suite, two review
+passes, and the defect was found by somebody pressing the button.
+
+### What was verified, and how
+
+- On merged `main` at `8d2996e`: `npm run verify` green (116 unit), `npm run test:e2e` green
+  (**158**), `npm run test:db` green (144). CI green on all three jobs for #37, #38 and #39.
+- Six more mutations on the fixes, all caught: `scrollIntoView` restored, the landing flag never
+  released, the headings clearance dropped, the picker field positioned against the heading again,
+  and the two behind the earlier findings.
+- The picker fix was confirmed by the owner on their own screen before the branch was pushed.
+
+### What was NOT verified
+
+- **The fix branch itself had no review pass.** It is the product of a review, which is not the
+  same thing, and it contains the riskiest change of the session: `scrollIntoView` replaced with
+  arithmetic over measured element boxes.
+- **Nothing has been re-measured on a real phone**, only in Playwright's iPhone emulation.
+- **The salon still has not run a day on any of it.**
+- The reviewer's own parting question is unanswered: force a 401 during a held drag and watch
+  whether `gesturing` clears. Reasoned to self-heal on remount; not reproduced.
+
+### Unfinished, and what comes next
+
+1. **Deployment** - the container and the VPS, still blocked by the brief's backup gate: a backup
+   that leaves the machine on a schedule and one restore actually performed.
+2. **Month steps**, still unbuilt and deliberately kept out of the arrow keys.
+3. The items named and deliberately not fixed in ADR-0018, ADR-0019 and ADR-0021.
+
+### What surprised me
+
+- **I wrote the bug and then wrote the excuse for it.** The Tab regression was in a test comment,
+  described accurately, and dismissed in the same sentence. A reviewer who had not built it took
+  two keystrokes to see what it cost.
+- **A review finding can be wrong and still be worth having.** The date-picker finding sent me to
+  measure something I would never have measured, and the measurement is now a test.
+- **Two of my own tests could not fail**, again - the fifth and sixth of the session.
+
 ## 2026-08-15, tenth session - six interface changes, and none of them reviewed
+
+**Superseded in part by the entry above**: three more changes followed, both review passes then ran
+over the whole span, and "none of them reviewed" stopped being true. Read the entry above first.
 
 The owner's GUI list, worked through one change at a time: they name it, I price it, they decide.
 Six merged. **Read the "what was NOT verified" section before trusting any of it** - this session
