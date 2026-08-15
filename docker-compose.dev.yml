@@ -1,0 +1,41 @@
+# Local development only. Never used on the server.
+#
+# TWO things live here, not one: the loopback port the host-side test suite needs, and the
+# script that creates salon_test. Both are development-only and neither belongs on the
+# salon's machine.
+#
+# **Start the database with `npm run db:up`, not `docker compose up -d`.** The init script
+# only runs when the data directory is empty, so a volume first created without this file
+# never gets salon_test, and mounting it later changes nothing - `npm run test:db` then fails
+# with `database "salon_test" does not exist` and no amount of restarting fixes it. The way
+# out is `docker compose down -v` and `npm run db:up`, which destroys the data in that
+# volume.
+#
+# ADR-0006 forbids publishing the database port and says the binding is deleted the moment
+# the application service joins the compose file. That happened. The one thing it leaves
+# unresolved is that `npm run test:db` runs on the HOST and cannot reach an unpublished
+# port, so the exception it granted for the test suite still has to live somewhere.
+#
+# It lives here, in a file the server never loads, rather than in docker-compose.yml where
+# forgetting it would publish the port in production. That is the whole point of the split:
+# `docker compose up -d` on the VPS publishes nothing, and it takes a second -f to change
+# that.
+#
+# It is still loopback only. If you find this bound to anything else, that is a defect.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
+#
+# which is what `npm run db:up` does.
+
+services:
+  db:
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      # Creates salon_test on first init, for a suite that truncates every table. It has no
+      # business on the salon's server, so it is mounted here rather than in the base file -
+      # a review pass found the production database carrying a salon_test beside it.
+      #
+      # Compose appends to the base file's volumes rather than replacing them, so db-data
+      # stays attached without being named again here. Verified with `docker compose config`.
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro

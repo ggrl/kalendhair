@@ -1,38 +1,84 @@
 # ADR-0005: the same file runs on a laptop now and on a VPS later, which is the whole
 # reason for containers here - it closes the gap between the two.
 #
-# The application service is not here yet. The board exists and is behind a password as of
-# 2026-08-13, so the reason is no longer that it must not be reachable - it is that the brief
-# makes a tested restore the condition for stage two, and this file is what stage two deploys.
-# It joins when that gate is met.
+# Two services, as that ADR describes: one long-running Node server that serves the built
+# board and answers the API, and one Postgres with its data on a named volume. The reverse
+# proxy that terminates TLS is NOT here - it runs on the host and forwards to the port
+# published below. See DEPLOYMENT.md.
+#
+# This file publishes no database port. For local development, where the test suite runs on
+# the host and has to reach Postgres, add the override:
+#
+#     docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# which is what `npm run db:up` does.
 
 services:
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      # Not "started" - "healthy". The server migrates on startup, and a migration against
+      # a Postgres that is still opening its socket fails the whole boot.
+      db:
+        condition: service_healthy
+    env_file:
+      # Not required, so that `npm run db:up` and `docker compose down` still work on a
+      # machine that has no .env - which is how this behaved before the app service existed.
+      # Nothing is lost by allowing it: the server refuses to start without its secrets and
+      # names the one it wants, which is a better error than compose's.
+      #
+      # Compose expands `$` in these values and `node --env-file` does not, so any value a
+      # person chose needs single quotes in .env. See DEPLOYMENT.md step 5.
+      - path: .env
+        required: false
+    environment:
+      # Both of these deliberately override .env, which is written for running the server
+      # on the host.
+      #
+      # 127.0.0.1 inside a container means "this container and nothing else", so the port
+      # published below would reach nothing. What keeps this off the network is that
+      # publish being bound to loopback on the host, not this value.
+      HOST: 0.0.0.0
+      # On the compose network the database answers to its service name. The .env copy of
+      # this points at 127.0.0.1, which is correct for the host and wrong from in here.
+      DATABASE_URL: postgres://salon:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/salon
+    ports:
+      # Loopback only. The proxy on the host reaches this; the internet does not. Serving
+      # the board to the world is the proxy's job, because it is the thing holding the
+      # certificate - ADR-0005.
+      - '127.0.0.1:3000:3000'
+
   db:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
       POSTGRES_DB: salon
       POSTGRES_USER: salon
-      # Local development only. Stage two supplies this from the environment and never
-      # from a tracked file: see rules/secrets.md.
       # No default on purpose. rules/secrets.md forbids a password in a committed file,
       # including as an example, and a placeholder default is the thing people forget to
       # change. Compose refuses to start until this is set in .env, which is gitignored.
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
-    ports:
-      # ADR-0006 forbids publishing the database port, with one named exception: local
-      # development and the test suite run on the host and have to reach it. Bound to
-      # loopback so it is not reachable from the network, and dropped entirely once the
-      # application runs in a container beside this one.
-      - '127.0.0.1:5432:5432'
+    # ADR-0006: no ports here. The database is reachable by the server on the compose
+    # network and by nothing else. "Stage two publishes nothing" is that ADR's wording, and
+    # this is the file stage two deploys.
     volumes:
       - db-data:/var/lib/postgresql/data
-      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U salon -d salon']
+      # -h 127.0.0.1 forces TCP. Without it pg_isready uses the unix socket, which the
+      # entrypoint's temporary init server answers while TCP is still refused - so on a first
+      # run the app can be released against a database it cannot yet connect to. TCP is what
+      # the app actually uses, so it is what this should test.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U salon -d salon']
       interval: 5s
       timeout: 5s
       retries: 10
+      # Because TCP stays refused for the whole of initdb, the first run on a fresh volume
+      # would otherwise spend its entire retry budget there and be declared unhealthy - which
+      # aborts `docker compose up` before the app is created. Failures inside start_period do
+      # not count against retries, so this buys the first boot room without slowing later
+      # ones: a healthy answer ends start_period immediately.
+      start_period: 60s
 
 volumes:
   db-data:

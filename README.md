@@ -78,9 +78,11 @@ The server refuses to start if any of them is missing, and names the one it want
 
 One optional name, and the day it matters: `COOKIE_SECURE`. The session cookie follows `HOST`
 by default - loopback means not `Secure`, anything else means `Secure`. **Set it to `true` the
-day a proxy terminates TLS in front of this**, because that deployment leaves `HOST` on
-loopback and the guess would send the session cookie in clear text. The startup log says which
-way it went, every time.
+day a proxy terminates TLS in front of a server started this way**, with `npm start` on the
+host, because that deployment leaves `HOST` on loopback and the guess would send the session
+cookie in clear text. Under `docker compose` the question does not arise the same way:
+compose sets `HOST` to `0.0.0.0`, so the guess already lands on `Secure`. The startup log says
+which way it went, every time.
 
 ```bash
 npm run db:up      # Postgres in a container, bound to 127.0.0.1 only
@@ -114,7 +116,24 @@ employee exists.
 While working on the front end, `npm run dev` gives Vite on
 [127.0.0.1:4173](http://127.0.0.1:4173) with hot reload, proxying `/api` to the server above.
 
-`npm run db:down` stops the database. Add `-v` by hand if you want to delete its data.
+`npm run db:down` is `docker compose down`, so it stops the whole project: the database and,
+if you started it, the application container beside it. Add `-v` by hand if you want to
+delete the data too.
+
+One rule for `.env` on any machine that runs the containers: **single-quote any value you
+chose yourself**, such as `SALON_PASSWORD='meins$2026'`. Compose expands `$` inside `.env`
+and `node --env-file` does not, so an unquoted `$` gives you a different password depending
+on how the server was started. `DEPLOYMENT.md` explains what that costs.
+
+## Putting it on a server
+
+[`DEPLOYMENT.md`](DEPLOYMENT.md) is the step by step, provider neutral, with the TLS
+certificate and the reverse proxy. The stack itself is `docker compose up -d`: the Node
+server and Postgres, as ADR-0005 describes, with only the proxy left on the host.
+
+It also names the gap that would bite a real deployment: `trust proxy` is unset, which
+turns the login rate limiter into one budget shared by everybody the moment a proxy is in
+front of it.
 
 ## The checks
 
@@ -122,6 +141,13 @@ While working on the front end, `npm run dev` gives Vite on
 npm run verify     # typecheck, lint, unit tests, build - no database needed
 npm run test:e2e   # browser tests (Playwright)
 ```
+
+**Start the database with `npm run db:up`, not `docker compose up -d`.** That script adds
+`docker-compose.dev.yml`, which publishes the port these tests need and creates the
+`salon_test` database. Postgres only runs that creation script when the data directory is
+empty, so a volume first created another way never gets `salon_test`, and adding the file
+afterwards does not help: the tests fail with `database "salon_test" does not exist` until
+`docker compose down -v` and `npm run db:up`, which deletes whatever was in that volume.
 
 The database tests need Postgres and its URL. Vitest does not read `.env` into
 `process.env`, so pass it explicitly:
