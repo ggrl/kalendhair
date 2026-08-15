@@ -2,6 +2,100 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-16, twelfth session, second half - trust proxy, built but not reviewed
+
+Continues the entry below, which is otherwise still current. It named `trust proxy` as the
+next thing to build. It is built.
+
+### START HERE: what is waiting
+
+**`fix/trust-proxy` at `2d6eee7` is committed, NOT pushed, and NOT reviewed.** It is the only
+branch and the only unpushed work. `main` is at `66fcd0e`.
+
+**Both review passes are the first job of the next session.** This is the first source change
+in three sessions - everything before it was documentation - so the two passes matter here in
+a way they did not for the log branches. The owner deferred them deliberately, not by
+accident. Then push, PR, merge.
+
+### What was built, and where
+
+`TRUST_PROXY`, an optional environment name holding a number of proxy hops.
+
+- **`server/config.ts`** - `trustProxyFrom`, next to `cookieSecureFrom` and for the same
+  reason: the process cannot see its own deployment. Absent or `0` means trust nothing.
+- **`server/app.ts`** - `app.set('trust proxy', n)` only when `n > 0`, and `AppConfig` gains
+  the field.
+- **`server/index.ts`** - the startup log says which way it went, beside the cookie line.
+- **`tests/config.test.ts`** - three tests: the default, the hop count, the refusals.
+- **`tests/auth.db.test.ts`** - three tests over real HTTP, proving which address the limiter
+  keys on in both configurations.
+- **`.env.example`, `DEPLOYMENT.md`, `README.md`, `ADR-0025`** - all four described this as an
+  unfixed gap and now describe the setting. ADR-0025 carries a dated amendment.
+
+### The thing worth knowing, because the obvious fix was wrong
+
+**`DEPLOYMENT.md` and ADR-0025 both said to write `app.set('trust proxy', 1)` in the code.
+Hardcoding it is unsafe.** Measured on Express 5 before writing anything: with one hop
+trusted, a request arriving *directly* carrying `X-Forwarded-For: 9.9.9.9` gets
+`request.ip === '9.9.9.9'`.
+
+So the constant that fixes the deployment behind Caddy breaks every other shape - a laptop, a
+test box before the proxy exists, anything reachable without passing through a proxy. The
+caller names themselves and all three counters stop applying. Both directions are real
+failures and they are opposite:
+
+| | Behind Caddy | Nothing in front |
+| --- | --- | --- |
+| Unset (the default) | one budget shared by everybody | correct |
+| `TRUST_PROXY=1` | correct | caller picks their own address |
+
+`true` and `false` are refused **by name** rather than coerced: `trust proxy: true` trusts the
+whole chain, so the leftmost header entry is whatever the caller wrote, and coerced to a
+number it would read as `0` and be silent.
+
+**Rejected: deriving it from `COOKIE_SECURE`**, which needs no new name and is nearly the same
+fact. It couples two unrelated settings, so turning one off would quietly change the other.
+Recorded in ADR-0025 so it is not re-proposed.
+
+### What was verified, and how
+
+- `npm run verify` green - **119 unit**, up from 116. `npm run test:db` green - **147**, up
+  from 144.
+- **Both mutations caught, in opposite directions.** Removing the `app.set` fails the
+  per-address test; hardcoding `app.set('trust proxy', 1)` fails the two tests that prove the
+  safe default. The tests can fail, which is the only reason to believe them.
+- **In a real container**: `TRUST_PROXY=1` logs `trusting 1 proxy hop(s)`, and
+  `TRUST_PROXY=true` refuses to start and prints the whole reason.
+
+### What was NOT verified, and why not
+
+- **Neither review pass has read this.** That is the next job and the entry above says so
+  twice on purpose.
+- **Still nothing has run behind a real Caddy.** The limiter behaviour is proved by setting
+  `X-Forwarded-For` by hand against the app, which is what a proxy does - but a proxy has
+  still never actually been in front of this board. Four sessions of documents now rest on
+  that being true.
+- **No browser was opened**, and `npm run test:e2e` was not run locally this session.
+
+### Unfinished, and the next step
+
+1. **Review, push, PR, merge `fix/trust-proxy`.** First job.
+2. **Month steps** - the one navigation piece never started. ADR-0010 already settled the
+   arithmetic.
+3. **The backup and one tested restore** still gate real customer data.
+4. **Deploy it somewhere.** `DEPLOYMENT.md` has been through three review rounds and has
+   never been executed. The Azure test box is the first real test of all of it.
+
+### What surprised me
+
+**My own test of the fix was wrong before the fix was.** I checked `TRUST_PROXY=1 docker
+compose up` and the log still said no proxy trusted, which looked like a broken change. It
+was a broken test: a shell variable is only used for `${VAR}` interpolation in the compose
+file and is not passed into the container - the name has to be in `.env`, which is what the
+guide already said. Ten minutes of suspecting correct code. The habit that has caught
+everything this session, running it rather than reading it, also produces false alarms, and
+the answer to those is the same - run something narrower.
+
 ## 2026-08-16, twelfth session - it deploys with one command, and three review rounds to get there
 
 Continues the entry below, which is now history rather than current state: everything it
