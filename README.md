@@ -116,6 +116,14 @@ While working on the front end, `npm run dev` gives Vite on
 
 `npm run db:down` stops the database. Add `-v` by hand if you want to delete its data.
 
+## Putting it on a server
+
+[`DEPLOYMENT.md`](DEPLOYMENT.md) is the step by step, provider neutral, with the TLS
+certificate and the reverse proxy. It also names what is not built yet and would bite a
+real deployment: there is no Dockerfile, so the application runs on the host under Node,
+and `trust proxy` is unset, which turns the login rate limiter into one budget shared by
+everybody the moment a proxy is in front of it.
+
 ## The checks
 
 ```bash
