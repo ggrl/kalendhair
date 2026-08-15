@@ -2,6 +2,96 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-15, eleventh session - the project has a name, and the history was audited to publish
+
+No application code changed. This session was about preparing to publish, and the useful
+output is a finding and a name.
+
+### Where things stand
+
+- **The repository is `github.com/ggrl/kalendhair`**, renamed from `calendar`. Still
+  **private**. The old URL redirects - checked with `git ls-remote`, not assumed.
+- **`main` is at `0ebf0f0`**, working tree clean, no open pull requests, only `main` exists
+  local and remote. PRs #40 and #41 merged.
+- **Twenty-four ADRs.** ADR-0024 is new: what gets published and why.
+- **The blocker on real customer names still has not moved**: no backup, no tested restore.
+
+### What the owner asked, and what the numbers said
+
+The question was whether `AGENTS.md`, `CLAUDE.md` and friends need uploading at all, then
+whether to start a fresh repository with only the application files under a better name.
+
+**The size premise did not survive measurement.** 122 tracked files, 1.3MB in the working
+tree, 620KB by GitHub's own `diskUsage`. Every agent file combined is 88KB, under 7%.
+Deleting the whole workflow would have saved 88KB. `.gitignore` was already correct.
+
+**So the real question was the history, and it is clean.** Audited rather than assumed:
+`.env` has never been committed - no such blob exists on any branch, only `.env.example`,
+which is placeholder-only. No hardcoded credential in any of the 40 commits. Every commit
+is authored as the GitHub noreply address, not a personal one. Test data is invented names.
+
+That is the finding worth keeping: **there is nothing in this history that cannot go
+public.** A future session preparing to publish does not need to redo this audit.
+
+### What changed, and where
+
+- **The name.** `package.json`, `package-lock.json` twice, and the `README.md` heading now
+  say `kalendhair` - Kalender plus hair. `cybersteps-training-starter` was the template's
+  name and appears nowhere now: `git grep cybersteps` returns nothing.
+- **`LICENSE`** reads `Copyright (c) 2026 ggrl`. `Cybersteps` was inherited from the
+  starter and was never this project's.
+- **`docs/adr/ADR-0024-*.md`**, recording the rename-in-place decision and, more usefully,
+  the two alternatives rejected and why.
+
+### What the owner decided
+
+- **`kalendhair`**, their own wordplay - "hairstylists love wordplays".
+- **Rename in place rather than a fresh repository**, keeping the history and the agent
+  scaffolding, on the argument that the record is the distinctive part and a salon board in
+  React is not.
+- **`ggrl` on the copyright line** rather than a legal name.
+- **Merge #41 without the two review passes**, after being told it had none.
+
+### What was verified, and how
+
+- On merged `main` at `0ebf0f0`: `npm ci` clean and `npm run verify` **green - 116 unit
+  tests, build clean, 0 vulnerabilities**, now reporting `kalendhair@0.1.0`. Run after the
+  merge, not only before it.
+- CI green on all three jobs - `verify`, `database`, `browser` - for both #40 and #41.
+- `npm ci` accepts the hand-edited lockfile, which was the one way a name change could
+  have broken something.
+- The old GitHub URL still resolves to `8d2996e` via `git ls-remote`.
+
+### What was NOT verified, and why not
+
+- **`npm run test:e2e` and `npm run test:db` were never run locally this session.** CI ran
+  both green on each PR, which is a real signal, but it is not the same as running them.
+- **Nobody opened the application in a browser this session.** No reason to think a string
+  rename would change a pixel, and equally nothing here proves it did not.
+- **PR #41 had zero review passes.** The push hook fired its reminder; it merged anyway on
+  instruction. Four string literals, no logic touched, CI green - but `AGENTS.md` section 3
+  carves out no exception for small changes, and this was an exception.
+
+### Unfinished, and the next step
+
+- **Month steps** remain the one navigation piece not started. ADR-0010 already settled the
+  arithmetic, so the ruling exists and only the work is missing. This is the obvious next
+  piece of product work.
+- **The backup and one tested restore** still gate real customer data. Unchanged for three
+  sessions and it will not change by itself.
+- **The working directory is still `~/Documents/git/calendar`** while the repository is
+  `kalendhair`. Cosmetic, git does not care, and it needs doing from outside a session
+  running inside that directory.
+- **The repository is still private.** Making it public is a switch whenever the owner
+  wants it - nothing in the code or history blocks it.
+
+### What surprised me
+
+**`gh repo rename` updated the local git remote by itself.** I had written out a
+`git remote set-url` for the owner to run and it was already unnecessary. Checked after,
+which is the right order - the instruction would have been harmless, but it would have been
+advice I had not verified.
+
 ## 2026-08-15, tenth session, second half - the boxes say more, and the review found a blocker
 
 Continues the entry below, which stopped at six changes and said none of them had been reviewed.

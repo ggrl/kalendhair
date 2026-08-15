@@ -170,7 +170,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Twenty-three decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Twenty-four decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -200,6 +200,7 @@ re-decide.
 | [0021](docs/adr/ADR-0021-the-board-on-a-phone.md) | The board on a phone: a 150px column minimum, sideways scrolling, `+ Termin`, and no dragging by touch |
 | [0022](docs/adr/ADR-0022-the-day-steps-are-quiet-strips-not-hot-zones.md) | The day steps are quiet strips with an arrow cursor - not hot zones laid over the board |
 | [0023](docs/adr/ADR-0023-what-a-box-says-about-itself.md) | A box says how long it lasts, and marks a note with a folded corner |
+| [0024](docs/adr/ADR-0024-the-repository-is-published-with-its-history-and-its-workflow-files.md) | The repository is published as kalendhair, keeping its history and its workflow files |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:
