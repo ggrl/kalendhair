@@ -71,6 +71,37 @@ if the person maintaining this already has an nginx habit, familiarity beats ele
 19:00 when the board is down. `DEPLOYMENT.md` therefore documents it as a real alternative
 rather than a footnote.
 
+## Amended 2026-08-16: how the server is told the proxy is there
+
+Written the same day, once the gap three review passes had flagged was actually built. This
+paragraph exists because the obvious implementation is wrong.
+
+`DEPLOYMENT.md` and this ADR both said the fix was `app.set('trust proxy', 1)` in the code.
+**Hardcoding it is unsafe**, and that is measured rather than reasoned. On Express 5, with one
+hop trusted, a request arriving *directly* with `X-Forwarded-For: 9.9.9.9` gets
+`request.ip === '9.9.9.9'`. So the constant that fixes the deployment behind Caddy breaks
+every other way of running this: a laptop, a test box before the proxy is configured, anything
+where the port can be reached without passing through a proxy. The caller simply names
+themselves and the three counters stop applying.
+
+**So it is configuration, defaulting to trusting nothing.** `TRUST_PROXY` is a number of hops;
+absent or `0` means Express's own default, which is the safe one. `DEPLOYMENT.md` sets it to
+`1` on the server, where the one hop is Caddy.
+
+**It refuses `true` and `false` by name** rather than coercing them, because somebody will
+reach for a boolean: `trust proxy: true` trusts the whole `X-Forwarded-For` chain, so the
+leftmost entry is whatever the caller wrote, which removes the limiters rather than fixing
+them. Coerced to a number that would read as `0` and be silent.
+
+**The startup log states which way it went**, for the same reason the cookie decision is
+logged: this process cannot see whether a proxy is really in front of it, so both settings are
+claims the operator makes, and a deploy is exactly when nobody re-reads a config file.
+
+Rejected on the way: **deriving it from `COOKIE_SECURE`**, which would have avoided a new
+name and is nearly the same fact - "something in front of me terminates TLS". Rejected because
+it couples two unrelated settings, so turning one off would silently change the other, and a
+future reader would have to know that to be safe.
+
 ## Consequences
 
 **This is a reversible choice and should stay one.** Nothing in the application knows which

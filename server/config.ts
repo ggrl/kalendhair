@@ -16,6 +16,11 @@ export interface Config {
   salonPin: string
   /** Whether the session cookie is marked Secure. Derived, not configured - see below. */
   cookieSecure: boolean
+  /**
+   * How many proxy hops in front of this server may be believed about who the caller is.
+   * `0` means none, which is the default and the safe answer - see below.
+   */
+  trustProxy: number
 }
 
 /**
@@ -75,7 +80,49 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     salonPassword,
     salonPin,
     cookieSecure: cookieSecureFrom(env, host),
+    trustProxy: trustProxyFrom(env),
   }
+}
+
+/**
+ * How many hops of `X-Forwarded-For` this server may believe.
+ *
+ * Three counters in `app.ts` are keyed on the caller's address: login, the master-password
+ * reset, and wrong PIN attempts. Behind a proxy Express has not been told to trust, every
+ * request carries the proxy's address, so all three stop being per-visitor and become one
+ * budget shared by the whole internet - a stranger sending 21 login attempts every five
+ * minutes holds the salon out of its own board, and out of the recovery door with it.
+ *
+ * **The default is 0 and it has to be**, because the fix is worse than the problem when it is
+ * wrong in the other direction. Measured on Express 5: with `trust proxy` set to `1`, a direct
+ * request carrying `X-Forwarded-For: 9.9.9.9` gets `request.ip === '9.9.9.9'`. So on a machine
+ * where anything can reach this port directly - a laptop, or a box before the proxy is set up -
+ * trusting a hop hands every limiter to the caller. Off unless somebody says otherwise.
+ *
+ * A count, never a boolean. `trust proxy: true` trusts the whole chain, which means the leftmost
+ * `X-Forwarded-For` entry is whatever the caller wrote, and the limiters are gone rather than
+ * fixed. `true` and `false` are therefore refused by name rather than coerced, because somebody
+ * will reach for them.
+ */
+function trustProxyFrom(env: NodeJS.ProcessEnv): number {
+  const given = env.TRUST_PROXY?.trim()
+  if (given === undefined || given === '') return 0
+
+  if (given.toLowerCase() === 'true' || given.toLowerCase() === 'false') {
+    throw new Error(
+      'TRUST_PROXY is a number of proxy hops, not true or false. One proxy in front of this ' +
+        'server is TRUST_PROXY=1; none is leaving it unset. "true" would trust the whole ' +
+        'X-Forwarded-For chain, which lets a caller claim any address and removes the rate ' +
+        'limits rather than fixing them',
+    )
+  }
+
+  const hops = Number(given)
+  if (!Number.isInteger(hops) || hops < 0) {
+    throw new Error(`TRUST_PROXY must be a whole number of proxy hops, and was: ${String(env.TRUST_PROXY)}`)
+  }
+
+  return hops
 }
 
 /**

@@ -278,3 +278,78 @@ describe('resetting with the master password', () => {
     expect((await fetch(`${base}/api/day?date=${DAY}`, { headers: { cookie: minted } })).status).toBe(200)
   })
 })
+
+// The fix for the gap three review passes flagged on the deployment branch: behind a proxy,
+// every request carries the proxy's address unless Express is told otherwise, so the three
+// counters keyed on `request.ip` become one budget shared by the whole internet.
+//
+// Both directions are tested, because both are real and they fail opposite ways. Getting this
+// wrong the other way - trusting a hop with nothing in front - lets a caller name themselves.
+describe('who the rate limiter thinks the caller is', () => {
+  const LIMIT = 20
+
+  async function serve(trustProxy: number): Promise<{ close: () => Promise<void>; url: string }> {
+    const listening = createApp(pool, { ...TEST_CONFIG, trustProxy }).listen(0, '127.0.0.1')
+    await new Promise<void>((resolve) => listening.once('listening', resolve))
+    const address = listening.address()
+    if (address === null || typeof address === 'string') throw new Error('expected a TCP address')
+
+    return {
+      url: `http://127.0.0.1:${address.port}`,
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          listening.close((error) => (error === undefined ? resolve() : reject(error)))
+        }),
+    }
+  }
+
+  async function attempt(url: string, forwardedFor?: string): Promise<number> {
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (forwardedFor !== undefined) headers['x-forwarded-for'] = forwardedFor
+    const response = await fetch(`${url}/api/login`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ password: 'wrong' }),
+    })
+    return response.status
+  }
+
+  it('spends one budget for everybody when no proxy is trusted', async () => {
+    // What the deployment behind Caddy did before this change, and the reason for it: one
+    // stranger sending 21 attempts locks out the salon, who arrive on a different address.
+    const app = await serve(0)
+    try {
+      for (let n = 0; n < LIMIT + 1; n += 1) await attempt(app.url, '203.0.113.7')
+      expect(await attempt(app.url, '198.51.100.9')).toBe(429)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('gives each forwarded address its own budget when one hop is trusted', async () => {
+    const app = await serve(1)
+    try {
+      for (let n = 0; n < LIMIT + 1; n += 1) await attempt(app.url, '203.0.113.7')
+      expect(await attempt(app.url, '203.0.113.7')).toBe(429)
+
+      // The salon, arriving through the same proxy from somewhere else, is unaffected. This
+      // assertion is the whole point of the change.
+      expect(await attempt(app.url, '198.51.100.9')).toBe(401)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('ignores a forwarding header entirely when no proxy is trusted', async () => {
+    // The other failure, and why the default is 0 rather than 1. With a hop trusted and
+    // nothing in front, a caller rotating this header never runs out of budget: measured on
+    // Express 5, `trust proxy: 1` makes a direct request's `X-Forwarded-For` its `request.ip`.
+    const app = await serve(0)
+    try {
+      for (let n = 0; n < LIMIT + 1; n += 1) await attempt(app.url, `203.0.113.${n}`)
+      expect(await attempt(app.url, '203.0.113.250')).toBe(429)
+    } finally {
+      await app.close()
+    }
+  })
+})

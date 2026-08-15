@@ -43,6 +43,7 @@ const app = createApp(pool, {
   // exactly as a guess at the salon password does.
   masterPasswordHash: await hashSecret(config.masterPassword),
   cookieSecure: config.cookieSecure,
+  trustProxy: config.trustProxy,
 })
 
 app.listen(config.port, config.host, () => {
@@ -59,5 +60,17 @@ app.listen(config.port, config.host, () => {
   } else {
     console.log('session cookie: not Secure - it will travel in clear text over plain HTTP')
     console.warn('WARNING: set COOKIE_SECURE=true if anything in front of this serves the board over HTTPS')
+  }
+
+  // Said out loud for the same reason as the cookie above: this process cannot see whether a
+  // proxy is really there, and being wrong either way is silent. Unset behind a proxy shares
+  // one attempt budget across the internet; set with nothing in front lets a caller pick their
+  // own address in a header.
+  if (config.trustProxy > 0) {
+    console.log(`rate limits: trusting ${config.trustProxy} proxy hop(s) for the caller's address`)
+    console.warn('WARNING: if nothing in front of this is a proxy, a caller can pick their own address')
+  } else {
+    console.log("rate limits: using the direct connection's address, trusting no proxy header")
+    console.warn('WARNING: set TRUST_PROXY=1 if a proxy serves the board, or all callers share one budget')
   }
 })
