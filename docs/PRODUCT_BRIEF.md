@@ -69,6 +69,12 @@ two appointments - the dye sets while somebody else is cut - is visibly one pers
 places. The colour is computed by the server from the whole day, never stored, and grey
 is kept out of the palette. See ADR-0009.
 
+**Each box also says how long it lasts, added 2026-08-15 because the stylists asked for it:
+`15m`, `45m`, `1h`, `1h15`, on the right of the box, blocks included. And a folded corner marks
+an appointment that has something written about it - a marker and never the words, since the
+note's text belongs in the form and not on a screen anybody can read over a shoulder. See
+ADR-0023, which records that the same marker was a word and then a dot first.**
+
 **The screen is in German.** Everything the salon reads - the weekday, `Heute`, `Notiz`,
 the date format - is German, because that is the language they work in and `KW` was asked
 for by name. Code, comments, commit messages and these documents stay English: they are for
