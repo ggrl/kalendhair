@@ -82,6 +82,24 @@ interface Undrawn {
 }
 
 /**
+ * The nearest ancestor that actually scrolls vertically, or null if nothing does.
+ *
+ * Found rather than named. The scrollport is `.shell__day`, which this component does not own and
+ * should not have to know the class of - and it is the element `App.tsx` may lay out differently
+ * tomorrow. `scrollHeight > clientHeight` is part of the test because an element can be `overflow:
+ * auto` and have nothing to scroll, and scrolling that one moves nothing.
+ */
+function scrollportOf(element: HTMLElement): HTMLElement | null {
+  for (let parent = element.parentElement; parent !== null; parent = parent.parentElement) {
+    const overflow = window.getComputedStyle(parent).overflowY
+    if ((overflow === 'auto' || overflow === 'scroll') && parent.scrollHeight > parent.clientHeight) {
+      return parent
+    }
+  }
+  return null
+}
+
+/**
  * Why an entry cannot be drawn. Two separate predicates decide it, so the report says which one
  * rather than offering the reader a choice the code does not have to make.
  */
@@ -150,6 +168,8 @@ export function Board({
   /** The `OPENS_AT` label, which is what the board is scrolled to, and whether that has happened. */
   const opening = useRef<HTMLDivElement>(null)
   const landed = useRef(false)
+  /** The sticky column headings, whose height is what the landing has to clear. */
+  const headings = useRef<HTMLDivElement>(null)
   const [gesture, setGesture] = useState<Gesture | null>(null)
 
   // Reported from an effect rather than from each place that sets a gesture, so there is one
@@ -169,15 +189,31 @@ export function Board({
   // It runs when the column count changes because a day with nobody on it renders no grid at all,
   // and the first day loaded can be one of those.
   useEffect(() => {
-    if (landed.current) return
     const line = opening.current
-    if (line === null) return
+    if (line === null) {
+      // No grid to scroll: a day with nobody on it. The scroll position dies with the grid, so the
+      // landing has to be owed again - a review pass walked staffed day, empty day, staffed day and
+      // arrived back at 06:00 with this flag still saying the job was done.
+      landed.current = false
+      return
+    }
+    if (landed.current) return
     landed.current = true
-    // `scrollIntoView` and not a `scrollTop` sum: the scrollport is `.shell__day`, which this
-    // component does not own, and `scroll-padding-top` there already keeps a scrolled-to element
-    // out from under the sticky column headings. Reimplementing that here would be a second
-    // opinion about the same number.
-    line.scrollIntoView({ block: 'start' })
+
+    // NOT `scrollIntoView`, which was the first version of this and cost more than it bought. It
+    // sets the browser's sequential focus navigation starting point to the element it scrolls to,
+    // so the first Tab after every load continued from the hour scale deep inside the board: a
+    // review pass measured Tab, Enter opening a customer's appointment, with the whole top bar -
+    // settings, Heute, Neuer Termin, both week steps - unreachable by tabbing forward at all.
+    //
+    // Setting `scrollTop` moves the pane and touches nothing else. The cost is that
+    // `scroll-padding-top` no longer applies, so the height of the sticky headings is subtracted
+    // here instead - measured from the element rather than named as a number, because the headings
+    // are one line on a laptop and two on a phone.
+    const pane = scrollportOf(line)
+    if (pane === null) return
+    const clearance = headings.current?.getBoundingClientRect().height ?? 0
+    pane.scrollTop += line.getBoundingClientRect().top - pane.getBoundingClientRect().top - clearance
   }, [day.employees.length])
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
@@ -417,7 +453,7 @@ export function Board({
       {/* Sticky, because 56 rows is taller than a laptop screen: scrolled to the evening, the
           board was four unlabelled pastel columns and a wrong-column booking waiting to
           happen. */}
-      <div className="board__heads" style={{ gridTemplateColumns: `${SCALE_WIDTH} repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))` }}>
+      <div className="board__heads" ref={headings} style={{ gridTemplateColumns: `${SCALE_WIDTH} repeat(${day.employees.length}, minmax(${MIN_COLUMN}, 1fr))` }}>
         <div className="board__corner" />
         {day.employees.map((employee) => {
           const blocked = wholeDayBlock(day, employee.id)

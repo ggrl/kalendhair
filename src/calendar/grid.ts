@@ -175,10 +175,12 @@ export function whyNotBookable(startsAt: string, endsAt: string): string | null 
  * The stylists asked for it. Counting quarter-hour lines or subtracting one time from another is
  * work the box can do for them, and it is the reading they do most.
  *
- * Minutes below an hour, bare hours with no `0m` after them, and no space inside the value, so the
- * whole thing stays two or four characters in a corner that has 40px. The remainder is padded
- * because a 5-minute one would read as `1h5` - the quarter-hour grid cannot produce that today, and
- * this does not depend on it staying that way.
+ * Minutes below an hour, bare hours with no `0m` after them, and no space inside the value, so it
+ * stays short in a corner that has about 40px: two to five characters, `1h` at the shortest and
+ * `13h45` at the longest, which a 06:00-19:45 entry produces and which fits. The claim here said
+ * "two or four" until a review pass counted. The remainder is padded because a 5-minute one would
+ * read as `1h5` - the quarter-hour grid cannot produce that today, and this does not depend on it
+ * staying that way.
  */
 export function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`

@@ -125,22 +125,23 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
     'entry--appointment',
     compact ? 'entry--compact' : '',
     oneLine ? 'entry--one-line' : '',
-    entry.notes !== null ? 'entry--has-notes' : '',
+    // `entry--has-notes` was here and is gone with the stylesheet that used it: it reserved room
+    // for the `Notiz` word, then for a dot, and the fold needs neither. Nothing styled it and no
+    // test read it. The note still shows - `.entry__fold` below - and still speaks, in `meta`.
     dragClass.trim(),
   ]
     .filter(Boolean)
     .join(' ')
 
-  // How long this runs, and a dot if something is written about it. Top right on a box tall enough
-  // to have a corner; held to the right of the single line when it is not, which is the same place
-  // to the eye and one less thing to reserve room for.
+  // How long this runs. Top right on a box tall enough to have a corner; held to the right of the
+  // single line when it is not, which is the same place to the eye and one less thing to reserve
+  // room for.
   //
-  // The dot replaced the word `Notiz`, which was the widest thing in the corner and the reason the
-  // duration had nowhere to go. The word survives for a screen reader, out of sight: a bare `•` is
-  // announced as "bullet" or as nothing at all depending on the reader, and losing it would take
-  // away the only signal a blind user has that a note exists - the note's text itself is
-  // deliberately not on the board, because a tooltip over the box once revealed an allergy to
-  // whoever was standing at the desk.
+  // That corner used to hold the word `Notiz`, and briefly a dot. The word survives here for a
+  // screen reader, out of sight, because the visible signal is now a shape - `.entry__fold` below -
+  // and a shape says nothing to a reader. Losing it would take away the only signal a blind user
+  // has that a note exists. The note's *text* is deliberately nowhere on the board, because a
+  // tooltip over the box once revealed an allergy to whoever was standing at the desk.
   const meta = (
     <span className={compact ? 'entry__meta entry__meta--line' : 'entry__meta'}>
       <span className="entry__duration">{duration}</span>
@@ -159,16 +160,6 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
       data-entry-id={entry.id}
       onClick={onOpen}
     >
-      {/* How long this runs, and a dot if something is written about it. Top right on a box tall
-          enough to have a corner; held to the right of the single line when it is not, which is
-          the same place to the eye and one less thing to reserve room for.
-
-          The dot replaced the word `Notiz`, which was the widest thing in the corner and the
-          reason the duration had nowhere to go. The word survives for a screen reader, out of
-          sight: a bare `•` is announced as "bullet" or as nothing at all depending on the reader,
-          and losing it would take away the only signal a blind user has that a note exists - the
-          note's text itself is deliberately not on the board, because a tooltip over the box once
-          revealed an allergy to whoever was standing at the desk. */}
       {compact ? (
         <span className="entry__line">
           <span className="entry__time">{shown.startsAt}</span>

@@ -53,10 +53,17 @@ every other control uses. Rejected because it is exactly the promise the owner a
 
 ## Consequences
 
-**The width comes off the board.** At 1440px four stylists keep columns well over the 150px
-minimum. A salon of eight at that width starts scrolling sideways sooner than before - ADR-0021's
+**The width comes off the board, and not evenly.** At 1440px four stylists keep columns well over
+the 150px minimum. A salon of eight at that width scrolls sideways sooner than before - ADR-0021's
 minimum giving way to scrolling rather than to squeezing, which is what that rule chose. Both cases
 are asserted in `tests/edges.browser.test.ts`.
+
+**Between 1308px and 1424px, widening the window narrows the board.** The strips grow a pixel per
+pixel of viewport, so the pane loses two for every one gained. Measured with eight stylists: 27px
+of board hidden at 1312px, **139px at 1424px** - the worst at any width, worse than at 1200px -
+recovering to nothing hidden by 1568px. This paragraph recorded only the 1600px best case until a
+review pass measured the curve. Nobody chose the reversal; it is what the formula does, and a
+future change to that formula should know it is there.
 
 **How the cursor looks is unverified.** A cursor is drawn by the operating system and Playwright
 cannot screenshot one, so the tests assert which cursor was declared and nothing more. The owner

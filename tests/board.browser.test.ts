@@ -109,6 +109,10 @@ function dayFor(date: string): Day {
   // board, which is what the settings screen and the poll can do between two days.
   if (date === '2026-08-18') employees.push({ id: SVEN, name: 'Sven' })
 
+  // And one where nobody is active at all, which draws no grid: the state the landing has to
+  // survive being stepped through.
+  if (date === '2026-08-20') employees.length = 0
+
   return {
     date,
     today: TODAY,
@@ -295,8 +299,21 @@ test('a long name on a short box never pushes the duration off it', async ({ pag
   expect(meta.x + meta.width).toBeLessThanOrEqual(outline.x + outline.width)
   // Whole, not half a number: the box is what gives way, never the duration.
   await expect(box.locator('.entry__duration')).toHaveText('15m')
-  const cut = await box.locator('.entry__meta').evaluate((span) => span.scrollWidth > span.clientWidth)
-  expect(cut).toBe(false)
+  // The `scrollWidth > clientWidth` check that used to sit here could not fail - a review pass
+  // pointed out that `.entry__meta--line` is `flex: 0 0 auto` around inline text and can never be
+  // its own scrollport. This measures the thing that can: the drawn width against what the text
+  // needs, which catches the corner being squeezed by anything, flex or not.
+  //
+  // The duration's own span, not `.entry__meta`: the corner also holds the screen-reader word,
+  // which is absolutely positioned, so a range over the whole corner measures a union of two boxes
+  // that are nowhere near each other. Measured while writing this - it read 48px needed against
+  // 22px drawn on a corner that is drawn perfectly.
+  const room = await box.locator('.entry__duration').evaluate((span) => {
+    const range = document.createRange()
+    range.selectNodeContents(span)
+    return { drawn: span.getBoundingClientRect().width, needed: range.getBoundingClientRect().width }
+  })
+  expect(room.drawn).toBeGreaterThanOrEqual(room.needed - 0.5)
 })
 
 test('a note is a folded corner on the board and still a word to a screen reader', async ({ page }) => {
@@ -770,6 +787,25 @@ test('stepping a day keeps the position, so an afternoon is not sent back to the
   expect(after).toBe(moved)
 })
 
+test('a day with nobody on it does not cost the next day its landing', async ({ page }) => {
+  // A review pass walked this: staffed day, empty day, staffed day, and arrived back at 06:00.
+  // The grid unmounts when there is nobody to draw, which resets the pane's scroll - but the flag
+  // saying the landing had happened survived, so the board never scrolled again.
+  await page.goto('/?date=2026-08-19')
+  await page.waitForSelector('.board__grid')
+  const first = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(first).toBeGreaterThan(0)
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.getByText('Für diesen Tag ist niemand eingeteilt.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await page.waitForSelector('.board__grid')
+
+  const again = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(again).toBe(first)
+})
+
 test('a stylist appearing does not send the board back to 08:00 either', async ({ page }) => {
   // The landing happens once and stays happened. It is written as an effect that re-runs when the
   // column count changes - a day with nobody on it draws no grid, so the first day loaded can have
@@ -868,16 +904,47 @@ test('every control is on the top row and the date is underneath', async ({ page
   // leaves it last, and then Tab reaches the week steps and the date picker before the row above
   // them - the half of this change a screenshot cannot show.
   //
-  // Asserted as document order rather than by pressing Tab, because a real Tab does not start at
-  // the top of the page here: the board scrolls itself to 08:00 on load, and scrolling moves the
-  // browser's sequential focus starting point, so the first press continues from inside the board.
-  // That is ordinary browser behaviour and has nothing to do with these two rows.
+  // Document order, and then the real thing below it. This comment used to say a real Tab could
+  // not be asserted here because the board's own 08:00 scroll moved the browser's focus starting
+  // point - true at the time, and written off as ordinary browser behaviour. It was a regression
+  // in the same session, a review pass measured what it cost, and `Board.tsx` no longer does it.
   const markupOrder = await page.evaluate(() =>
     [...document.querySelectorAll('.topbar__step, .topbar__actions, .topbar__date')].map(
       (element) => element.className,
     ),
   )
   expect(markupOrder).toEqual(['topbar__step', 'topbar__actions', 'topbar__step', 'topbar__date'])
+})
+
+test('the first Tab after a load lands in the top bar, not inside the board', async ({ page }) => {
+  // The blocker a review pass found. The board scrolls itself to 08:00 on load, and the first
+  // version did that with `scrollIntoView`, which sets the browser's sequential focus navigation
+  // starting point to the element it scrolls to - the hour scale, deep inside the grid. So the
+  // first Tab landed on an appointment and the second on the next-day strip: Tab, Enter opened a
+  // customer's form, and the entire top bar could not be reached by tabbing forward at all.
+  //
+  // Three presses rather than one, because the failure was not "the wrong element" but "everything
+  // before the board is gone".
+  await stubApi(page)
+  await page.goto('/?date=2026-08-13')
+  await page.waitForSelector('.board__grid')
+
+  const reached: string[] = []
+  for (let press = 0; press < 3; press += 1) {
+    await page.keyboard.press('Tab')
+    reached.push(
+      await page.evaluate(() => {
+        const active = document.activeElement
+        return active?.getAttribute('aria-label') ?? active?.textContent?.trim() ?? ''
+      }),
+    )
+  }
+
+  expect(reached).toEqual(['Vorige Woche', 'Einstellungen', 'Heute'])
+
+  // And the landing still happened - the fix is not "stop scrolling".
+  const scrolled = await page.locator('.shell__day').evaluate((pane) => pane.scrollTop)
+  expect(scrolled).toBeGreaterThan(0)
 })
 
 test('the hour scale takes what the times need and gives the rest to the columns', async ({ page }) => {

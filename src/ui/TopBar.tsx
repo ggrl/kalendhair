@@ -158,31 +158,38 @@ export function TopBar({
           {/* ADR-0020, moved here from the button row. The field beside `Heute` said the date a
               second time, two inches from the heading that already said it; this is the same
               control with the duplicate removed. */}
-          <button type="button" className="topbar__pick" onClick={openPicker} aria-label="Datum wählen">
-            {/* Drawn rather than an emoji: `AGENTS.md` forbids one, and a glyph that renders as a
-                different picture on every platform is not a control anybody learns. */}
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-              <rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" stroke="currentColor" />
-              <path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" fill="none" stroke="currentColor" />
-            </svg>
-          </button>
+          {/* The glyph and the field it opens, wrapped so the field can be positioned against the
+              glyph and nothing else. The browser hangs its calendar off the INPUT, wherever that
+              is - and while this was positioned against the heading instead, the heading grew to
+              span the whole bar and the popup opened 573px to the right of the button that opened
+              it, off the screen on a narrow window. */}
+          <span className="topbar__picker">
+            <button type="button" className="topbar__pick" onClick={openPicker} aria-label="Datum wählen">
+              {/* Drawn rather than an emoji: `AGENTS.md` forbids one, and a glyph that renders as a
+                  different picture on every platform is not a control anybody learns. */}
+              <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                <rect x="1.5" y="3" width="13" height="11.5" rx="1.5" fill="none" stroke="currentColor" />
+                <path d="M1.5 6.5h13M5 1.5v3M11 1.5v3" fill="none" stroke="currentColor" />
+              </svg>
+            </button>
 
-          <input
-            ref={picker}
-            type="date"
-            className="topbar__pick-input"
-            value={date}
-            // Out of the tab order and out of the accessibility tree: the button above is the one
-            // control, and two stops for one thing is clutter a keyboard user has to walk through.
-            tabIndex={-1}
-            aria-hidden="true"
-            // Every change is passed on, including the empty string a browser hands back for a
-            // cleared or half-typed field. It is not checked here: `App.tsx` refuses anything
-            // `isSalonDate` rejects, and an empty string is one of those. A guard here as well
-            // would be a second copy of one rule, and the copy that is never the authority is the
-            // one that drifts.
-            onChange={(event) => onPick(event.target.value)}
-          />
+            <input
+              ref={picker}
+              type="date"
+              className="topbar__pick-input"
+              value={date}
+              // Out of the tab order and out of the accessibility tree: the button above is the one
+              // control, and two stops for one thing is clutter a keyboard user has to walk through.
+              tabIndex={-1}
+              aria-hidden="true"
+              // Every change is passed on, including the empty string a browser hands back for a
+              // cleared or half-typed field. It is not checked here: `App.tsx` refuses anything
+              // `isSalonDate` rejects, and an empty string is one of those. A guard here as well
+              // would be a second copy of one rule, and the copy that is never the authority is the
+              // one that drifts.
+              onChange={(event) => onPick(event.target.value)}
+            />
+          </span>
         </div>
         <p className="topbar__week">
           {/* ADR-0010: the ISO week number, whose year is not always the year in the date.
