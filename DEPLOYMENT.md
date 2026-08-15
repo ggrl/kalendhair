@@ -45,10 +45,12 @@ the first time only**, ignoring them ever after.
 
 - A server running a current Linux. Anything Debian or Ubuntu based matches the commands
   below; adjust the package manager otherwise.
-- **A domain name you control.** Not optional. Certificate authorities do not issue
-  publicly trusted certificates for bare IP addresses, so without a hostname there is no
-  HTTPS, and without HTTPS the shared password and every customer name cross the network
-  readable. This is the whole point of `docs/PRODUCT_BRIEF.md`'s stage two.
+- **A hostname.** Not optional, though it does not have to be a domain you bought.
+  Certificate authorities do not issue publicly trusted certificates for bare IP
+  addresses, so without a hostname there is no HTTPS, and without HTTPS the shared
+  password and every customer name cross the network readable. On Azure you get a usable
+  hostname for free: see [Testing on Azure without buying a domain](#testing-on-azure-without-buying-a-domain).
+  For the real deployment, buy one.
 - Ports 80 and 443 reachable from the internet. Port 80 is needed even though the board is
   HTTPS only, because that is how the certificate challenge arrives.
 
@@ -78,6 +80,53 @@ That must print the server's public IP.
 change on deallocation and silently break both DNS and your certificate. Set it to static
 in the portal under the IP resource, or accept that a stopped VM may come back on a
 different address.
+
+### Testing on Azure without buying a domain
+
+**You do not need to buy a domain for a test box.** Azure gives every public IP an optional
+free DNS name label. Set it on the **Public IP** resource, under Configuration, and you get:
+
+```
+<your-label>.<region>.cloudapp.azure.com
+```
+
+for example `kalendhair-test.westeurope.cloudapp.azure.com`. The label only has to be unique
+within that Azure region. It is a real, publicly resolvable name, it survives the underlying
+IP changing, and it needs no DNS record of your own. Put it in the Caddyfile in step 9
+exactly as you would a purchased domain and everything else in this guide is unchanged.
+
+**The catch, and it is worth knowing before it bites you.** Let's Encrypt limits certificate
+issuance per registered domain to **50 certificates every 7 days**, refilling at roughly one
+every 202 minutes. For `cloudapp.azure.com` names that budget is **not yours alone** - it is
+shared with other Azure customers whose names sit under the same suffix, and you have no
+control over them. People do hit this and the failure reads as `too many certificates already
+issued`, naming a domain you have never heard of. It is nothing you did wrong and there is
+nothing to fix; you wait, or you use a hostname you own.
+
+Two things make this a non-issue in practice:
+
+- **Point Caddy at Let's Encrypt's staging environment while you are still iterating.** The
+  certificate it issues is not publicly trusted, so your browser will warn and you click
+  through, but staging has far looser limits and nothing you do during setup touches the real
+  budget. Switch to production once the deployment actually works. In the Caddyfile:
+
+  ```
+  board-test.westeurope.cloudapp.azure.com {
+      tls {
+          ca https://acme-staging-v02.api.letsencrypt.org/directory
+      }
+      reverse_proxy 127.0.0.1:3000
+  }
+  ```
+
+  Delete the `tls` block to move to a real certificate.
+
+- **Do not tear the VM down and rebuild it repeatedly with production certificates.** Each
+  rebuild is another certificate against a shared budget.
+
+**Use the Azure hostname for testing only.** For the salon's actual deployment, buy a domain:
+the rate limit is then yours alone, the name is yours if you change provider, and
+`cloudapp.azure.com` disappears the day you stop paying Azure.
 
 ---
 
