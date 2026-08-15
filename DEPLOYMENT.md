@@ -308,8 +308,9 @@ Three things that are not the rule:
 - **Not double quotes.** They are not equivalent and they fail silently.
 - **Not `$$`.** Compose reads that correctly and Node hands you a literal `$$`.
 - **Not an apostrophe in the value.** `O'Brien2026` cannot be single-quoted, and compose
-  then refuses the whole project with `unexpected character "'" in variable name`. That one
-  is at least loud. Choose a password without an apostrophe.
+  then refuses the whole project with `unexpected character "'" in variable name "Brien2026'"`.
+  That one is loud, but read the message: **it echoes the rest of the password back onto
+  stderr**, and on a cron run that lands in a log. Choose a password without an apostrophe.
 
 The generated secrets above are hex and base64, neither of which can contain any of these,
 so they are safe either way. Quoting them anyway costs nothing and is the simpler rule.
@@ -544,9 +545,15 @@ sudo chmod 700 /srv/kalendhair-backups
 ```
 
 Then write the backup as a script rather than a one-liner, because it needs to fail loudly
-and a pipeline does not do that by default. Create `/srv/kalendhair/backup.sh`:
+and a pipeline does not do that by default. Write it to `/usr/local/bin/kalendhair-backup`,
+**outside the git checkout** - a script kept inside `/srv/kalendhair` would be deleted by a
+`git clean` and would collide the day the repository gains a file of that name, and backups
+would then stop with no announcement.
+
+Paste this whole block; it creates the file:
 
 ```bash
+sudo tee /usr/local/bin/kalendhair-backup >/dev/null <<'SCRIPT'
 #!/bin/bash
 # Fail on error, on an unset name, and - the one that matters here - on any
 # failing stage of a pipeline, not just the last one.
@@ -564,13 +571,20 @@ dest="/srv/kalendhair-backups/kalendhair-$(date +%F-%H%M).sql.gz"
 docker compose exec -T db pg_dump -U salon -d salon --clean --if-exists \
   | gzip > "$dest.part"
 mv "$dest.part" "$dest"
+SCRIPT
+
+sudo chown root:root /usr/local/bin/kalendhair-backup
+sudo chmod 755 /usr/local/bin/kalendhair-backup
+sudo -u kalendhair /usr/local/bin/kalendhair-backup && echo "backup ok"
 ```
 
-```bash
-sudo chown kalendhair:kalendhair /srv/kalendhair/backup.sh
-sudo chmod 700 /srv/kalendhair/backup.sh
-sudo -u kalendhair /srv/kalendhair/backup.sh && echo "backup ok"
-```
+**Owned by `root`, run by `kalendhair`.** The account that runs it nightly cannot rewrite
+it, which matters because that account is in the `docker` group: anything that compromised
+the application would otherwise be able to edit a script that runs every night.
+
+That last line is worth running rather than skipping. It executes the script exactly as cron
+will - same account, same absent `HOME` - so if anything in the environment is wrong you find
+out now rather than from a directory that quietly stopped filling.
 
 **Three lines in that script are there because of specific ways this goes wrong**, and none
 of them is theoretical:
@@ -586,9 +600,7 @@ of them is theoretical:
   readable by every account on the box. `/var/backups`, the obvious place to put it, is
   `0755 root:root` on Debian and Ubuntu.
 - **`.part` then `mv`.** Belt and braces with `pipefail`: a half-written dump never carries
-  the name a restore would reach for. **A leftover `.part` file is the trace of a failed
-  run** - worth grepping for occasionally, since it is the one thing a silent failure leaves
-  behind.
+  the name a restore would reach for. A leftover `.part` is the trace of a failed run.
 
 Measured, with the dump made to fail: exit `1`, no file carrying the final name, one
 `.part` left behind. On success: exit `0`, mode `600`, real content.
@@ -597,13 +609,67 @@ Then run it from cron nightly, as the same account:
 
 ```bash
 sudo crontab -u kalendhair -e
-# 20 3 * * * /srv/kalendhair/backup.sh
 ```
 
-**Then copy it off the machine, and think about where.** A backup that only exists on the
-server it is backing up is not a backup: the disk that dies takes both. But this is the one
-instruction in this guide that can hand the salon's data to the internet if you follow it
-carelessly. **The destination must be private** - a storage bucket or container with public
+Add this line, **without a leading `#`**, and keep the redirect:
+
+```
+20 3 * * * umask 077; /usr/local/bin/kalendhair-backup >> /srv/kalendhair-backups/backup.log 2>&1
+```
+
+**The `umask 077;` at the front is not the same one as in the script.** Cron's own shell
+creates `backup.log` *before* the script starts, so the script's umask cannot apply to it:
+without this the log lands at `664`. Measured both ways. It matters because that log can
+carry a compose parse error, and those echo part of the offending value.
+
+Then confirm it is really there, because a crontab that saved as a comment looks exactly
+like one that saved correctly:
+
+```bash
+sudo crontab -u kalendhair -l | grep kalendhair-backup   # must print a line NOT starting with #
+```
+
+### Nobody is listening unless you make them
+
+`pipefail` makes the script exit non-zero, and cron's convention is to mail that to you. **A
+stock cloud image has no mail transfer agent**, so on a default Ubuntu or Debian VM there is
+nothing to deliver it: checked, and the mail spool stayed empty after a failing run. Saying
+the script "fails loudly" is only half true - it fails *correctly*, into silence.
+
+The redirect above is what gives the failure somewhere to sit, and the `umask 077` in front
+of it is what keeps that log at `600` like the dumps. Three things to look at, and they take
+one command:
+
+```bash
+sudo -u kalendhair ls -lt /srv/kalendhair-backups | head
+```
+
+- **The newest timestamp.** If it is not from last night, backups have stopped.
+- **Any `.part` file.** One per failed run.
+- **`backup.log`.** The error itself.
+
+Put that in whatever routine you already have. If you would rather have mail, install an MTA
+and set `MAILTO=` at the top of the crontab - but do not assume mail exists, because by
+default it does not.
+
+### Then get it off the machine, on the same schedule
+
+**What you have so far is a nightly backup that dies with the disk it is on.** The brief's
+condition is a backup that *leaves the machine* on a schedule, and nothing above does that
+yet - so add the copy as the last line of `/usr/local/bin/kalendhair-backup`, not as
+something you remember to do. `set -e` then makes a failed upload fail the whole run, which
+is what you want:
+
+```bash
+# last line of the script, once you have chosen a destination
+rclone copy "$dest" remote:kalendhair-backups   # or: scp "$dest" user@host:/backups/
+```
+
+The command is yours to choose because the destination is; the scheduling is not optional.
+
+**Think hard about where.** This is the one instruction in this guide that can hand the
+salon's data to the internet if you follow it carelessly. **The destination must be
+private** - a storage bucket or container with public
 access disabled, or a host you control reached over SSH. A bucket left world-readable is
 the ordinary way this goes wrong, and the file is unencrypted, so anyone who finds it has
 everything. If the destination is not one you would be comfortable posting the URL of,
