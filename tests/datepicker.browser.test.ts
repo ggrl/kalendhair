@@ -95,6 +95,42 @@ test('the glyph is the only control, and it opens the browser picker', async ({ 
   expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(1)
 })
 
+test('the field the calendar hangs from sits on the glyph, at every width', async ({ page }) => {
+  // The owner found this by opening the picker: the calendar appeared about 400px to the right of
+  // the button that opened it, and off the edge of a narrow window.
+  //
+  // The browser hangs its popup off the INPUT, wherever that is. The input was positioned against
+  // `.topbar__heading`, which was the middle column of a three-column bar - close enough to the
+  // glyph that nobody noticed. Then the top bar was rearranged and the date block grew to span the
+  // whole width, so `right: 0` became the far right of the screen: measured at 573px away on a
+  // 1440px window.
+  //
+  // The popup itself is browser chrome and Playwright cannot see it, so what is asserted is the
+  // thing it anchors to. Several widths, because one width is exactly how this got through.
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+  await expect(pickButton(page)).toBeVisible()
+
+  for (const width of [1600, 1440, 900, 390, 320]) {
+    await page.setViewportSize({ width, height: 800 })
+    const placed = await page.evaluate(() => {
+      const glyph = document.querySelector('.topbar__pick')!.getBoundingClientRect()
+      const field = document.querySelector('.topbar__pick-input')!.getBoundingClientRect()
+      return {
+        inside:
+          field.x >= glyph.x - 1 &&
+          field.right <= glyph.right + 1 &&
+          field.y >= glyph.y - 1 &&
+          field.bottom <= glyph.bottom + 1,
+        away: Math.round(Math.abs(field.x - glyph.x)),
+        onScreen: field.right <= window.innerWidth,
+      }
+    })
+    expect(placed.inside, `at ${width}px the field is ${placed.away}px from the glyph`).toBe(true)
+    expect(placed.onScreen, `at ${width}px the field is off the screen`).toBe(true)
+  }
+})
+
 test('the hidden input is not a second stop for the keyboard', async ({ page }) => {
   // Two tab stops for one control is clutter somebody has to walk through, so the input is out of
   // the tab order and out of the accessibility tree. The button carries the name.

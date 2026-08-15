@@ -213,10 +213,10 @@ body {
   background: #f3f4f6;
 }
 
-/* The date, and the glyph that opens the picker beside it. Relative, because the input the
-   picker belongs to is positioned against this. */
+/* The date, and the glyph that opens the picker beside it. It was `position: relative` so the
+   hidden date field could be positioned against it - the field belongs to `.topbar__picker` now,
+   and leaving the declaration here would be a reason that is no longer true. */
 .topbar__heading {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -248,6 +248,18 @@ body {
    where the button is, because the native popup anchors to the input rather than to whatever
    opened it. Transparent and untouchable: the button is the control, and this is only the thing
    the browser hangs its calendar from. */
+/* The glyph and its hidden field, as one box the field can be positioned against. */
+.topbar__picker {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The browser hangs its calendar off this element, wherever it is - which is the whole reason it
+   is here rather than hidden with `display: none`, and the reason it is positioned at all.
+
+   Against `.topbar__picker` and not the heading. It was the heading until the date block grew to
+   span the whole top bar, and then the popup opened 573px right of the glyph at 1440px and off the
+   edge on a narrow window. Measured, after the owner saw it on their own screen. */
 .topbar__pick-input {
   position: absolute;
   right: 0;
