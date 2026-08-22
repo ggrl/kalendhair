@@ -131,9 +131,11 @@ on how the server was started. `DEPLOYMENT.md` explains what that costs.
 certificate and the reverse proxy. The stack itself is `docker compose up -d`: the Node
 server and Postgres, as ADR-0005 describes, with only the proxy left on the host.
 
-It also names the gap that would bite a real deployment: `trust proxy` is unset, which
-turns the login rate limiter into one budget shared by everybody the moment a proxy is in
-front of it.
+Two names in `.env` are claims about the deployment that the server cannot check for itself,
+and both matter the day a proxy appears: `COOKIE_SECURE` and `TRUST_PROXY`. Getting the
+second wrong either way is a real failure - unset behind a proxy makes every caller share one
+rate-limit budget, and set with nothing in front lets a caller pick their own address. The
+startup log says which way each went, every time.
 
 ## The checks
 

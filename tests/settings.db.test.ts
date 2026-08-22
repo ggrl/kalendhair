@@ -376,9 +376,10 @@ describe('guessing the PIN', () => {
    * here is loopback, so one shared server would carry one test's blocked address into the next
    * and into every other test in this file.
    *
-   * That is also why nothing below asserts the per-address half of the rule: `trust proxy` is
-   * deliberately unset (ADR-0017), so `X-Forwarded-For` cannot vary `request.ip` and this harness
-   * has exactly one address to offer.
+   * That is also why nothing below asserts the per-address half of the rule: `TEST_CONFIG` leaves
+   * `trustProxy` at `0`, so `X-Forwarded-For` cannot vary `request.ip` and this harness has exactly
+   * one address to offer. The per-address half is asserted in `tests/auth.db.test.ts`, which passes
+   * its own hop count - see the amendment to ADR-0025.
    */
   async function fresh(): Promise<{
     url: string

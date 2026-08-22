@@ -102,4 +102,32 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...complete, PORT: '70000' })).toThrow(/PORT/)
     expect(() => loadConfig({ ...complete, PORT: '3000.5' })).toThrow(/PORT/)
   })
+
+  it('trusts no proxy hop unless one is asked for', () => {
+    // The default is the load-bearing half. Trusting a hop with nothing in front means a
+    // caller picks their own address in a header, which hands every attempt limiter away -
+    // so silence has to mean "trust nothing", not "guess".
+    expect(loadConfig(complete).trustProxy).toBe(0)
+    expect(loadConfig({ ...complete, TRUST_PROXY: '' }).trustProxy).toBe(0)
+    expect(loadConfig({ ...complete, TRUST_PROXY: '  ' }).trustProxy).toBe(0)
+    expect(loadConfig({ ...complete, TRUST_PROXY: '0' }).trustProxy).toBe(0)
+
+    expect(loadConfig({ ...complete, TRUST_PROXY: '1' }).trustProxy).toBe(1)
+    expect(loadConfig({ ...complete, TRUST_PROXY: ' 2 ' }).trustProxy).toBe(2)
+  })
+
+  it('refuses true and false by name, because they are what somebody will reach for', () => {
+    // `trust proxy: true` trusts the whole chain, so the leftmost X-Forwarded-For entry is
+    // whatever the caller wrote. Coercing it to a number would read as 0 and be silent; the
+    // message has to say why the answer is a hop count.
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: 'true' })).toThrow(/hops, not true or false/)
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: 'TRUE' })).toThrow(/hops, not true or false/)
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: 'false' })).toThrow(/hops, not true or false/)
+  })
+
+  it('refuses a hop count that is not one', () => {
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: 'yes' })).toThrow(/TRUST_PROXY/)
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: '-1' })).toThrow(/TRUST_PROXY/)
+    expect(() => loadConfig({ ...complete, TRUST_PROXY: '1.5' })).toThrow(/TRUST_PROXY/)
+  })
 })

@@ -137,16 +137,4 @@ line already says.
 
 ## 8. What this repository is
 
-A clean workflow shell, not an application. `src/` holds a one-page placeholder and
-`tests/` holds one placeholder test per harness (unit and browser), each named and
-commented as something to delete once real code exists to test. There is no product
-here yet - that is the point, not an oversight.
-
-**The toolchain is ready.** TypeScript, ESLint, Vitest, Playwright and the CI
-workflow all run today, against the placeholder, exactly as they will against
-whatever gets built here next. `npm run verify` passing on a fresh clone is a fact
-about the harness, not about a feature.
-
-**The `example` branch holds a finished worked example** - a small phishing-report
-triage queue, built with this same workflow end to end. Look there to see what a
-finished change through this process looks like before you build your own.
+kalendhair - a single-day appointment board for a hair salon, one column per employee, deliberately close to the paper page it replaces.

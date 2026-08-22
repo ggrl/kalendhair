@@ -64,6 +64,9 @@ export const TEST_CONFIG: AppConfig = {
   masterPasswordHash: await hashSecret(TEST_MASTER_PASSWORD),
   // Every test speaks plain HTTP to a loopback port, and a Secure cookie would be dropped.
   cookieSecure: false,
+  // Nothing sits in front of a test server, so the honest answer is the same as the default:
+  // trust no forwarding header. The tests that care about the other setting pass their own.
+  trustProxy: 0,
 }
 
 export const TEST_PASSWORD = 'test-salon-password'

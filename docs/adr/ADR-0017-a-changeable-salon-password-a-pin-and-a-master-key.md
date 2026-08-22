@@ -122,8 +122,10 @@ should not re-decide them by accident either.
   the password guessed until they were refused, and then found the master password refused too -
   the door built for exactly that moment. Behind a reverse proxy that Express is not told to
   trust it becomes one budget for everybody, and a stranger can hold the salon's door shut at
-  four requests a minute. Stage two has to set `trust proxy`, and to the specific hop:
-  `trust proxy: true` makes `X-Forwarded-For` whatever the caller says and removes the limit.
+  four requests a minute. **Amended 2026-08-22:** that is now `TRUST_PROXY`'s job, a hop count
+  defaulting to trusting nothing, so this is configuration rather than the outstanding work
+  this paragraph used to describe. Still never `true`, for the reason given here - see the
+  amendment to ADR-0025.
 
 ## Alternatives rejected
 

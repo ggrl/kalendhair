@@ -20,17 +20,22 @@ a named volume. The host needs Docker and git, and **not** Node: the build happe
 the image. The reverse proxy that terminates TLS is the one piece that stays on the host,
 because it is the thing holding the certificate.
 
-**2. `trust proxy` is not set, and that matters the moment a proxy exists.** `server/app.ts`
-keeps **three** counters keyed on the caller's address: login at 20 per 5 minutes, the
-master-password reset at 20 per 5 minutes, and wrong PIN attempts at 10 per 5 minutes.
-Behind a reverse proxy that Express has not been told to trust, every request carries the
-proxy's address, so all three stop being per-visitor and become one budget shared by
-everybody.
+**2. `TRUST_PROXY=1` is not optional behind a proxy, and it is not safe without one.**
+`server/app.ts` keeps **three** counters keyed on the caller's address: login at 20 per 5
+minutes, the master-password reset at 20 per 5 minutes, and wrong PIN attempts at 10 per 5
+minutes. Both ways of getting this wrong are real and they fail in opposite directions:
 
-A stranger can then hold the salon's front door shut at roughly four requests a minute -
-**and the recovery door with it**, because the master-password reset has its own bucket
-that collapses the same way. **This is a code change that has to happen before real use.**
-See [Known gaps](#known-gaps) at the end. It does not block a throwaway test box.
+- **Unset behind a proxy**, every request carries the proxy's address, so all three counters
+  become one budget shared by everybody. A stranger holds the salon's front door shut at
+  roughly four requests a minute - **and the recovery door with it**, since the
+  master-password reset has its own bucket that collapses the same way.
+- **Set with nothing in front**, `request.ip` becomes whatever the caller writes in an
+  `X-Forwarded-For` header, so the same stranger rotates addresses and never runs out.
+  Measured on Express 5: with one hop trusted, a direct request claiming `9.9.9.9` gets
+  exactly that.
+
+So it defaults to trusting nothing, and step 5 has you set it on the server where the proxy
+actually exists. The startup log says which way it went.
 
 **3. The server uses two relative paths.** `express.static('dist')` and the migration
 runner's `'migrations'` are both relative to the working directory, so the process must be
@@ -337,6 +342,7 @@ Set every value:
 | `SALON_PASSWORD` | one the salon will type | at least 8 characters |
 | `SALON_PIN` | four digits | guards the settings screen |
 | `COOKIE_SECURE` | **`true`** | see the warning below |
+| `TRUST_PROXY` | **`1`** | one proxy, Caddy, in front. See below |
 
 **Two names in that file are deliberately overridden by `docker-compose.yml`**, because
 `.env` is written for running the server on the host and both values are wrong from inside
@@ -368,6 +374,13 @@ explicitly means that change cannot quietly downgrade the cookie.
 **It follows that the startup log cannot detect a `COOKIE_SECURE` mistake in this
 deployment**, because it prints `Secure` either way. The real check is step 9: log in
 through the browser over HTTPS.
+
+**`TRUST_PROXY=1` is the other half of the same day.** Set it here, on the server, because
+this is the deployment that has a proxy - it is `1` because there is exactly one hop, Caddy,
+between the internet and the app. Leave it out of a laptop's `.env`, where nothing is in
+front and trusting a hop would let any caller name themselves. It takes a hop count and
+refuses `true` by name: `true` trusts the whole `X-Forwarded-For` chain, which hands the
+caller their own address and removes the three rate limits rather than fixing them.
 
 Confirm the permissions stuck, now that the file holds every secret on the machine:
 
@@ -414,7 +427,7 @@ than at 19:00 on a Friday.
 sudo -u kalendhair docker compose logs -f app
 ```
 
-**Four things to confirm**, and this output is exactly what a correct first run looks like:
+**Five things to confirm**, and this output is exactly what a correct first run looks like:
 
 ```
 migrate: applied 001_init.sql
@@ -427,6 +440,8 @@ salon calendar api on http://0.0.0.0:3000
 salon timezone: Europe/Berlin
 session cookie: Secure - browsers will send it over HTTPS only
 WARNING: if nothing in front of this terminates TLS, no login will work at all
+rate limits: trusting 1 proxy hop(s) for the caller's address
+WARNING: if nothing in front of this is a proxy, a caller can pick their own address
 ```
 
 - **The `migrate:` lines.** They appear once, against a fresh database. On later starts
@@ -440,6 +455,13 @@ WARNING: if nothing in front of this terminates TLS, no login will work at all
 - **The cookie decision, stated out loud.** `session cookie: Secure` is what you want. The
   warning under it is correct and expected right now: the proxy does not exist yet. It is
   the next step.
+- **The rate-limit decision, the same way.** `trusting 1 proxy hop(s)` is what you want, from
+  the `TRUST_PROXY=1` in step 5. Its warning is correct and expected right now for the same
+  reason as the cookie's: Caddy is the next step, and until it exists a caller reaching this
+  port directly really could name themselves in a header. That is why step 2 closed everything
+  except 22, 80 and 443 before this point. Both warnings stop being true once step 8 is done,
+  and neither goes away - the server cannot see its own deployment, so it says what it assumed
+  on every start.
 
 Confirm the API and the board both answer, from the server itself:
 
@@ -742,17 +764,12 @@ code and **not** the database, which is the reason the backup above comes first.
 
 Things this deployment does not solve, listed so they are decisions rather than surprises.
 
-**`trust proxy` is not set, so all three rate limiters are wrong behind a proxy.** Described
-at the top of this file. Behind Caddy, `request.ip` is Caddy's address on every request, so
-the login limiter, the master-password reset limiter and the wrong-PIN counter each become
-one budget shared by the whole internet. A stranger sending 21 login attempts every five
-minutes - about four a minute - locks the salon out of its own board indefinitely, and can
-close the master-password recovery door the same way.
-
-The fix is a small code change in `server/app.ts`: `app.set('trust proxy', 1)`, and it must
-be a specific hop count. `trust proxy: true` makes `X-Forwarded-For` whatever the caller
-claims, which removes all three limiters entirely rather than fixing them. **Do this before
-real use.** It is not urgent on a test box.
+**The rate limiters depend on you setting `TRUST_PROXY` correctly**, and nothing can check it
+for you. The server cannot see whether a proxy is really in front of it, so both this and
+`COOKIE_SECURE` are claims you make about the deployment. If you set `TRUST_PROXY=1` on a box
+where the app port is reachable directly, anything that can reach it picks its own address
+and the limits stop applying. The compose file publishes to `127.0.0.1` precisely so that
+"reachable directly" means "already on the host".
 
 **The image is built on the server, not in CI.** Simple, and it means the box needs enough
 memory to run a TypeScript build. Building in CI and pushing to a registry is the tidier end
@@ -806,7 +823,8 @@ ever becomes more than that, it becomes a secret manager.
 | App cannot reach the database | `DATABASE_URL` must use host `db`, not `127.0.0.1`. Compose sets this; check you did not override it in `.env` |
 | Login accepted, then bounced back to login | `COOKIE_SECURE` disagrees with whether the page is really on HTTPS. The startup log says which mode it chose |
 | Caddy cannot get a certificate | DNS not resolving to this box yet, or port 80 blocked at the cloud firewall rather than at `ufw` |
-| Everyone locked out of login at once | The `trust proxy` gap above |
+| Everyone locked out of login at once | `TRUST_PROXY` is unset while Caddy is in front, so every caller shares one budget. The startup log says which way it went |
+| One caller never gets rate limited | `TRUST_PROXY` is set where nothing proxies this, so they are picking their own address in a header |
 | Update seems to do nothing | `--build` was omitted, so compose reused the old image |
 | Board works, then dies after a reboot | Docker is not enabled at boot. `restart: unless-stopped` cannot help if the daemon never starts |
 | Password in `.env` does not work | Expected after first run. ADR-0017: the environment seeds once, then the settings screen owns it. Use `MASTER_PASSWORD` to reset |

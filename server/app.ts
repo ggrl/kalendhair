@@ -23,7 +23,7 @@ import { isSalonDate, todayIn } from '../src/calendar/salon-date.js'
 import { PIN_HEADER } from '../src/calendar/types.js'
 
 /** What the HTTP surface needs. The connection string and the bind address are startup's business. */
-export interface AppConfig extends Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'cookieSecure'> {
+export interface AppConfig extends Pick<Config, 'salonTimeZone' | 'sessionSecret' | 'cookieSecure' | 'trustProxy'> {
   /**
    * The master password as a scrypt hash, made once at startup rather than compared as plain
    * text.
@@ -49,6 +49,20 @@ export function createApp(pool: Pool, config: AppConfig): Express {
   // Nothing here needs to announce the framework and its presence in a header.
   app.disable('x-powered-by')
 
+  /**
+   * Who the caller is, when something sits in front of this server.
+   *
+   * Set only when configured, because Express's own default is the safe one and this is the
+   * setting that decides whether the three attempt counters below are per-visitor or shared.
+   * Both directions are a real failure and they are opposite: unset behind a proxy makes every
+   * request look like the proxy, so one stranger can spend everybody's budget; set with no
+   * proxy makes `request.ip` whatever the caller writes in a header. The environment is the
+   * only thing that knows which shape this deployment is - see `trustProxyFrom` in config.ts.
+   */
+  if (config.trustProxy > 0) {
+    app.set('trust proxy', config.trustProxy)
+  }
+
   // No CORS header is set anywhere, and that absence is load-bearing now that the board and
   // the API share an origin: it is what stops a page on another site reading a customer list.
   // A future "just add CORS so the app can call it" would undo it. ADR-0006.
@@ -69,9 +83,10 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    *
    * Behind a reverse proxy that Express is not told to trust, every request carries the
    * proxy's address, so the limit becomes one budget for everybody - and a stranger can then
-   * hold the salon's door shut at four requests a minute. Stage two has to set `trust proxy`
-   * when the proxy arrives, and to the specific hop: `trust proxy: true` makes
-   * `X-Forwarded-For` whatever the caller says it is, which removes this entirely.
+   * hold the salon's door shut at four requests a minute. **Which address this counts is now
+   * `TRUST_PROXY`'s answer**, set at the top of this function and defaulting to trusting
+   * nothing. It is a hop count and never `true`: `trust proxy: true` makes `X-Forwarded-For`
+   * whatever the caller says it is, which removes this limiter rather than fixing it.
    *
    * Two limiters and not one. Sharing the budget meant the door built for a forgotten password
    * was shut by somebody forgetting their password: twenty wrong guesses, then the correct
