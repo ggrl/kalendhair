@@ -427,7 +427,7 @@ than at 19:00 on a Friday.
 sudo -u kalendhair docker compose logs -f app
 ```
 
-**Four things to confirm**, and this output is exactly what a correct first run looks like:
+**Five things to confirm**, and this output is exactly what a correct first run looks like:
 
 ```
 migrate: applied 001_init.sql
@@ -440,6 +440,8 @@ salon calendar api on http://0.0.0.0:3000
 salon timezone: Europe/Berlin
 session cookie: Secure - browsers will send it over HTTPS only
 WARNING: if nothing in front of this terminates TLS, no login will work at all
+rate limits: trusting 1 proxy hop(s) for the caller's address
+WARNING: if nothing in front of this is a proxy, a caller can pick their own address
 ```
 
 - **The `migrate:` lines.** They appear once, against a fresh database. On later starts
@@ -453,6 +455,13 @@ WARNING: if nothing in front of this terminates TLS, no login will work at all
 - **The cookie decision, stated out loud.** `session cookie: Secure` is what you want. The
   warning under it is correct and expected right now: the proxy does not exist yet. It is
   the next step.
+- **The rate-limit decision, the same way.** `trusting 1 proxy hop(s)` is what you want, from
+  the `TRUST_PROXY=1` in step 5. Its warning is correct and expected right now for the same
+  reason as the cookie's: Caddy is the next step, and until it exists a caller reaching this
+  port directly really could name themselves in a header. That is why step 2 closed everything
+  except 22, 80 and 443 before this point. Both warnings stop being true once step 8 is done,
+  and neither goes away - the server cannot see its own deployment, so it says what it assumed
+  on every start.
 
 Confirm the API and the board both answer, from the server itself:
 

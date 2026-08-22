@@ -335,6 +335,17 @@ describe('who the rate limiter thinks the caller is', () => {
       // The salon, arriving through the same proxy from somewhere else, is unaffected. This
       // assertion is the whole point of the change.
       expect(await attempt(app.url, '198.51.100.9')).toBe(401)
+
+      // **A caller who writes their own entry does not get a fresh budget.** Caddy appends the
+      // address it saw, so a spoofed value arrives to the LEFT of the real one, and one trusted
+      // hop reads the rightmost entry - still 203.0.113.7, still blocked.
+      //
+      // This assertion is what separates a hop count from `trust proxy: true`, which is the
+      // mistake config.ts refuses by name and the only reason this setting is a number at all.
+      // Nothing else in the suite can tell the two apart: measured on Express 5, every other
+      // case here sends a single entry, and for one entry `1` and `true` give the same
+      // `request.ip`. Under `true` the line below reads 9.9.9.9 and answers 401.
+      expect(await attempt(app.url, '9.9.9.9, 203.0.113.7')).toBe(429)
     } finally {
       await app.close()
     }

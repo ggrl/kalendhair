@@ -179,10 +179,11 @@ server-side window.
   way back is the master password, whose reset route has its own limiter and does not sit behind
   the PIN. Written here rather than discovered during the incident.
 
-  **Untested here: that the limit is per address.** `trust proxy` is deliberately unset, so
-  `X-Forwarded-For` cannot vary `request.ip` and the harness has one address to offer. When a proxy
-  arrives it must be set to the specific hop, or the limit becomes one budget for the whole salon -
-  which ADR-0017 already warns about for the login limiter.
+  **Amended 2026-08-22: the per-address half is now built and tested.** This paragraph used to
+  say it was untested and that `trust proxy` was deliberately unset. Both stopped being true
+  with `TRUST_PROXY`, a hop count that defaults to trusting nothing - see the amendment to
+  ADR-0025 for why it is configuration rather than the hardcoded `1` this paragraph asked for.
+  `tests/auth.db.test.ts` now proves which address each counter keys on in both configurations.
 - **A password change does not blank a phone that is already showing the day.** Polling stops while
   the tab is hidden - ADR-0019, deliberately - so a backgrounded board never learns the session
   ended and keeps the last-fetched day sheet painted indefinitely. Disclosure of what was already

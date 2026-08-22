@@ -83,9 +83,10 @@ export function createApp(pool: Pool, config: AppConfig): Express {
    *
    * Behind a reverse proxy that Express is not told to trust, every request carries the
    * proxy's address, so the limit becomes one budget for everybody - and a stranger can then
-   * hold the salon's door shut at four requests a minute. Stage two has to set `trust proxy`
-   * when the proxy arrives, and to the specific hop: `trust proxy: true` makes
-   * `X-Forwarded-For` whatever the caller says it is, which removes this entirely.
+   * hold the salon's door shut at four requests a minute. **Which address this counts is now
+   * `TRUST_PROXY`'s answer**, set at the top of this function and defaulting to trusting
+   * nothing. It is a hop count and never `true`: `trust proxy: true` makes `X-Forwarded-For`
+   * whatever the caller says it is, which removes this limiter rather than fixing it.
    *
    * Two limiters and not one. Sharing the budget meant the door built for a forgotten password
    * was shut by somebody forgetting their password: twenty wrong guesses, then the correct
