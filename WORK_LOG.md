@@ -2,6 +2,139 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-09-07, fourteenth session - the salon's two styling asks, and a blink
+
+The salon saw the board, wants to use it, and asked for two changes. Both shipped, plus a
+bug they reported on the way. Three pull requests merged.
+
+### Where things stand
+
+- **`main` is at `c764b8f`**, working tree clean. No branches, local or remote, except `main`.
+- `npm run verify` green - **119 unit**. Browser **165**. `npm run test:db` green - **147**.
+  All three run on merged `main` at the end of the session, not only on the branches.
+- **Twenty-six ADRs.** ADR-0026 is new; ADR-0013, ADR-0015 and ADR-0021 gained dated amendments.
+- The blocker on real customer data has not moved: still no backup, still no tested restore.
+- `docs/log-thirteenth-session` is gone - it was merged this session as PR #47.
+
+### What shipped
+
+**PR #46 - thicker hour rules, and alternating working rows.**
+
+The salon reported "thick lines at 10:00 and 17:00" only. That was not a setting somebody had
+got wrong. The hour rule was 1px, the same width as a quarter rule and only darker, and a row
+was `1.1rem` = 17.6px, making an hour 70.4px - so most hour rules straddled two pixels at part
+strength and which ones looked ruled depended on the screen. Measured as ink, per hour rule:
+
+```
+1.1rem:      30 59 52 42 61 38 55 57 35 61 47 51 61 40   spread 31
+1.09375rem: 138 for all fourteen                         spread 0
+```
+
+Three parts: 2px, listed first so it paints over the quarter rule, and a row height whose x4 is
+a whole 70px. A quarter rule is 26-27, so the weakest hour rule went from 1.11x to 5.11x one.
+
+Alternating 15-minute rows inside the working hours only, chosen by the owner from three
+granularities built and looked at. Closed wash darkened 7% -> 10%. Greys land on rgb(245)
+shaded row, rgb(233) closed, rgb(212) block. Stripes anchored to the clock, not the opening
+time, so 09:15 is shaded whether the salon opens at 09:00 or 09:15.
+
+**PR #47** - the thirteenth session's work log, recovered from the unpushed local branch.
+
+**PR #48 - the add button stopped blinking.** The salon noticed the `+` "disappears for a split
+second" on every day change and every box move. `App.tsx` passed `onAdd: null` while loading and
+`TopBar` renders the button only when `onAdd` is not null, so the guard against booking onto the
+day just left was implemented by unmounting the control - which reflows the four beside it.
+Now a `loading` prop and `disabled`. Same guard, button stays.
+
+### What was verified, and how
+
+- All three suites green on each branch and again on merged `main`. CI green on all three jobs
+  for all three PRs.
+- **The board was measured, not eyeballed.** Playwright screenshots decoded to pixels: hour
+  rule ink per hour before and after, the three greys, paint order via `elementsFromPoint`,
+  and the stripe band's grid rows for five core-hour shapes including an odd opening slot.
+- **Eight malformed `coreHours` shapes driven through the real board.** Off-quarter drops the
+  overlay to auto-placement at height 0; reversed, equal and out-of-range produce no overlay;
+  every appointment box stayed at the same position in all of them.
+- **The blink was reproduced before it was fixed** - sampling the button every 25ms gave
+  1 -> 0 -> 1 on a day step, a week step and a drag - and re-measured after as
+  1 -> disabled -> 1, with the row identical to the pixel.
+- **Mutation testing on both changes.** 11 mutations on the styling work, 4 on the button.
+
+### What was NOT verified, and why not
+
+- **Nothing has still ever run behind a real Caddy**, and there is still no deploy. Five
+  sessions of documents rest on Caddy appending `X-Forwarded-For` rather than passing it
+  through, which nobody has confirmed.
+- **The board at a non-default text size or OS scaling.** The whole-pixel hour pitch is a
+  default-text-size property and the ADR says so rather than promising otherwise. Nobody has
+  looked at what a 4% overlay does to the rules once both sit on fractional device pixels.
+- **Chromium only**, for the `disabled` button on touch. ADR-0021 exists because an iPhone once
+  did not do what was argued.
+- **Printing.** A 4% wash and a 10% wash are two things a laser printer decides for itself, and
+  the salon is coming from paper.
+- The commit that fixed each round of review findings had **no review pass of its own**
+  (`db86ac0`, `3ffab63`). Both went in on the owner's instruction.
+
+### What the review passes cost, and why they are not a formality
+
+Both passes ran on both code branches. Security said SHIP twice. Logic said NO-SHIP twice, and
+was right all four times.
+
+1. **`.board__rows` painted on top of the columns and the comment said the opposite.** A grid
+   item with an explicit `z-index` paints after ones left `auto`, so `z-index: 0`, copied from
+   `.board__closed` without thinking, put the stripes in front of the rules they claimed to sit
+   behind. Fixed in the code rather than the prose, because on top is also the fragile order -
+   a darker `--row-shade` would start eating the quarter rules.
+2. **Three mutations deleted the row shading and passed all 163 tests**: `--row-shade:
+   transparent`, `background-image: none`, and an alpha *darker than the closed wash* - the
+   exact inversion the CSS comment calls the one thing that must not happen. Every assertion
+   written was the geometry of an element allowed to be invisible.
+3. **ADR-0021 records "`+ Termin` is absent while a day is loading"** and PR #48 reversed it
+   silently. AGENTS.md forbids exactly that.
+4. **The test written for the blink passed with `opacity: 0`** - the reported symptom, verbatim -
+   and with the button removed entirely, because it compared the row against itself.
+
+### Open findings, recorded so they are not rediscovered as new
+
+1. **`EntryModal` is `role="dialog" aria-modal="true"` with no focus trap**
+   (`src/ui/EntryModal.tsx:165`). The backdrop blocks the mouse but not Shift+Tab, so a keyboard
+   user can leave an open form, reach the live day-step button and change the day while
+   `editor.date` stays frozen. Found by the security pass, pre-existing, **not** fixed. It only
+   bites if staff are activated or deactivated inside that window, because `server/day.ts`
+   returns active staff salon-wide rather than per day.
+2. **The row shading is 1.07:1 against paper** and invisible to a low-vision user or in a
+   forced-colours mode. Acceptable only because it is `aria-hidden` and duplicates what the
+   quarter rules already say. If anyone ever wants a stripe to *mean* something, it cannot at
+   this alpha.
+3. **Deleting the clamp in `clampedBand` fails no test.** Unreachable through `server/hours.ts`,
+   which refuses anything outside 06:00-20:00. Written into the docstring rather than covered.
+4. Still open from the thirteenth session: `DEPLOYMENT.md`'s nginx paragraph never names
+   `$proxy_add_x_forwarded_for`, and nothing checks `TRUST_PROXY` took effect after a deploy.
+
+### Unfinished, and the next step
+
+1. **Deploy it, and put Caddy in front of it.** Top of the list for five sessions now. It is the
+   only thing that closes finding 4 and the Caddy assumption above.
+2. **Month steps** - the one navigation piece never started. ADR-0010 settled the arithmetic.
+3. **The backup and one tested restore** still gate real customer data.
+4. The `EntryModal` focus trap, which is a real hole in a screen people use every day.
+
+### What surprised me
+
+**A comment can be load-bearing for a decision that has not been made yet.** The paint-order
+sentence was wrong in a way that changed nothing on screen - the board looked right either way.
+It mattered because ADR-0026 rejects darkening the closed wash *because* that wash paints over
+the rules, and in the same breath told the reader the stripes do not. The next person wanting
+more contrast would have reached for the one they had been told was safe.
+
+**And: the same test hole twice, one session apart.** The thirteenth session was caught out by
+six tests that asserted the right property and could not distinguish the value that mattered.
+This session wrote four stripe assertions that were all geometry of an element allowed to be
+invisible, and then, after being told, wrote a fifth test for the blink that passed with the
+button at `opacity: 0`. Knowing about the failure mode did not prevent repeating it. What
+caught it both times was somebody running the mutation rather than reasoning about it.
+
 ## 2026-08-22, thirteenth session - trust proxy reviewed and merged
 
 The entry below is now history. Everything it called unreviewed and unpushed is merged.
