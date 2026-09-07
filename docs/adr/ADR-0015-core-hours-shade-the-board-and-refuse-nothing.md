@@ -24,6 +24,13 @@ all of Sunday and Monday - to be light red.
 > asked for at the time. The ruling was never about which colour - only that there is one, that it
 > is translucent, and that it refuses nothing.
 
+> The grey darkened from 7% to 10% black on 2026-09-07, on the owner's call, because
+> [ADR-0026](ADR-0026-the-grid-rules-the-hour-and-shades-the-working-rows.md) shades alternate rows
+> *inside* the working hours and 7% no longer read as a different thing. It cannot go much further
+> and the reason is worth knowing before somebody tries: this wash paints OVER the column's rules,
+> not behind them, so at 10% a quarter rule already reads rgb(209) instead of rgb(226). Every extra
+> percent dims the grid this fill exists to leave readable.
+
 The brief says the opposite about the concept, not about the colour: *"There is no concept of
 opening days and this keeps it that way."* That line was written to stop opening hours becoming
 a rule that refuses bookings. It is now half wrong and has been amended: the board knows the
