@@ -723,17 +723,23 @@ test('the top bar does not move while a day is loading', async ({ page }) => {
 
   const boxes = async (): Promise<string> =>
     page.evaluate(() =>
-      ['.topbar__icon', '.topbar__today', '.topbar__icon--add']
+      // Both week steps included, not only the middle group: they are what the row would push
+      // sideways, and leaving them out means the test never looks at the controls most likely to
+      // move. `.topbar__icon` is the settings cog, being first in document order.
+      ['.topbar__step', '.topbar__icon', '.topbar__today', '.topbar__icon--add', '.topbar__step:last-of-type']
         .map((selector) => {
           const element = document.querySelector(selector)
           if (element === null) return `${selector}:ABSENT`
           const rect = element.getBoundingClientRect()
-          return `${selector}:${Math.round(rect.x)},${Math.round(rect.width)}`
+          return `${selector}:${Math.round(rect.x)},${Math.round(rect.width)},${Math.round(rect.y)},${Math.round(rect.height)}`
         })
         .join(' '),
     )
 
   const atRest = await boxes()
+  // Without this the test compares the row to itself, so a button absent in all three samples
+  // passes - which is the bug it exists to catch.
+  expect(atRest).not.toContain('ABSENT')
 
   let release = (): void => {}
   await page.route('**/api/day*', async (route) => {
@@ -748,6 +754,10 @@ test('the top bar does not move while a day is loading', async ({ page }) => {
 
   // Every control in the row in the same place, to the pixel, while the day is in flight.
   expect(await boxes()).toBe(atRest)
+
+  // And still *drawn*. Geometry alone does not catch `opacity: 0`, which reproduces the reported
+  // symptom exactly - the button vanishes for a split second - while occupying the same box.
+  await expect(page.locator('.topbar__icon--add')).toHaveCSS('opacity', '0.45')
 
   release()
   await expect(page.locator('.shell__loading')).toHaveCount(0)

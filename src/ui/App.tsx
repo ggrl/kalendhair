@@ -697,7 +697,7 @@ export function App() {
         // stylist and the first hour of the salon's day are a starting point to change, not a
         // proposal. `day.date` and not `pending`, because the form saves onto the day it captured
         // and that has to be the day whose board is underneath it.
-        // Dead while a day is loading, which is what `busy` below is for. The top bar sits outside
+        // Dead while a day is loading, which is what `loading` below is for. The top bar sits outside
         // the `inert` subtree - that covers the board only - so during a step the header names one
         // day, the board underneath is another, and this button was live between them. A review
         // pass clicked it mid-load and the appointment landed on the day just left, with the header
@@ -716,7 +716,7 @@ export function App() {
                   draft: { employeeId: day.employees[0].id, ...firstHourOf(day) },
                 })
         }
-        busy={loading}
+        loading={loading}
         onSettings={() => {
           window.history.pushState(null, '', urlFor(shown, true))
           setSettings(true)
