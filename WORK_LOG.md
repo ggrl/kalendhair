@@ -2,6 +2,125 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-08-22, thirteenth session - trust proxy reviewed and merged
+
+The entry below is now history. Everything it called unreviewed and unpushed is merged.
+
+### Where things stand
+
+- **`main` is at `7838c87`**, working tree clean. No branches local or remote except `main`;
+  `fix/trust-proxy` is merged (PR #45, squashed) and deleted both sides.
+- `npm run verify` green - **119 unit**. `npm run test:db` green - **147**. CI's browser job
+  green on the PR, which is the one suite that was never run locally.
+- **Twenty-five ADRs**, unchanged in number. ADR-0017 and ADR-0021 gained dated amendments.
+- The blocker on real customer data has not moved: still no backup, still no tested restore.
+
+### What this session was: two review passes, and what they cost
+
+Both passes ran on `fix/trust-proxy` as the entry below demanded.
+
+- **Security pass: SHIP.** Traced the safe default to `express/lib/application.js:99` and
+  confirmed the three limiter keys (`server/app.ts:423`, `:494`) are the only readers of
+  `request.ip` in the codebase. Nothing reads `req.secure`, `req.protocol` or `req.hostname`,
+  and the cookie's `Secure` flag comes from config, so this setting moves nothing but the
+  limiter key.
+- **Logic pass: NO-SHIP** - not on the mechanism, which both passes independently measured and
+  found correct, but on four documents and one unenforced rule. All fixed in the commit
+  squashed into `7838c87`.
+
+**The finding worth remembering, because it is the whole reason review is not a formality.**
+Every one of the six new tests sent a *single* `X-Forwarded-For` entry. For a single entry,
+`trust proxy: 1` and `trust proxy: true` produce the same `request.ip`. So `true` - the exact
+value `config.ts` refuses by name, the mistake the ADR-0025 amendment calls the reason the
+setting is a count at all - **passed all six tests**. The rule the design rests on was held up
+by a comment.
+
+Fixed by one assertion in the test that already existed: with one hop trusted, spend the budget
+as `203.0.113.7`, then send `X-Forwarded-For: 9.9.9.9, 203.0.113.7` and require `429`. That is
+also the real attack behind Caddy, which appends the address it saw, so a caller's own entry
+lands to the left of it. **Measured, not reasoned**: with the code mutated to `true` that line
+fails with `expected 401 to be 429` and no other assertion in the suite moves.
+
+The four stale documents, each telling a reader work was still to do that this branch had
+finished: `server/app.ts:86` ("stage two has to set `trust proxy`", twenty lines below the code
+that sets it), `ADR-0021:182` ("**Untested here: that the limit is per address**"), `ADR-0017:125`,
+and the `DEPLOYMENT.md` step 7 log block, which promised "exactly what a correct first run looks
+like" while omitting the two lines `server/index.ts` now prints - including a WARNING that is
+literally true at that point in the guide, because Caddy is three steps later. The cookie warning
+already had a bullet explaining exactly that; this one now does too. Also
+`tests/settings.db.test.ts:379`, which credited ADR-0017 for a fact now belonging to ADR-0025.
+
+### What was verified, and how
+
+- `npm run verify` green on the branch and again on merged `main` - 119 unit tests.
+- `npm run test:db` green - 147. **Run for real, against Postgres**, which neither review pass
+  could do because Docker was down for both of them. I started it.
+- CI green on all three jobs on PR #45: `verify` 35s, `database` 47s, `browser` 2m16s.
+- **Mutations caught in three directions**: remove the `app.set` (fails the per-address test),
+  hardcode `1` (fails the two default tests), set `true` (fails the new chain assertion, and
+  only that one).
+- **The merged code was then run, three ways, and asked a real question over HTTP.** After 21
+  wrong logins as `203.0.113.7`, a request as `198.51.100.9` answers `429` with `TRUST_PROXY`
+  unset and `401` with `TRUST_PROXY=1`. `TRUST_PROXY=true` refuses to start and prints the
+  reason. The startup log said the right thing each time.
+
+### What was NOT verified, and why not
+
+- **Nothing has still ever run behind a real Caddy.** Every measurement here sets
+  `X-Forwarded-For` by hand. The limiters now depend on Caddy *appending* that header rather
+  than passing it through, and **nobody has confirmed that vendor behaviour** - both review
+  passes flagged it independently as the one unknown reading cannot settle. Five sessions of
+  documents now rest on it.
+- **The commit that fixed the review findings had no review pass of its own.** It is
+  documentation plus one mutation-tested assertion, and it went in on the owner's instruction,
+  but no second mind read it.
+- No browser was opened by hand. The Playwright suite ran in CI only.
+
+### Two findings left open on purpose, by the owner's call
+
+Recorded here so they are not rediscovered as new, and not silently re-decided.
+
+1. **`DEPLOYMENT.md`'s nginx paragraph (line 510, "If you prefer nginx") says only "make sure
+   the forwarding headers are set" and never names the variable.** `proxy_set_header X-Forwarded-For
+   $http_x_forwarded_for;` is pure pass-through and circulates widely; with the documented
+   `TRUST_PROXY=1` that is **unlimited salon-password guessing**, since the caller rotates the
+   header and never reaches 20. One sentence naming
+   `$proxy_add_x_forwarded_for` closes it. The Caddy path is unaffected.
+2. **Nothing checks that the setting actually took effect after a deploy.** `DEPLOYMENT.md`
+   step 9 verifies TLS, the cookie, the closed database port and a reboot, but not this - and
+   the failure is silent in both directions. Two curls settle it: 21 bad logins from a laptop
+   until `429`, then the same request from a phone on mobile data, where `401` means it works.
+
+Related and also declined: a hop count at or above the real chain length is behaviourally
+identical to `true` (measured: `trust proxy: 2` behind one appending proxy hands the caller
+their own value), and nothing caps it. The parser also accepts `0x2` as 2 and `1e1` as 10.
+`DEPLOYMENT.md:379` saying "it is `1` because there is exactly one hop, Caddy" is the entire
+mitigation. The logic pass offered `/^\d+$/` as a cheaper parser and asked that declining be
+recorded, so: declined, not overlooked.
+
+### Unfinished, and the next step
+
+1. **Deploy it, and put Caddy in front of it.** This is now the top of the list and has been
+   deferred four sessions. It is the only way to close the open assumption above.
+2. **Month steps** - the one navigation piece never started. ADR-0010 settled the arithmetic.
+3. **The backup and one tested restore** still gate real customer data.
+4. The two open findings above, if the deploy does not force them first.
+
+### What surprised me
+
+**A test can assert the right property and still not enforce the rule.** The six tests were
+well-named, well-commented, and one of them was titled for exactly the behaviour it could not
+distinguish. Nothing about reading them revealed it - the single-entry header looked like a
+detail. What revealed it was a reviewer asking "what mutation would survive this?", and then
+the mutation actually being run. The work log entry below claims two mutations were tested; both
+claims were true, and the third one nobody thought of was the one that mattered.
+
+**Also: an unrelated commit rode in on the branch.** `86e8453 "Update AGENTS.md"` appeared
+mid-session, made through the GitHub web editor - which is why the working tree changed under
+me and why the branch was already on the remote when the work log said it was unpushed. It
+corrected section 8, which still described this repository as an empty workflow shell. Correct
+change, but neither review pass was pointed at it, and it merged inside PR #45.
+
 ## 2026-08-16, twelfth session, second half - trust proxy, built but not reviewed
 
 Continues the entry below, which is otherwise still current. It named `trust proxy` as the
