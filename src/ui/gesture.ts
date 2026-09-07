@@ -25,7 +25,7 @@ interface Held {
    * Whether the pointer has moved far enough for this to be a drag rather than a click.
    *
    * **Pixels, not rows.** Comparing slots looked like a threshold and was not one: a row is
-   * 17.6px, so a hand twitching three pixels across a row line wrote a fifteen-minute change with
+   * 17.5px, so a hand twitching three pixels across a row line wrote a fifteen-minute change with
    * no dialogue and no undo, from about a third of every box. A review pass demonstrated it, and
    * the test that was supposed to cover it passed only because the box centre it grabbed happened
    * to sit exactly on a row boundary.

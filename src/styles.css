@@ -434,7 +434,7 @@ body {
   margin-top: 0.4rem;
 }
 
-/* The names must not scroll away: 56 rows is 985px, so on a laptop about 40% of the day is
+/* The names must not scroll away: 56 rows is 980px, so on a laptop about 40% of the day is
    always off screen, and unlabelled columns are how an appointment ends up in the wrong
    stylist's day. */
 .board__heads {
@@ -539,15 +539,35 @@ body {
    Hessen holiday there is no working stretch at all, so nothing is drawn - which is correct, not a
    missing case.
 
-   Under the columns in the markup, so their rules paint over it and the grid stays continuous. */
+   **No `z-index`, deliberately, and it is the opposite of `board__closed` above.** A grid item with
+   an explicit `z-index` paints after the ones that leave it `auto`, so `z-index: 0` here - copied
+   from that wash without thinking - put the stripes ON TOP of the columns and their rules. Left
+   `auto` the element paints in tree order, which is before the columns, so the rules keep their
+   own colour. Measured, a quarter rule on a half-pixel boundary: rgb(239) unshaded, rgb(232) with
+   the stripes over it, rgb(235) with them under it.
+
+   That rule still moves by three, under and all, because a rule on a half-pixel boundary is
+   antialiased and therefore partly transparent - whatever is behind it shows through. So a much
+   darker `--row-shade` would still tint those rules, and painting order does not buy immunity from
+   that, only half of it.
+
+   The hour rules are untouched either way, at rgb(184) with the stripes on or off, and NOT because
+   of paint order: every hour boundary is an even slot, so it lands in the transparent half of the
+   tile and there is nothing over it to blend with. */
 .board__rows {
-  z-index: 0;
-  /* One tile is two rows: the first left alone, the second shaded. `Board.tsx` shifts the tile by
-     a row when the salon opens on an odd slot, because the pattern belongs to the clock and not to
-     the opening time - 09:15 is shaded whether the day starts at 09:00 or at 09:15. */
+  /* One tile is two rows: the first left alone, the second shaded - and the other way round on a
+     day whose opening slot is odd, because `Board.tsx` shifts the tile by a row to keep the pattern
+     on the clock rather than on the opening time. 09:15 is shaded whether the day starts at 09:00
+     or at 09:15. */
   background-image: linear-gradient(to bottom, transparent 50%, var(--row-shade) 50%);
   background-size: 100% calc(var(--slot-height) * 2);
   background-repeat: repeat-y;
+  /* Insurance, and honestly labelled as such: with no `z-index` this element paints under the
+     columns, so they take the pointer whatever this says. Removing this line alone breaks nothing
+     and no test notices. What the click test in `board.browser.test.ts` does catch is the pair -
+     this line gone AND the element moved after the columns - which is the only way it could
+     actually start swallowing a booking. Kept because a full-width overlay across the working
+     hours should not have its safety resting on the order of two lines of JSX. */
   pointer-events: none;
 }
 
@@ -603,7 +623,7 @@ body {
 }
 
 /* The two resize edges. A share of the box rather than a fixed height: one 15-minute row is
-   17.6px, so two 6px handles would leave nothing in the middle to grab for a move. */
+   17.5px, so two 6px handles would leave nothing in the middle to grab for a move. */
 /* A note, said as a folded corner rather than as a character: the dot it replaces was 10px of
    punctuation on a coloured box and read as a speck of dirt.
 

@@ -742,9 +742,12 @@ test('an hour of grid is a whole number of pixels, so every hour rule draws the 
   // an hour has to be a whole number of pixels. Putting 1.1rem back fails this line.
   await page.goto('/?date=2026-08-13')
 
+  // Measured from the grid's own box rather than parsed out of `grid-template-rows`, whose
+  // serialisation could become `repeat(56, 17.5px)` and hand this test a NaN instead of a failure
+  // anybody could read.
   const row = await page
     .locator('.board__grid')
-    .evaluate((element) => parseFloat(getComputedStyle(element).gridTemplateRows.split(' ')[0]))
+    .evaluate((element) => element.getBoundingClientRect().height / 56)
 
   expect(row).toBe(17.5)
   expect(Number.isInteger(row * 4)).toBe(true)
@@ -765,10 +768,44 @@ test('the working hours get alternating rows, and no other part of the day does'
   // One tile is two rows: the first left alone, the second shaded.
   await expect(rows).toHaveCSS('background-size', '100% 35px')
 
+  // **And that it is actually shaded.** Everything above is the geometry of an element that is
+  // allowed to be invisible: `--row-shade: transparent`, or `background-image: none`, passed every
+  // one of those assertions and deleted the feature the salon asked for. `background-size` still
+  // computes to `100% 35px` with no image at all, which is what made that hole so quiet.
+  await expect(rows).toHaveCSS('background-image', /rgba\(55, 54, 54, 0\.04\)/)
+
   // A day the salon does not work has no white part for stripes to alternate against, so there is
   // nothing to draw. Sunday, Monday and a public holiday all arrive as null.
   await page.goto('/?date=2026-08-16')
   await expect(page.locator('.board__rows')).toHaveCount(0)
+})
+
+test('a shaded row stays lighter than a closed hour, which is the whole point of it', async ({ page }) => {
+  // The salon's own condition: the alternating grey has to be lighter than the grey over the hours
+  // they do not work, so that "working" and "not working" stay a glance apart. Both are the same
+  // ink at different alphas, so comparing the alphas IS the ordering.
+  //
+  // Asserted because the inversion was green: `--row-shade` at 20%, darker than the 10% wash and
+  // the exact thing the comment in `styles.css` calls the one thing this must not do, passed all
+  // 163 browser tests. Nothing was looking at the colour.
+  await page.goto('/?date=2026-08-13')
+
+  const alphaOf = (value: string): number => {
+    const match = /rgba?\(\s*55,\s*54,\s*54(?:,\s*([\d.]+))?\s*\)/.exec(value)
+    if (match === null) throw new Error(`not the board's grey ink: ${value}`)
+    return match[1] === undefined ? 1 : Number(match[1])
+  }
+
+  const shade = alphaOf(
+    await page.locator('.board__rows').evaluate((element) => getComputedStyle(element).backgroundImage),
+  )
+  const wash = alphaOf(
+    await page.locator('.board__closed').first().evaluate((element) => getComputedStyle(element).backgroundColor),
+  )
+
+  expect(shade).toBeLessThan(wash)
+  // And neither of them invisible, which `transparent` would satisfy the line above with.
+  expect(shade).toBeGreaterThan(0)
 })
 
 test('the alternating rows follow the clock, not the opening time', async ({ page }) => {
@@ -801,7 +838,14 @@ test('the alternating rows take no clicks either', async ({ page }) => {
   // 37 rows down is 15:15: inside the working hours, one of the shaded ones, and free - Marco is
   // booked solidly from 09:00 to 11:30 on this date, so a click in the morning lands on a box and
   // proves nothing about the overlay.
-  await page.locator('.board__column').first().click({ position: { x: 40, y: 17.5 * 37 + 8 } })
+  //
+  // The row height is measured rather than written down. Hardcoding it means that changing the row
+  // height again fails this test with "Von is 15:00, expected 15:15", which says nothing about what
+  // actually broke.
+  const row = await page
+    .locator('.board__grid')
+    .evaluate((element) => element.getBoundingClientRect().height / 56)
+  await page.locator('.board__column').first().click({ position: { x: 40, y: row * 37 + 8 } })
 
   await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
   await expect(page.getByLabel('Von')).toHaveValue('15:15')

@@ -129,11 +129,31 @@ function undrawnReason(entry: Entry, hasColumn: boolean): string | null {
  * too, and a second opinion about which row 09:07 belongs on is how the shading and the settings
  * screen would come to disagree about the same number.
  */
+/**
+ * Where the salon's working hours fall on the grid, as slot numbers clamped to it.
+ *
+ * The grey wash and the alternating rows are two drawings of one pair of numbers, and they have to
+ * agree to the row: the stripes stop exactly where the wash starts. This is the single place that
+ * turns the hours into slots, so there is no second copy to drift - one edge computed twice is how
+ * a one-row seam of the wrong colour appears at 09:00.
+ *
+ * **The clamp is for a hand-edited table and nothing else, and no test covers it.** `whyUnusable`
+ * in `server/hours.ts` refuses anything outside 06:00-20:00 on the way in, so the API cannot
+ * produce a slot needing clamping. Deleting `Math.min`/`Math.max` here fails no test - measured.
+ * It predates this function and is kept rather than proved, because the cost of being wrong is a
+ * band drawn off the end of the grid and the cost of keeping it is two calls.
+ */
+function clampedBand(core: CoreHours): { opens: number; closes: number } {
+  return {
+    opens: Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT),
+    closes: Math.min(Math.max(slotFromWallClock(core.to), 0), SLOT_COUNT),
+  }
+}
+
 function closedBands(core: CoreHours | null): { startSlot: number; endSlot: number }[] {
   if (core === null) return [{ startSlot: 0, endSlot: SLOT_COUNT }]
 
-  const opens = Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT)
-  const closes = Math.min(Math.max(slotFromWallClock(core.to), 0), SLOT_COUNT)
+  const { opens, closes } = clampedBand(core)
 
   return [
     { startSlot: 0, endSlot: opens },
@@ -144,16 +164,15 @@ function closedBands(core: CoreHours | null): { startSlot: number; endSlot: numb
 /**
  * The one stretch of the day the salon normally works, or null when it does not work at all.
  *
- * What the alternating row shading is drawn over. Derived from the same two numbers and clamped the
- * same way as `closedBands`, deliberately rather than by subtracting the bands from the day: the
- * stripes have to stop exactly where the grey wash starts, and one edge computed two ways is how
- * a one-row seam of the wrong colour appears at 09:00.
+ * What the alternating row shading is drawn over. `closes > opens` is the same test as the empty
+ * band filter in `closedBands`, so a day whose hours are equal or reversed gets no stripes and a
+ * fully washed board from both, rather than two different opinions about a day that cannot happen
+ * anyway - `core_hours_positive_span` in `migrations/005_core_hours.sql` refuses it.
  */
 function openBand(core: CoreHours | null): { startSlot: number; endSlot: number } | null {
   if (core === null) return null
 
-  const opens = Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT)
-  const closes = Math.min(Math.max(slotFromWallClock(core.to), 0), SLOT_COUNT)
+  const { opens, closes } = clampedBand(core)
 
   return closes > opens ? { startSlot: opens, endSlot: closes } : null
 }
@@ -585,9 +604,10 @@ export function Board({
             style={{
               gridColumn: `2 / span ${day.employees.length}`,
               gridRow: `${workingRows.startSlot + 1} / span ${workingRows.endSlot - workingRows.startSlot}`,
-              // The tile starts at the band, so an odd opening slot would shade 09:00 and leave
-              // 09:15 white - half a step out from every other day. Shifting the tile down one row
-              // puts the pattern back on the clock: even slots from 06:00 stay white.
+              // The tile starts at the band and leaves its first row unshaded, so on a day opening
+              // at 09:15 that row - 09:15 itself - would come out white, and 09:30 shaded. Every
+              // other day shades 09:15. Shifting the tile down one row puts the pattern back on the
+              // clock, where odd slots counting from 06:00 are the shaded ones on every day.
               backgroundPositionY: workingRows.startSlot % 2 === 0 ? undefined : 'var(--slot-height)',
             }}
             aria-hidden="true"

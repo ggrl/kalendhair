@@ -19,7 +19,7 @@ interface Props {
  *
  * Real elements rather than a pixel test against the box's rectangle, so the cursor changes on
  * its own and the hit area is the same thing the eye sees. Sized as a share of the box in CSS,
- * because a fixed 6px would swallow a 15-minute box whole: one slot is 17.6px.
+ * because a fixed 6px would swallow a 15-minute box whole: one slot is 17.5px.
  */
 function Grips() {
   return (
@@ -70,7 +70,7 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
     // "the reason replaces the word" - the marker now always stands, and the reason qualifies it.
     const label = entry.reason === null ? 'N/A' : `N/A ${entry.reason}`
 
-    // A 15-minute block is 15.6px tall and its second line starts below the bottom edge, so a
+    // A 15-minute block is 15.5px tall and its second line starts below the bottom edge, so a
     // reason on the shortest block the grid allows was drawn nowhere at all - which is the promise
     // ADR-0014 makes, broken in the one case that needed it most. The appointment path already
     // solved this by putting the time and the text on one line; this is the same answer.
@@ -109,7 +109,7 @@ export function EntryBox({ entry, column, drag, onOpen }: Props) {
     )
   }
 
-  // How much text the box can hold, by measurement rather than by taste. One row is 17.6px,
+  // How much text the box can hold, by measurement rather than by taste. One row is 17.5px,
   // which after margins, borders and padding leaves a single line - so the time and the name
   // share it and the treatment does not fit. Two rows leave 31px, and a compact first line plus
   // a treatment line needs 29.5px, so the treatment does fit and is shown.

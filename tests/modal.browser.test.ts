@@ -569,7 +569,7 @@ test('a block still says gesperrt to a screen reader, whatever the reason says',
 })
 
 test('a 15-minute block still shows its reason somewhere', async ({ page }) => {
-  // The promise ADR-0014 makes, in the one case that broke it: the second line of a 15.6px box
+  // The promise ADR-0014 makes, in the one case that broke it: the second line of a 15.5px box
   // starts below its bottom edge, so the reason was drawn nowhere at all.
   const short: Day['entries'][number] = { ...HOLIDAY, id: 'b3', startsAt: '16:00', endsAt: '16:15', reason: 'Zahnarzt' }
   await stub(page, [short])

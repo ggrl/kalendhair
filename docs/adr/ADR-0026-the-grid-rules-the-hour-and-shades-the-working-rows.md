@@ -42,9 +42,22 @@ hour rule identical. All fourteen now measure 138 ink, spread 0, which is 5.11x 
 board is 5.6px shorter than it was and nothing else about it moved.
 
 **The 15-minute rows alternate, inside the salon's working hours and nowhere else.** One element,
-`.board__rows`, spanning the open stretch, drawn before the columns so their rules paint across it
-and the grid stays continuous. It takes no pointer events, because it lies over the part of the day
-where nearly every appointment is made.
+`.board__rows`, spanning the open stretch. It takes no pointer events, because it lies over the part
+of the day where nearly every appointment is made.
+
+**It leaves `z-index` alone, which is the opposite of the wash above it.** A grid item with an
+explicit `z-index` paints after the ones that leave it `auto`, so the `z-index: 0` this was first
+written with - copied from `.board__closed` - put the stripes on top of the columns and their rules.
+Left `auto` it paints in tree order, before the columns. Measured on a quarter rule sitting on a
+half-pixel boundary: rgb(239) with no stripes, rgb(232) with them on top, rgb(235) with them
+underneath.
+
+**That rule still moves by three, and painting order cannot fix it.** A rule on a half-pixel
+boundary is antialiased, so it is partly transparent and whatever is behind it shows through. Order
+buys half the effect, not immunity - which matters the day somebody wants a darker `--row-shade`.
+**The hour rules are untouched either way**, rgb(184) with the stripes on or off, and not because of
+paint order: every hour boundary is an even slot, so it lands in the transparent half of the tile
+and has nothing over it to blend with.
 
 **The stripe pattern is anchored to the clock, not to the opening time.** 06:15 is shaded, and so is
 every odd quarter after it, whether the salon opens at 09:00 or at 09:15. The tile starts at the
@@ -85,8 +98,14 @@ this amends that ADR rather than superseding it.
   Monday and a Hessen holiday alike, because they all arrive as `coreHours: null`. There is no white
   part for stripes to alternate against, so this is correct rather than a missing case.
 - **Two edges have to agree.** The stripes stop exactly where the grey wash starts, so `openBand`
-  and `closedBands` are computed from the same two numbers and clamped the same way. Subtracting one
-  from the other is how a one-row seam of the wrong colour appears at 09:00.
+  and `closedBands` both take their slots from one `clampedBand`. That guarantee started out held by
+  two copies of the same four lines plus a comment defending them, which is not a guarantee; it is
+  now held by there being one copy.
+- **A test has to look at the colour, not only at the geometry.** The first version of these tests
+  asserted the overlay's count, rows, size and position, and `--row-shade: transparent`,
+  `background-image: none` and an alpha *darker than the closed wash* all passed every one of them -
+  `background-size` still computes to `100% 35px` with no image at all. The salon's actual condition,
+  that the shaded row stays lighter than a closed hour, is now asserted by comparing the two alphas.
 - **Two lists have to agree.** The gradients in `styles.css` and the sizes `Board.tsx` hands them
   are in the same order. Swapping one without the other sizes the hour rule to a quarter row, which
   draws a 2px rule every fifteen minutes. A test asserts the order, not only the widths.
