@@ -134,6 +134,11 @@ const CORE_HOURS: Record<string, { from: string; to: string } | null> = {
   '2026-08-13': { from: '10:00', to: '17:00' },
   '2026-08-15': { from: '08:00', to: '13:30' },
   '2026-08-16': null,
+  // An opening on an ODD quarter-hour slot: 09:15 is slot 13 counting from 06:00. The alternating
+  // row shading has to stay on the clock rather than on the opening time, and every other fixture
+  // here opens on an even slot, where a board that anchored the pattern to the band would look
+  // right. This is the only date that can tell the two apart.
+  '2026-08-21': { from: '09:15', to: '17:00' },
 }
 
 async function stubApi(page: Page): Promise<void> {
@@ -704,6 +709,102 @@ test('a half-hour edge lands on the grid, and a closed day is shaded all day', a
   await expect(sunday).toHaveCount(1)
   await expect(sunday.first()).toHaveCSS('grid-row-start', '1')
   await expect(sunday.first()).toHaveCSS('grid-row-end', 'span 56')
+})
+
+test('the hour rule is thicker than the quarter rule, and painted over it', async ({ page }) => {
+  // The stylists asked for a thicker line on every full hour. Two lists have to agree for that to
+  // happen: the gradients in `styles.css` and the sizes `Board.tsx` hands them, in the same order.
+  // Swapping one list without the other sizes the hour rule to a quarter row, which draws a 2px
+  // rule every fifteen minutes - so the ORDER is asserted here and not only the widths.
+  await page.goto('/?date=2026-08-13')
+
+  const column = page.locator('.board__column').first()
+  const image = await column.evaluate((element) => getComputedStyle(element).backgroundImage)
+
+  // `--rule-hour` at 2px and `--rule-quarter` at 1px, hour first: the first image in the list is
+  // the one painted on top. Underneath the quarter rule it lost its top pixel to it and measured
+  // 97 ink against the 138 it has now.
+  expect(image).toContain('rgb(184, 181, 173) 2px')
+  expect(image).toContain('rgb(226, 224, 218) 1px')
+  expect(image.indexOf('rgb(184, 181, 173)')).toBeLessThan(image.indexOf('rgb(226, 224, 218)'))
+
+  // An hour, then a quarter - the same order as the gradients above.
+  await expect(column).toHaveCSS('background-size', '100% 70px, 100% 17.5px')
+})
+
+test('an hour of grid is a whole number of pixels, so every hour rule draws the same', async ({ page }) => {
+  // This is why the stylists saw thick lines at only some hours. At 1.1rem a row is 17.6px and an
+  // hour 70.4px, so a rule at 70.4 x n mostly straddles two pixels at part strength: measured on
+  // this board, the fourteen hour rules ranged from 30 ink to 61, and the weakest was 1.11x a
+  // quarter rule. At 17.5px all fourteen measure 138, which is 5.11x a quarter rule.
+  //
+  // Asserted as arithmetic rather than by reading pixels, because the arithmetic IS the property:
+  // an hour has to be a whole number of pixels. Putting 1.1rem back fails this line.
+  await page.goto('/?date=2026-08-13')
+
+  const row = await page
+    .locator('.board__grid')
+    .evaluate((element) => parseFloat(getComputedStyle(element).gridTemplateRows.split(' ')[0]))
+
+  expect(row).toBe(17.5)
+  expect(Number.isInteger(row * 4)).toBe(true)
+})
+
+test('the working hours get alternating rows, and no other part of the day does', async ({ page }) => {
+  // The stylists asked for this after using the board: crossing six columns without losing the
+  // line you are on. Inside the working hours only - outside them the grey wash already says
+  // something, and striping that too would be two greys arguing about the same rows.
+  await page.goto('/?date=2026-08-13')
+
+  const rows = page.locator('.board__rows')
+  await expect(rows).toHaveCount(1)
+  // 10:00 is row 17 and 17:00 is row 45, so the stripes fill 28 rows and stop exactly where the
+  // first grey band ended - the two are computed from the same two numbers for that reason.
+  await expect(rows).toHaveCSS('grid-row-start', '17')
+  await expect(rows).toHaveCSS('grid-row-end', 'span 28')
+  // One tile is two rows: the first left alone, the second shaded.
+  await expect(rows).toHaveCSS('background-size', '100% 35px')
+
+  // A day the salon does not work has no white part for stripes to alternate against, so there is
+  // nothing to draw. Sunday, Monday and a public holiday all arrive as null.
+  await page.goto('/?date=2026-08-16')
+  await expect(page.locator('.board__rows')).toHaveCount(0)
+})
+
+test('the alternating rows follow the clock, not the opening time', async ({ page }) => {
+  // 09:15 is an odd slot. The tile starts at the band, so without a shift the band's own first row
+  // would be the shaded one, and this day would read 09:15 shaded where every other day reads
+  // 09:15 white - the pattern half a step out, differing by weekday for no reason a stylist could
+  // see. Remove the shift in `Board.tsx` and this fails.
+  await page.goto('/?date=2026-08-21')
+
+  const odd = page.locator('.board__rows')
+  await expect(odd).toHaveCSS('grid-row-start', '14')
+  await expect(odd).toHaveCSS('background-position-y', '17.5px')
+
+  // And an even opening needs no shift, which is the other half of the same claim.
+  await page.goto('/?date=2026-08-13')
+  await expect(page.locator('.board__rows')).toHaveCSS('background-position-y', '0%')
+})
+
+test('the alternating rows take no clicks either', async ({ page }) => {
+  // The same trap as the shading, in a worse place. This overlay covers the working hours, which
+  // is where nearly every appointment gets made, so if it swallowed a pointer the board would
+  // stop taking bookings during opening hours and keep taking them at 06:00 - and the test above
+  // books at 06:00.
+  await page.goto('/?date=2026-08-13')
+
+  // Positioned inside the column element rather than from viewport coordinates, exactly as the
+  // 06:00 case below does it: the board has already scrolled itself to the opening hour, so the
+  // grid's own box is off screen and viewport arithmetic clicks the top bar.
+  //
+  // 37 rows down is 15:15: inside the working hours, one of the shaded ones, and free - Marco is
+  // booked solidly from 09:00 to 11:30 on this date, so a click in the morning lands on a box and
+  // proves nothing about the overlay.
+  await page.locator('.board__column').first().click({ position: { x: 40, y: 17.5 * 37 + 8 } })
+
+  await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
+  await expect(page.getByLabel('Von')).toHaveValue('15:15')
 })
 
 test('the shading takes no clicks, so closed hours still book', async ({ page }) => {

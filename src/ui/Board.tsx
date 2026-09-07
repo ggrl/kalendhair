@@ -141,6 +141,23 @@ function closedBands(core: CoreHours | null): { startSlot: number; endSlot: numb
   ].filter((band) => band.endSlot > band.startSlot)
 }
 
+/**
+ * The one stretch of the day the salon normally works, or null when it does not work at all.
+ *
+ * What the alternating row shading is drawn over. Derived from the same two numbers and clamped the
+ * same way as `closedBands`, deliberately rather than by subtracting the bands from the day: the
+ * stripes have to stop exactly where the grey wash starts, and one edge computed two ways is how
+ * a one-row seam of the wrong colour appears at 09:00.
+ */
+function openBand(core: CoreHours | null): { startSlot: number; endSlot: number } | null {
+  if (core === null) return null
+
+  const opens = Math.min(Math.max(slotFromWallClock(core.from), 0), SLOT_COUNT)
+  const closes = Math.min(Math.max(slotFromWallClock(core.to), 0), SLOT_COUNT)
+
+  return closes > opens ? { startSlot: opens, endSlot: closes } : null
+}
+
 /** The one block that covers the whole bookable day, if this employee has one. */
 function wholeDayBlock(day: Day, employeeId: string): Entry | undefined {
   return day.entries.find(
@@ -213,7 +230,12 @@ export function Board({
     const pane = scrollportOf(line)
     if (pane === null) return
     const clearance = headings.current?.getBoundingClientRect().height ?? 0
-    pane.scrollTop += line.getBoundingClientRect().top - pane.getBoundingClientRect().top - clearance
+    // Floored, so the rounding can only ever leave 08:00 BELOW the headings and never tucked under
+    // them. This aims the label exactly flush with their bottom edge, which is a knife edge: the
+    // grid's own top is a fractional number of pixels, so the exact target lands a fraction either
+    // side of flush depending on the row height. It was landing 0.41px high the moment the row
+    // height changed, which is the difference between a visible label and a clipped one.
+    pane.scrollTop += Math.floor(line.getBoundingClientRect().top - pane.getBoundingClientRect().top - clearance)
   }, [day.employees.length])
 
   // Anything the grid cannot draw is listed instead of being forced into it. Two unplaceable
@@ -247,6 +269,7 @@ export function Board({
   const slotsPerHour = 60 / SLOT_MINUTES
   const labels = hourLabels()
   const lastColumn = day.employees.length + 1
+  const workingRows = openBand(day.coreHours)
 
   /**
    * Why the gesture cannot be dropped where it is, or null.
@@ -553,6 +576,24 @@ export function Board({
           />
         ))}
 
+        {/* The alternating rows, over the working stretch only and under the columns that draw the
+            grid. Nothing on a day the salon does not work: `openBand` returns null and there is no
+            white part for stripes to alternate against. */}
+        {workingRows !== null && (
+          <div
+            className="board__rows"
+            style={{
+              gridColumn: `2 / span ${day.employees.length}`,
+              gridRow: `${workingRows.startSlot + 1} / span ${workingRows.endSlot - workingRows.startSlot}`,
+              // The tile starts at the band, so an odd opening slot would shade 09:00 and leave
+              // 09:15 white - half a step out from every other day. Shifting the tile down one row
+              // puts the pattern back on the clock: even slots from 06:00 stay white.
+              backgroundPositionY: workingRows.startSlot % 2 === 0 ? undefined : 'var(--slot-height)',
+            }}
+            aria-hidden="true"
+          />
+        )}
+
         {day.employees.map((employee, index) => (
           <div
             key={employee.id}
@@ -566,7 +607,10 @@ export function Board({
               // `:last-of-type` counted div siblings, and blocks are divs rendered after the
               // columns - so any day containing a block lost the board's right-hand edge.
               borderRight: index + 2 === lastColumn ? '1px solid var(--rule-hour)' : undefined,
-              backgroundSize: `100% var(--slot-height), 100% calc(var(--slot-height) * ${slotsPerHour})`,
+              // Hour first, then quarter, matching the order the gradients are declared in
+              // `styles.css`. Swapping one list without the other sizes the hour rule to a
+              // quarter row, which paints a 2px rule every fifteen minutes.
+              backgroundSize: `100% calc(var(--slot-height) * ${slotsPerHour}), 100% var(--slot-height)`,
             }}
             aria-label={`Freie Zeit bei ${employee.name}`}
           />
