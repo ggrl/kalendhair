@@ -1,5 +1,21 @@
 :root {
-  --slot-height: 1.1rem;
+  /* 17.5px at a 16px root, so four of them are exactly 70px and every hour rule lands on a whole
+     pixel. It was 1.1rem, which makes an hour 70.4px, and a rule at a fractional offset is smeared
+     across two pixels at part strength. Measured on the running board, one hour rule per hour,
+     as ink - how much darker than paper, summed across the rule:
+
+       1.1rem:      30 59 52 42 61 38 55 57 35 61 47 51 61 40   -> spread 31
+       1.09375rem: 138 for all fourteen                         -> spread 0
+
+     A quarter rule is 26 to 27, so the weakest hour rule used to be 1.11x a quarter rule and is
+     now 5.11x it. That spread is what the stylists were describing when they said the thick lines
+     were only at some hours: the strong ones were where 70.4 x n happened to land near a whole
+     pixel. Which hours those are depends on the screen, so their 10:00 and 17:00 are not
+     reproduced here exactly - the unevenness is.
+
+     Honest limit: this holds at the default root font size. Somebody who enlarges text makes the
+     pitch fractional again, and no rem value can prevent that. */
+  --slot-height: 1.09375rem;
   /* Fixed on purpose. The column headings stick directly below the top bar, so the offset has
      to be a number both agree on - guessing it pinned the names behind the bar, where a
      higher z-index hid them completely and the scrolled board was unlabelled columns again. */
@@ -12,6 +28,11 @@
      counting down from an hour label. */
   --rule-quarter: #e2e0da;
   --rule-hour: #b8b5ad;
+  /* The alternating row shade, inside the salon's working hours only. Deliberately the lightest
+     grey on the board: over paper it lands on rgb(245), against rgb(233) for the closed hours and
+     rgb(212) for a block. If it ever gets darker than the closed wash, "working" and "not working"
+     swap places at a glance, which is the one thing this must not do. */
+  --row-shade: rgb(55 54 54 / 4%);
   --block-grey: #d4d4d4;
   --alert-ink: #7f1d1d;
   --alert-paper: #fee2e2;
@@ -413,7 +434,7 @@ body {
   margin-top: 0.4rem;
 }
 
-/* The names must not scroll away: 56 rows is 985px, so on a laptop about 40% of the day is
+/* The names must not scroll away: 56 rows is 980px, so on a laptop about 40% of the day is
    always off screen, and unlabelled columns are how an appointment ends up in the wrong
    stylist's day. */
 .board__heads {
@@ -472,11 +493,17 @@ body {
   transform: translateY(0.4em);
 }
 
+/* The hour rule is listed FIRST, which puts it on top: the first background image in the list is
+   the one painted over the others. Under the quarter rule it lost its top pixel to it and measured
+   97 ink instead of 138 - a third of the rule, gone to a paint order nobody had looked at.
+
+   Two pixels because the stylists asked for it, and one pixel of contrast in colour alone was not
+   enough to count hours by. `Board.tsx` sets the sizes, in the same order as these. */
 .board__column {
   border-left: 1px solid var(--rule-hour);
   background-image:
-    linear-gradient(to bottom, var(--rule-quarter) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--rule-hour) 1px, transparent 1px);
+    linear-gradient(to bottom, var(--rule-hour) 2px, transparent 2px),
+    linear-gradient(to bottom, var(--rule-quarter) 1px, transparent 1px);
   background-repeat: repeat-y;
 }
 
@@ -490,8 +517,57 @@ body {
   z-index: 0;
   /* Grey since 2026-08-14, on the owner's judgement after seeing it on their own screen: red said
      "something is wrong with this day" about hours that are perfectly ordinary. Same notation as
-     the other translucent fills in this file, same colour they chose. */
-  background: rgb(55 54 54 / 7%);
+     the other translucent fills in this file, same colour they chose.
+
+     7% until 2026-09-07, when the alternating row shade arrived inside the working hours and 7%
+     was too close to it to read as a different thing. Darkened on the owner's call.
+
+     It cannot go much further, and the reason is not what it looks like. This wash paints OVER the
+     column's rules, not behind them - measured on the running board: at 10% a quarter rule reads
+     rgb(209) instead of rgb(226) and an hour rule rgb(171) instead of rgb(184). So every extra
+     percent here dims the grid directly, which is the one thing the first paragraph says this fill
+     must not do. */
+  background: rgb(55 54 54 / 10%);
+  pointer-events: none;
+}
+
+/* Alternating 15-minute rows, so the eye can cross six columns without losing the line it is on.
+   The stylists asked for it after using the board.
+
+   Inside the working hours and nowhere else: outside them `board__closed` already says something,
+   and striping that too would be two greys arguing about the same rows. On a Sunday, a Monday or a
+   Hessen holiday there is no working stretch at all, so nothing is drawn - which is correct, not a
+   missing case.
+
+   **No `z-index`, deliberately, and it is the opposite of `board__closed` above.** A grid item with
+   an explicit `z-index` paints after the ones that leave it `auto`, so `z-index: 0` here - copied
+   from that wash without thinking - put the stripes ON TOP of the columns and their rules. Left
+   `auto` the element paints in tree order, which is before the columns, so the rules keep their
+   own colour. Measured, a quarter rule on a half-pixel boundary: rgb(239) unshaded, rgb(232) with
+   the stripes over it, rgb(235) with them under it.
+
+   That rule still moves by three, under and all, because a rule on a half-pixel boundary is
+   antialiased and therefore partly transparent - whatever is behind it shows through. So a much
+   darker `--row-shade` would still tint those rules, and painting order does not buy immunity from
+   that, only half of it.
+
+   The hour rules are untouched either way, at rgb(184) with the stripes on or off, and NOT because
+   of paint order: every hour boundary is an even slot, so it lands in the transparent half of the
+   tile and there is nothing over it to blend with. */
+.board__rows {
+  /* One tile is two rows: the first left alone, the second shaded - and the other way round on a
+     day whose opening slot is odd, because `Board.tsx` shifts the tile by a row to keep the pattern
+     on the clock rather than on the opening time. 09:15 is shaded whether the day starts at 09:00
+     or at 09:15. */
+  background-image: linear-gradient(to bottom, transparent 50%, var(--row-shade) 50%);
+  background-size: 100% calc(var(--slot-height) * 2);
+  background-repeat: repeat-y;
+  /* Insurance, and honestly labelled as such: with no `z-index` this element paints under the
+     columns, so they take the pointer whatever this says. Removing this line alone breaks nothing
+     and no test notices. What the click test in `board.browser.test.ts` does catch is the pair -
+     this line gone AND the element moved after the columns - which is the only way it could
+     actually start swallowing a booking. Kept because a full-width overlay across the working
+     hours should not have its safety resting on the order of two lines of JSX. */
   pointer-events: none;
 }
 
@@ -547,7 +623,7 @@ body {
 }
 
 /* The two resize edges. A share of the box rather than a fixed height: one 15-minute row is
-   17.6px, so two 6px handles would leave nothing in the middle to grab for a move. */
+   17.5px, so two 6px handles would leave nothing in the middle to grab for a move. */
 /* A note, said as a folded corner rather than as a character: the dot it replaces was 10px of
    punctuation on a coloured box and read as a speck of dirt.
 

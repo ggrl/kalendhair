@@ -34,6 +34,12 @@ not a threshold: a row is 17.6px, so comparing slots meant a three-pixel twitch 
 line saved a fifteen-minute change from about a third of every box. Once past the threshold
 the slot arithmetic decides *what* to write; it never decides *whether* to write.
 
+> A row became 17.5px on 2026-09-07, by
+> [ADR-0026](ADR-0026-the-grid-rules-the-hour-and-shades-the-working-rows.md), so that an hour is a
+> whole number of pixels. The number above is kept as it was written. Nothing about this ruling
+> moves: the threshold is measured from the grid box at the time of the gesture and was never the
+> constant.
+
 **A drop the browser can already see is occupied is refused before it is sent**, with the
 same sentence the server would have used, and the box springs back. `TIME_TAKEN` has one
 home for that reason. This is a convenience, not enforcement: the exclusion constraint

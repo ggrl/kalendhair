@@ -216,7 +216,7 @@ test('a box dragged to another stylist and another time is saved at the version 
 })
 
 test('a hand that twitches across a row line still opens the form and saves nothing', async ({ page }) => {
-  // The threshold is pixels, not rows, and this is why. A row is 17.6px: comparing slots meant a
+  // The threshold is pixels, not rows, and this is why. A row is 17.5px: comparing slots meant a
   // three-pixel twitch across a row line wrote a fifteen-minute change with no dialogue and no
   // undo, from about a third of every box. The test that was supposed to cover this passed only
   // because the box centre it grabbed sat exactly on a row boundary - so these press deliberately
