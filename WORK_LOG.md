@@ -112,6 +112,39 @@ was right all four times.
 4. Still open from the thirteenth session: `DEPLOYMENT.md`'s nginx paragraph never names
    `$proxy_add_x_forwarded_for`, and nothing checks `TRUST_PROXY` took effect after a deploy.
 
+### Server sizing, measured 2026-09-08 - asked, answered, not yet written into the guide
+
+The owner asked what to rent and whether 1 vCPU is enough. `DEPLOYMENT.md:67` answers this with
+an adjective - "the smallest instance any provider sells is enough" at runtime, "at least 2GB of
+RAM if you build the image on the box, because the build needs considerably more memory". Sound
+advice, but nobody had put a number on "considerably". Measured against the running stack:
+
+| | Measured |
+| --- | --- |
+| Postgres at rest | 58 MB |
+| Node server at rest | 36 MB |
+| CPU per `/api/day` request | 0.9 ms (0.27s of node CPU across 300 requests) |
+| Throughput, one connection | 115 req/s |
+| `npm ci` peak | ~320 MB |
+| `npm run build` peak | ~350 MB, 5 CPU-seconds |
+| Docker images | 248 MB app + 415 MB `postgres:17-alpine` |
+| Empty database | 8 MB |
+
+**1 vCPU is enough by a wide margin.** Eight boards polling every 30 seconds is 0.27 req/s, which
+at 0.9ms is about 0.02% of one core. RAM during a deploy is the only real constraint, and
+`DEPLOYMENT.md`'s 2GB is right and slightly conservative. 1GB would work only if the image is
+built in CI rather than on the box, which `DEPLOYMENT.md:775` already calls the tidier end.
+
+**These numbers were taken on macOS/arm64 through Docker Desktop, not on a Linux x86 VPS**, and
+nothing was measured behind Caddy. Order of magnitude, not gospel.
+
+Two things that matter more than the specs and are not about specs at all: host it in the EU,
+because customer names are personal data and the salon is in Hessen; and provider snapshots do
+NOT satisfy the brief's blocker, which demands a backup leaving the VPS on a schedule plus one
+restore actually performed.
+
+Nothing was changed in `DEPLOYMENT.md` - `/save` does not fix things it notices.
+
 ### Unfinished, and the next step
 
 1. **Deploy it, and put Caddy in front of it.** Top of the list for five sessions now. It is the
@@ -119,6 +152,9 @@ was right all four times.
 2. **Month steps** - the one navigation piece never started. ADR-0010 settled the arithmetic.
 3. **The backup and one tested restore** still gate real customer data.
 4. The `EntryModal` focus trap, which is a real hole in a screen people use every day.
+5. Fold the measured sizing numbers above into `DEPLOYMENT.md`, replacing "considerably more
+   memory" with them - and, if anybody wants provider names or prices in there, have the
+   researcher read live pages rather than quoting from memory. Offered this session, not taken up.
 
 ### What surprised me
 
