@@ -265,10 +265,21 @@ test.describe('on a phone', () => {
 
     await page.getByRole('button', { name: 'Nächster Tag' }).click()
     await expect(page.locator('.shell__loading')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toHaveCount(0)
+
+    // Disabled, and still there. It used to be removed for the length of the load, which guarded
+    // the same thing and gave the salon a button that blinked out on every day step and every
+    // drag - reported 2026-09-07. Being on screen is now half of what this test protects.
+    const add = page.getByRole('button', { name: 'Neuer Termin' })
+    await expect(add).toBeVisible()
+    await expect(add).toBeDisabled()
+
+    // Dead, not merely faded. `force` skips the actionability wait, which on a live button would
+    // let this pass by timing out instead of by being refused.
+    await add.click({ force: true })
+    await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toHaveCount(0)
 
     release()
-    await expect(page.getByRole('button', { name: 'Neuer Termin' })).toBeVisible()
+    await expect(add).toBeEnabled()
     expect(sent.filter((request) => request.method === 'POST')).toHaveLength(0)
   })
 

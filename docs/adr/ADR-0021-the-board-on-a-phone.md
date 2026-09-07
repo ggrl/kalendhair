@@ -117,6 +117,15 @@ which removes the reason for this change.
   covers the board only, so during a step the header names one day and the board underneath is
   another. A review pass clicked the button in that window and booked onto the day just left, with
   the form showing no date at all to contradict the header.
+
+  > **Disabled, not absent, since 2026-09-07.** The rule above is right about what must not happen
+  > and wrong about how. Removing the button also reflows the four controls beside it, and the salon
+  > reported it "disappears for a split second" on every day change and every box move - measured at
+  > 1 -> 0 -> 1 sampling every 25ms across a day step, a week step and a drag. It is now rendered
+  > with `disabled` for the length of the load. The guard is unchanged and was measured again:
+  > `.click()`, a dispatched `MouseEvent`, Enter, Space and a forced pointer click all fail to open
+  > the form. **Absent still stands for the other case in this ADR** - a day with nobody on the
+  > board, where the form's first field would have nothing to put in it.
 - The login screen keeps its own layout. It carries the same `shell` class as the board, so the new
   flex column reached it at a higher specificity than `.login` and put the form flush against the
   left edge - measured at a centre of 188px on a 1280px screen. Every person in the salon meets

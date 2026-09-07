@@ -229,6 +229,22 @@ body {
   background: #f3f4f6;
 }
 
+/* Only the add button is ever disabled, and only for the few hundred milliseconds a day is in
+   flight. Faded rather than hidden, and 0.45 is not an arbitrary pick: `.shell__fading` fades the
+   board by exactly that much at exactly the same moment, so the button and the day it would book
+   into go provisional together and come back together.
+
+   Nothing here may change the box the button occupies. The whole point of disabling it rather than
+   removing it is that the row does not move. */
+.topbar__icon:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.topbar__icon:disabled:hover {
+  background: #fff;
+}
+
 .topbar__step:hover,
 .topbar__today:hover {
   background: #f3f4f6;

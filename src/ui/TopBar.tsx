@@ -20,10 +20,23 @@ interface Props {
   /**
    * Open an empty form for a new appointment on the day being shown. ADR-0021.
    *
-   * Null when there is nobody to book, and while a day is loading - the two states where the
-   * button would open a form that cannot name a person, or would name the wrong day.
+   * Null when there is nobody to book: the form's first field is the person, and there is nothing
+   * to put in it.
    */
   onAdd: (() => void) | null
+  /**
+   * Whether a day is in flight, which disables the add button without removing it.
+   *
+   * Named for what it is rather than `busy`, which `App.tsx` already uses 550 lines above for
+   * "a form is open or a drag is running" - a different idea that would read as this one.
+   *
+   * Both halves matter. It must not be clickable, because the top bar sits outside the `inert`
+   * subtree and a click between two days opens a form for the day just left - a review pass found
+   * exactly that. And it must not be REMOVED, which is what used to happen: the salon saw the
+   * button blink out on every day step and every drag, because unmounting it also reflows the four
+   * controls beside it.
+   */
+  loading: boolean
   onSettings: () => void
 }
 
@@ -36,6 +49,7 @@ export function TopBar({
   onToday,
   onPick,
   onAdd,
+  loading,
   onSettings,
 }: Props) {
   const { week } = isoWeek(date)
@@ -130,6 +144,11 @@ export function TopBar({
             Absent rather than disabled when nobody is on the board: the form's first field is the
             person, and there is nothing to put in it. The board already says so in words.
 
+            Disabled rather than absent while a day loads, which is the other way round and for the
+            opposite reason: that state lasts a few hundred milliseconds and comes back, so removing
+            the button made it blink out on every day step and every drag, taking the four controls
+            beside it sideways and back. Present and dead holds the row still.
+
             Named `Neuer Termin` and not `+ Termin`: the label is what a screen reader reads out,
             and "plus Termin" is not a thing anybody says. */}
         {onAdd !== null && (
@@ -137,6 +156,7 @@ export function TopBar({
             type="button"
             className="topbar__icon topbar__icon--add"
             onClick={onAdd}
+            disabled={loading}
             aria-label="Neuer Termin"
             title="Neuer Termin"
           >
