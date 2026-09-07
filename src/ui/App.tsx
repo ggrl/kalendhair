@@ -697,13 +697,17 @@ export function App() {
         // stylist and the first hour of the salon's day are a starting point to change, not a
         // proposal. `day.date` and not `pending`, because the form saves onto the day it captured
         // and that has to be the day whose board is underneath it.
-        // Null while a day is loading, too. The top bar sits outside the `inert` subtree - that
-        // covers the board only - so during a step the header names one day, the board underneath
-        // is another, and this button was live between them. A review pass clicked it mid-load and
-        // the appointment landed on the day just left, with the header saying otherwise and the
-        // form showing no date at all to contradict it.
+        // Dead while a day is loading, which is what `busy` below is for. The top bar sits outside
+        // the `inert` subtree - that covers the board only - so during a step the header names one
+        // day, the board underneath is another, and this button was live between them. A review
+        // pass clicked it mid-load and the appointment landed on the day just left, with the header
+        // saying otherwise and the form showing no date at all to contradict it.
+        //
+        // It was `null` while loading until 2026-09-07, which disabled it by removing it - and the
+        // salon saw the button blink out on every day step and every drag, reflowing the row each
+        // time. Same guard, kept where it belongs: the button stays, the click does not.
         onAdd={
-          day.employees.length === 0 || loading
+          day.employees.length === 0
             ? null
             : () =>
                 setEditor({
@@ -712,6 +716,7 @@ export function App() {
                   draft: { employeeId: day.employees[0].id, ...firstHourOf(day) },
                 })
         }
+        busy={loading}
         onSettings={() => {
           window.history.pushState(null, '', urlFor(shown, true))
           setSettings(true)

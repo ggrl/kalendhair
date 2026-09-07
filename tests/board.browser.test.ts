@@ -711,6 +711,49 @@ test('a half-hour edge lands on the grid, and a closed day is shaded all day', a
   await expect(sunday.first()).toHaveCSS('grid-row-end', 'span 56')
 })
 
+test('the top bar does not move while a day is loading', async ({ page }) => {
+  // Reported by the salon on 2026-09-07: the add button "disappears for a split second" on every
+  // day change and every box move. It was being unmounted for the length of the load - the guard
+  // that stops it booking onto the day just left was written as `onAdd: null`, and removing a
+  // control from a row of five reflows the other four sideways and back.
+  //
+  // The guard itself is asserted in `phone.browser.test.ts`; this asserts the thing that was seen.
+  await page.goto('/?date=2026-08-13')
+  await expect(page.locator('.board__grid')).toBeVisible()
+
+  const boxes = async (): Promise<string> =>
+    page.evaluate(() =>
+      ['.topbar__icon', '.topbar__today', '.topbar__icon--add']
+        .map((selector) => {
+          const element = document.querySelector(selector)
+          if (element === null) return `${selector}:ABSENT`
+          const rect = element.getBoundingClientRect()
+          return `${selector}:${Math.round(rect.x)},${Math.round(rect.width)}`
+        })
+        .join(' '),
+    )
+
+  const atRest = await boxes()
+
+  let release = (): void => {}
+  await page.route('**/api/day*', async (route) => {
+    await new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await route.fallback()
+  })
+
+  await page.getByRole('button', { name: 'Nächster Tag' }).click()
+  await expect(page.locator('.shell__loading')).toBeVisible()
+
+  // Every control in the row in the same place, to the pixel, while the day is in flight.
+  expect(await boxes()).toBe(atRest)
+
+  release()
+  await expect(page.locator('.shell__loading')).toHaveCount(0)
+  expect(await boxes()).toBe(atRest)
+})
+
 test('the hour rule is thicker than the quarter rule, and painted over it', async ({ page }) => {
   // The stylists asked for a thicker line on every full hour. Two lists have to agree for that to
   // happen: the gradients in `styles.css` and the sizes `Board.tsx` hands them, in the same order.

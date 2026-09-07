@@ -229,6 +229,19 @@ body {
   background: #f3f4f6;
 }
 
+/* Only the add button is ever disabled, and only for the few hundred milliseconds a day is in
+   flight. Faded rather than hidden, and the same notation the login and settings buttons use: the
+   point of disabling it instead of removing it is that the row does not move, so nothing here may
+   change the box it occupies. */
+.topbar__icon:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.topbar__icon:disabled:hover {
+  background: #fff;
+}
+
 .topbar__step:hover,
 .topbar__today:hover {
   background: #f3f4f6;
