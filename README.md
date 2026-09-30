@@ -31,7 +31,6 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Navigation: day steps, week steps, `Heute`, the `KW` number, date in the address bar | done |
 | Navigation: a date picker, using the browser's own | done |
 | Navigation: arrow keys for a day, `Umschalt`+arrow for a week | done |
-| Navigation: month steps | not started |
 | Live updates, by polling the day on screen every 30 seconds | done |
 | Creating and editing appointments in a form, with autocomplete | done |
 | Moving and resizing by dragging, with a form for the details | done |
@@ -39,6 +38,8 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
 | A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
 | The salon's core hours, editable from that screen instead of hardcoded | done |
+| Backups that leave the server on a schedule, and one restore actually performed | not started |
+| Data older than a year deleted automatically | not started |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
@@ -48,6 +49,9 @@ behind a password as of 2026-08-13, which was one of the two blockers. The other
 are no backups, and `docs/PRODUCT_BRIEF.md` makes one tested restore the condition for putting
 real data in. The server still binds to loopback and there is still no TLS, so stage one runs
 on fake names only.
+
+Since 2026-09-30 there is a second condition before deployment: data older than a year is deleted
+automatically. Neither is built.
 
 ## Requirements
 

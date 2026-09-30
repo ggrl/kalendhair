@@ -105,6 +105,10 @@ month steps keep the weekday; month steps clamp the day of the month, which is n
 reversible. Week numbers are ISO 8601, whose year is not always the year in the date. See
 ADR-0010.
 
+> **Month steps were dropped on 2026-09-30, on the owner's call: they will not be built.** The
+> paragraph above is kept because it records what was planned. Week steps, the date picker and
+> `Heute` are the navigation.
+
 Landing on a day the salon is shut shows an empty board, exactly as flipping the paper to
 a Sunday does. Nothing about opening hours refuses a booking - the full 06:00-20:00 stays
 bookable every day of the week, which is the half of this line that still holds.
@@ -208,7 +212,8 @@ Awkward, each needing an answer in code:
 - text staying readable on a coloured 15-minute box
 - 1 January 2027, which is in ISO week 53 of 2026, so the header must read KW 53 on a date
   that says 2027
-- stepping a month forward from 31 January, and stepping back again, which does not return
+- stepping a month forward from 31 January, and stepping back again, which does not return -
+  moot since month steps were dropped on 2026-09-30
 - arrow keys pressed while a box is selected or the modal is open: answered on 2026-08-14. The
   modal, the settings screen, the login screen, a drag in flight and any focused field all swallow
   the press, and a held key moves one day rather than one per repeat
@@ -252,6 +257,10 @@ the salon puts one real appointment in, there must be a backup that leaves the V
 schedule, and one restore that has actually been performed, not merely documented.** An
 untested backup is a belief, not a backup.
 
+**Added 2026-09-30, by the owner: data older than a year is deleted automatically, and that too
+is built before deployment.** What counts as the data, and what a year is measured from, is not
+decided yet.
+
 ## Permissions
 
 May create `src/`, `tests/`, the `/api` backend and `docs/`, and delete the
@@ -285,7 +294,8 @@ with automated tests asserting specifically:
 - a whole-day block on a column with existing appointments is refused and names the clash
 - the week number is right on 2026-12-28 through 2027-01-04, where the ISO week-year and
   the calendar year disagree, and 2026 has a week 53
-- a month step from 31 January clamps to the end of February, in a leap year and out of one
+- a month step from 31 January clamps to the end of February, in a leap year and out of one -
+  dropped with month steps on 2026-09-30
 
 And then the thing no test provides: the salon runs a real day on it and says what is
 wrong with it.
