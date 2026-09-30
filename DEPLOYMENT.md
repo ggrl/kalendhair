@@ -554,20 +554,73 @@ An untested backup is a belief, not a backup.
 You can skip this for a throwaway test box with fake names. You cannot skip it for the real
 one, and this is the gate between the two.
 
-**Know what is in the file before you decide where to put it.** A dump of this database
-holds every customer name, every treatment, and the `notes` field - which the code's own
-comment identifies as where a salon writes "allergic to ammonia", meaning health data - plus
-the `salon_credential` table of password hashes, which somebody can grind offline at their
-leisure. It is not encrypted. Treat it as the most sensitive object on the machine, because
-it is.
+**The shape, decided in [ADR-0028](docs/adr/ADR-0028-the-backup-is-encrypted-and-pulled-by-the-salon-laptop.md):**
+the server dumps the database every night and encrypts it to a key it cannot decrypt with.
+The salon's Windows laptop fetches the dumps once a day through a login that can read them
+and do nothing else. Each side keeps the newest seven. Nobody is alerted when it stops: the
+check is a person looking at the laptop's folder, so **that look is part of the backup**.
 
-Make a directory for it that only this account can read:
+**Know what is in the file.** A dump of this database holds every customer name, every
+treatment, and the `notes` field - which the code's own comment identifies as where a salon
+writes "allergic to ammonia", meaning health data - plus the `salon_credential` table of
+password hashes, which somebody can grind offline at their leisure. That is why it is
+encrypted before it is written, and why the server holds only the public half of the key.
+
+### 10a. Make the key, on your own computer - not the server
+
+Any machine with [`age`](https://github.com/FiloSottile/age) installed will do:
 
 ```bash
-sudo mkdir -p /srv/kalendhair-backups
-sudo chown kalendhair:kalendhair /srv/kalendhair-backups
-sudo chmod 700 /srv/kalendhair-backups
+age-keygen -o kalendhair-backup.key
 ```
+
+It prints `Public key: age1...`. **Put the whole content of `kalendhair-backup.key` into your
+password manager, then delete the file** - permanently, not to the Trash or the Recycle Bin,
+where it is still a file. That file is the only thing that can read a
+backup. Lose it and every dump is noise; leave it on the server and whoever breaks in reads
+them all. The public key is not a secret and is what the server gets.
+
+The password manager needs two more things before this is finished, because the backup does
+not contain them and a new server cannot start without them: **every value in `.env`**, and
+the salon password and PIN as they are now (ADR-0017 - they live in the database, and the
+database is what you are restoring, but the master password is only in `.env`).
+
+### 10b. The nightly dump on the server
+
+Install `age` and give the server the public key. Replace the placeholder with the
+`age1...` line from 10a:
+
+```bash
+sudo apt update
+sudo apt install -y age
+echo 'PASTE-YOUR-PUBLIC-KEY-HERE' | sudo tee /etc/kalendhair-backup.pub >/dev/null
+```
+
+`age` is in Debian's and Ubuntu's own archives: checked on Debian 12 and 13 and Ubuntu 22.04
+and 24.04, versions 1.0.0 to 1.2.1. A dump written by 1.1.1 decrypts with 1.3.2 and the
+other way around - tested, because a key made on a newer laptop is the normal case.
+
+Then the directories:
+
+```bash
+sudo groupadd --system kalendhair-backup
+sudo mkdir -p /srv/kalendhair-backups/files
+sudo chown root:root /srv/kalendhair-backups
+sudo chmod 755 /srv/kalendhair-backups
+sudo chown kalendhair:kalendhair-backup /srv/kalendhair-backups/files
+sudo chmod 2750 /srv/kalendhair-backups/files
+sudo install -o kalendhair -g kalendhair -m 600 /dev/null /var/log/kalendhair-backup.log
+```
+
+**Each of those modes is load-bearing.**
+
+- `/srv/kalendhair-backups` is root's and not writable by anyone else, because OpenSSH
+  refuses to lock a login inside a directory that is not. That is the laptop's jail, 10c.
+- `files` is `2750`: the `kalendhair` account writes, the `kalendhair-backup` group reads,
+  nobody else gets in. The `2` makes every new file inherit that group, which is how the
+  laptop's login can read a file it did not create.
+- The log lives outside, in `/var/log`, created `600` up front. It can carry a compose error
+  that echoes part of a value from `.env`, and the laptop has no business reading it.
 
 Then write the backup as a script rather than a one-liner, because it needs to fail loudly
 and a pipeline does not do that by default. Write it to `/usr/local/bin/kalendhair-backup`,
@@ -583,19 +636,34 @@ sudo tee /usr/local/bin/kalendhair-backup >/dev/null <<'SCRIPT'
 # Fail on error, on an unset name, and - the one that matters here - on any
 # failing stage of a pipeline, not just the last one.
 set -euo pipefail
-umask 077
+# Readable by the kalendhair-backup group, which is how the laptop's login reads
+# them. They are encrypted, so readable is not the same as legible.
+umask 027
 
 # cron does not get your login PATH, and docker is the thing it will not find.
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 cd /srv/kalendhair
-dest="/srv/kalendhair-backups/kalendhair-$(date +%F-%H%M).sql.gz"
+dir=/srv/kalendhair-backups/files
+dest="$dir/kalendhair-$(date +%F-%H%M).sql.gz.age"
 
-# Write beside the real name, then move into place. A dump that dies halfway
-# never gets the name a restore would reach for.
+# Encrypted to the public key only. This machine cannot read its own backups,
+# so neither can anybody who breaks into it.
+#
+# Written beside the real name, then moved into place. A dump that dies halfway
+# never gets the name a restore - or the laptop - would reach for.
 docker compose exec -T db pg_dump -U salon -d salon --clean --if-exists \
-  | gzip > "$dest.part"
+  | gzip | age -R /etc/kalendhair-backup.pub > "$dest.part"
 mv "$dest.part" "$dest"
+
+# Keep the newest seven. Reached only when the new dump is in place, so a run
+# that fails deletes nothing, and a week of failures still leaves the last
+# seven good ones. The names sort by date because they start with it.
+ls -1 "$dir"/kalendhair-*.sql.gz.age | head -n -7 | xargs -r rm --
+
+# A .part is a night that failed partway. It can hold whole chunks of real rows,
+# so it goes too, once a night has succeeded.
+rm -f "$dir"/*.part
 SCRIPT
 
 sudo chown root:root /usr/local/bin/kalendhair-backup
@@ -611,24 +679,26 @@ That last line is worth running rather than skipping. It executes the script exa
 will - same account, same absent `HOME` - so if anything in the environment is wrong you find
 out now rather than from a directory that quietly stopped filling.
 
-**Three lines in that script are there because of specific ways this goes wrong**, and none
-of them is theoretical:
+**The lines in that script that exist because of a specific way this goes wrong**, none of
+them theoretical:
 
-- **`set -o pipefail`.** Without it the pipeline's exit status is `gzip`'s, and `gzip`
-  succeeds at compressing nothing. Measured with the database stopped: exit `0`, a
-  correctly named file, correct `600` permissions, a *valid* gzip archive - containing zero
-  bytes. Cron mails nothing. You get a directory of plausible backups holding nothing at
-  all, which is precisely the belief this section opens by warning about. **Note it must be
-  `bash`, not `sh`:** on Debian and Ubuntu `/bin/sh` is dash, which answers `set -o
-  pipefail` with `Illegal option`.
-- **`umask 077`.** Without it the redirect creates the file `0644` under the default umask,
-  readable by every account on the box. `/var/backups`, the obvious place to put it, is
-  `0755 root:root` on Debian and Ubuntu.
-- **`.part` then `mv`.** Belt and braces with `pipefail`: a half-written dump never carries
-  the name a restore would reach for. A leftover `.part` is the trace of a failed run.
+- **`set -o pipefail`.** Without it the pipeline's exit status is the last stage's, and the
+  last stage succeeds at encrypting nothing. Measured before encryption was added, with the
+  database stopped: exit `0`, a correctly named, *valid* gzip archive containing zero bytes.
+  **It must be `bash`, not `sh`:** on Debian and Ubuntu `/bin/sh` is dash, which answers
+  `set -o pipefail` with `Illegal option`.
+- **`.part` then `mv`.** A half-written dump never carries the name the laptop fetches -
+  it fetches `*.age`, and `.part` does not match. A `.part` that is still there is the
+  trace of a night that failed since the last good one.
+- **The prune comes last.** Measured with the dump made to fail: exit `1`, the seven
+  finished backups untouched, one `.part` left behind - and gone after the next good night,
+  because a cut-off dump still holds whole chunks of real rows, and ADR-0027's year would
+  not otherwise apply to it. Deleting by age instead - "anything
+  older than seven days" - would have spent a week of silent failures deleting the last good
+  backup.
 
-Measured, with the dump made to fail: exit `1`, no file carrying the final name, one
-`.part` left behind. On success: exit `0`, mode `600`, real content.
+Measured the other way: with nine older backups in place, one run left exactly seven, the
+new one among them. Mode `640`, group `kalendhair-backup`.
 
 Then run it from cron nightly, as the same account:
 
@@ -639,13 +709,13 @@ sudo crontab -u kalendhair -e
 Add this line, **without a leading `#`**, and keep the redirect:
 
 ```
-20 3 * * * umask 077; /usr/local/bin/kalendhair-backup >> /srv/kalendhair-backups/backup.log 2>&1
+20 3 * * * umask 077; /usr/local/bin/kalendhair-backup >> /var/log/kalendhair-backup.log 2>&1
 ```
 
 **The `umask 077;` at the front is not the same one as in the script.** Cron's own shell
-creates `backup.log` *before* the script starts, so the script's umask cannot apply to it:
-without this the log lands at `664`. Measured both ways. It matters because that log can
-carry a compose parse error, and those echo part of the offending value.
+opens the log *before* the script starts, so the script's umask cannot apply to it. The file
+already exists at `600`, so this only matters the day somebody deletes it - and then it is
+the difference between `600` and `664`.
 
 Then confirm it is really there, because a crontab that saved as a comment looks exactly
 like one that saved correctly:
@@ -654,86 +724,340 @@ like one that saved correctly:
 sudo crontab -u kalendhair -l | grep kalendhair-backup   # must print a line NOT starting with #
 ```
 
-### Nobody is listening unless you make them
+### 10c. A login for the laptop that can only read
 
-`pipefail` makes the script exit non-zero, and cron's convention is to mail that to you. **A
-stock cloud image has no mail transfer agent**, so on a default Ubuntu or Debian VM there is
-nothing to deliver it: checked, and the mail spool stayed empty after a failing run. Saying
-the script "fails loudly" is only half true - it fails *correctly*, into silence.
-
-The redirect above is what gives the failure somewhere to sit, and the `umask 077` in front
-of it is what keeps that log at `600` like the dumps. Three things to look at, and they take
-one command:
+Make the account, give it the laptop's public key - from 10d, step 2, so do that first - and
+lock it in:
 
 ```bash
-sudo -u kalendhair ls -lt /srv/kalendhair-backups | head
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin -g kalendhair-backup kalendhair-pull
+echo 'PASTE-THE-LAPTOP-PUBLIC-KEY-HERE' | sudo tee /etc/ssh/kalendhair-pull.keys >/dev/null
+sudo tee /etc/ssh/sshd_config.d/kalendhair-pull.conf >/dev/null <<'CONF'
+# The laptop's login: read the backups, and nothing else. No shell, no
+# forwarding, no writing - it cannot delete a backup or leave anything behind.
+Match User kalendhair-pull
+    AuthorizedKeysFile /etc/ssh/kalendhair-pull.keys
+    AuthenticationMethods publickey
+    ChrootDirectory /srv/kalendhair-backups
+    ForceCommand internal-sftp -R -d /files
+    AllowTcpForwarding no
+    AllowAgentForwarding no
+    X11Forwarding no
+    PermitTTY no
+CONF
+sudo sshd -t && sudo systemctl reload ssh
 ```
 
-- **The newest timestamp.** If it is not from last night, backups have stopped.
-- **Any `.part` file.** One per failed run.
-- **`backup.log`.** The error itself.
+**What that login was measured to do**, from outside, against a Debian 12 server set up with
+exactly these blocks: `get` of every backup works. `put`, `rm`, `rename` and `mkdir` all
+answer `Permission denied`, including a `put` over an existing backup. `ls /` shows `/files`
+and nothing else, and `/etc/passwd` is `not found`. A shell gets `This service allows sftp
+connections only.` A port forward gets `administratively prohibited`. A password gets
+`Permission denied (publickey)`. And `sshd -T` confirms the `Match` block binds this account
+only: `root` and `kalendhair` keep their settings.
 
-Put that in whatever routine you already have. If you would rather have mail, install an MTA
-and set `MAILTO=` at the top of the crontab - but do not assume mail exists, because by
-default it does not.
+**A stolen laptop key can therefore read seven encrypted files and nothing else.** Remove its
+line from `/etc/ssh/kalendhair-pull.keys` and it cannot do even that.
 
-### Then get it off the machine, on the same schedule
+The reload's exit code proves nothing about the new rules. The first connection in 10d, step
+3, does.
 
-**What you have so far is a nightly backup that dies with the disk it is on.** The brief's
-condition is a backup that *leaves the machine* on a schedule, and nothing above does that
-yet - so add the copy as the last line of `/usr/local/bin/kalendhair-backup`, not as
-something you remember to do. `set -e` then makes a failed upload fail the whole run, which
-is what you want:
+### 10d. The laptop
+
+Everything below runs in **PowerShell on the salon's Windows laptop**, as the person who uses
+it. Nothing needs to be installed, if the SSH client that ships with Windows is there.
+
+**1. Check for the SSH client.**
+
+```powershell
+where.exe ssh
+```
+
+`where.exe`, not `where`: in PowerShell `where` means something else and answers nothing
+useful. If it finds nothing, install it from Settings > System > Optional features >
+"OpenSSH Client", or as administrator with
+`Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0`. Microsoft's own pages
+disagree about whether it is there by default, which is why this step exists.
+
+**2. Make the laptop's key.** Press Enter twice when it asks for a passphrase: a key nobody is
+there to unlock has to have none, which is why 10c gives it so little to unlock.
+
+```powershell
+ssh-keygen -t ed25519 -f "$HOME\.ssh\kalendhair-pull" -C "kalendhair laptop"
+Get-Content "$HOME\.ssh\kalendhair-pull.pub"
+```
+
+That last line prints the public key. It is what goes into 10c.
+
+**3. Meet the server once, by hand.** The first connection asks whether to trust the server's
+identity, and a scheduled run cannot answer - it fails with `Host key verification failed`,
+which is exactly what happened when this was first tested.
+
+```powershell
+sftp -i "$HOME\.ssh\kalendhair-pull" kalendhair-pull@YOUR-SERVER-NAME
+```
+
+Before answering `yes`, compare the fingerprint it shows with the one of the same type -
+`ED25519`, `ECDSA` or `RSA`, it says which - among those the server prints for
+`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done`. An older Windows SSH
+client may be offered a different type than a newer one. Then `ls` should list the backups, and
+`bye` leaves.
+
+**4. The script.** Make the folder and save this as `pull.ps1` in it:
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\kalendhair-backups"
+notepad "$HOME\kalendhair-backups\pull.ps1"
+```
+
+Paste this, and change `YOUR-SERVER-NAME` in the fourth line:
+
+```powershell
+# kalendhair: fetch the encrypted backups from the server and keep a week of them.
+# Run daily by Task Scheduler. Every run writes one line to pull.log, success or not.
+param(
+    [string]$Server = 'kalendhair-pull@YOUR-SERVER-NAME',
+    [string]$Key    = "$HOME\.ssh\kalendhair-pull",
+    [string]$Folder = "$HOME\kalendhair-backups"
+)
+$ErrorActionPreference = 'Stop'
+$log      = Join-Path $Folder 'pull.log'
+$incoming = Join-Path $Folder 'incoming'
+$batch    = Join-Path $Folder 'pull.sftp'
+
+try {
+    # First the list, and only names of the exact shape the server script writes.
+    # The server chooses the names, and a name is also where sftp writes on this
+    # laptop - so nothing else, no path, no backslash, no wildcard, reaches a get.
+    Set-Content -Path $batch -Value 'ls -1'
+    # BatchMode: fail instead of waiting for a password nobody will type.
+    $listing = & sftp -q -b $batch -i $Key -o BatchMode=yes $Server
+    if ($LASTEXITCODE -ne 0) { throw "sftp exited with $LASTEXITCODE while listing" }
+    $offered = @($listing | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -cmatch '^kalendhair-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\.sql\.gz\.age$' })
+    if ($offered.Count -eq 0) { throw 'the server offered no backups' }
+
+    # Only names this laptop does not have yet. A copy that is here stays exactly
+    # as it arrived, whatever the server offers under the same name later.
+    $new = @($offered | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Folder $_)) })
+    if ($new.Count -gt 0) {
+        # Into a folder of its own first, so a transfer that dies halfway never
+        # sits beside the good copies under a good copy's name.
+        if (Test-Path $incoming) { Remove-Item $incoming -Recurse -Force }
+        New-Item -ItemType Directory -Path $incoming | Out-Null
+        Set-Content -Path $batch -Value ($new | ForEach-Object { "get $_ $_" })
+        Push-Location $incoming
+        try {
+            & sftp -q -b $batch -i $Key -o BatchMode=yes $Server
+            if ($LASTEXITCODE -ne 0) { throw "sftp exited with $LASTEXITCODE while downloading" }
+        } finally {
+            Pop-Location
+        }
+        Get-ChildItem -Path $incoming | Move-Item -Destination $Folder
+        Remove-Item $incoming -Recurse -Force
+    }
+
+    # A copy goes only once seven newer ones have arrived AND it arrived more than
+    # seven days ago, by this laptop's clock. Not by name: the server chooses the
+    # names. A server that stops sending new dumps therefore leaves the last seven
+    # here for good, and junk cannot push a copy out inside a week of its arrival.
+    Get-ChildItem -Path $Folder -Filter 'kalendhair-*.age' |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -Skip 7 |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } |
+        Remove-Item
+
+    $newest = $offered | Sort-Object | Select-Object -Last 1
+    Add-Content -Path $log -Value "$(Get-Date -Format s) ok, $($new.Count) new, newest $newest"
+} catch {
+    Add-Content -Path $log -Value "$(Get-Date -Format s) FAILED: $_"
+    exit 1
+}
+```
+
+Run it once by hand:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\kalendhair-backups\pull.ps1"
+Get-Content "$HOME\kalendhair-backups\pull.log" -Tail 1
+```
+
+It should say `ok, 7 new, newest kalendhair-...` - or fewer new, once it has run before - and
+the folder should hold the backups.
+
+**It trusts the server as little as it can, and this is exactly how far that goes:**
+
+- **A name is only ever one of the server script's own.** The script asks for the list
+  first and takes only `kalendhair-YYYY-MM-DD-HHMM.sql.gz.age`, digits 0-9, lower case, and
+  fetches each by that exact name. The server chooses the names, and a name is also where
+  sftp writes on the laptop, so a path, a backslash or a wildcard never reaches a download.
+- **A copy here is never overwritten.** A name the laptop already has is not fetched again.
+- **A copy is kept at least seven days after it arrived**, by the laptop's own clock, and
+  after that for as long as fewer than seven newer copies have arrived. So a server that
+  stops sending leaves the last seven here for good.
+- **A server that has been taken over can still replace them.** Copies older than a week,
+  in one run of seven new files - after a holiday with the laptop off, say. Fresher copies,
+  in about a week of one plausible file a night. Those files would even decrypt: the server
+  holds the public key and can encrypt fake dumps. Nothing a look at the folder shows gives
+  it away. Only a restore does, which is one more reason 10f is not a one-off.
+- **It can also make every run fail**, by listing a name it will not serve. That is loud -
+  `FAILED` in `pull.log`, nothing deleted - which is the better way for this to go wrong.
+
+**What this script was measured to do**, in PowerShell 7 on Linux against the test server,
+not on Windows, with seven distinct encrypted files:
+
+- With `KALENDHAIR-...` in capitals, `kalendhair-[x]...`, a date containing the Arabic-Indic
+  digit `٣`, a `.part`, `x.age` and `..\kalendhair-...` on the server, only the seven
+  well-formed names arrived, and nothing was written beside the folder.
+- A server file dated 2020 arrived stamped with the time it arrived.
+- With the laptop's copies made to look ten days old and nothing new on the server, the next
+  run kept all seven.
+- With the server's seven overwritten by junk under the same names, the next run took
+  nothing and the copies here stayed byte for byte the same.
+- Seven junk files named for 2099 were taken in and the real seven kept beside them. Once
+  those had arrived more than seven days before, the next good run let them go - the limit
+  above. A failed run in between deleted nothing.
+- With the server unreachable it exited `1`, logged `FAILED`, and deleted nothing. A file of
+  your own in the folder is left alone.
+
+**One thing the test did not explain:** several runs ended with exit code `133` or `134`
+from the emulated PowerShell - mostly after writing a correct `ok` line, once after
+downloading but before logging, which the next run then counted correctly as nothing new.
+Whether that is the emulator or something the script does was not settled. On Windows,
+step 6 below and Task Scheduler's "Last Run Result" are where it would show. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
+which is why running it by hand once, above, is not optional.
+
+**5. Schedule it.** Daily at noon, and at every logon, so a laptop that was switched off at
+noon still gets its copy the next time somebody signs in:
+
+```powershell
+$script = "$HOME\kalendhair-backups\pull.ps1"
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`""
+$triggers = @(
+    New-ScheduledTaskTrigger -Daily -At 12:00
+    New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+)
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 10)
+Register-ScheduledTask -TaskName 'kalendhair backup' -Action $action -Trigger $triggers -Settings $settings
+```
+
+**Why each setting:**
+
+- **Only while you are logged on.** No `-User` or `-Password`, so Task Scheduler should show
+  the task as "Run only when user is logged on" - check that it does. Running while logged
+  off would mean storing your Windows password in the task, where the next password change
+  silently breaks it. The laptop is in use whenever the salon is open, which is the only
+  time this needs to run.
+- **`-StartWhenAvailable`** catches up a noon that was missed. Microsoft's documentation
+  does not say whether that covers a laptop that was switched off rather than asleep, which
+  is why the logon trigger is there as well. Running twice in a day costs nothing.
+- **`-AllowStartIfOnBatteries`**, because Microsoft documents it as a switch you turn on, and
+  this is a laptop.
+- **Ten minutes**, instead of the default three days, so a hung connection ends.
+
+**6. Prove it runs on its own.** Two checks that only this laptop can answer:
+
+```powershell
+Start-ScheduledTask -TaskName 'kalendhair backup'
+Start-Sleep 30
+Get-Content "$HOME\kalendhair-backups\pull.log" -Tail 1
+```
+
+Then sign out and back in, and look at the log again: a new line proves the logon trigger.
+If either shows nothing, Task Scheduler's own "Last Run Result" for the task is the next
+place to look.
+
+### 10e. The check
+
+**Nothing tells anyone when a backup fails.** A stock cloud server has no mail system -
+checked, the mail spool stayed empty after a failing run - and no alerting service was
+chosen, by decision. So somebody looks, regularly, at the laptop's
+`kalendhair-backups` folder:
+
+- **The newest file's name should carry yesterday's or today's date.** The time in the name
+  is the server's clock, which `timedatectl` on the server names - it need not be German
+  time. If the newest is days old, one side has stopped.
+- **The last line of `pull.log`** says whether the laptop's side worked, and why not.
+- **On the server**, `sudo -u kalendhair ls -l /srv/kalendhair-backups/files` and
+  `sudo tail /var/log/kalendhair-backup.log` say whether the server's side did. A `.part`
+  file is one failed night.
+
+With a week kept on each side, a failure noticed within that week has lost nothing that
+existed. The laptop usually holds seven or eight files; the count is not the thing to watch,
+the dates are.
+
+### 10f. Rehearse the restore, from a copy that went through the laptop
+
+**This is the step the brief is about.** Do it before the first real appointment, and write
+the date in `WORK_LOG.md`, because nobody will remember whether it happened.
+
+Carry one backup from the laptop's `kalendhair-backups` folder to the computer you administer
+the server from - a USB stick is fine, it is encrypted - and send it up from there:
 
 ```bash
-# last line of the script, once you have chosen a destination
-rclone copy "$dest" remote:kalendhair-backups   # or: scp "$dest" user@host:/backups/
+scp kalendhair-SOMEDATE.sql.gz.age YOUR-ADMIN-USER@YOUR-SERVER-NAME:/tmp/
 ```
 
-The command is yours to choose because the destination is; the scheduling is not optional.
+Not from the laptop directly: its only key is the one that can read backups, and the server
+will not let it log in as you.
 
-**Think hard about where.** This is the one instruction in this guide that can hand the
-salon's data to the internet if you follow it carelessly. **The destination must be
-private** - a storage bucket or container with public
-access disabled, or a host you control reached over SSH. A bucket left world-readable is
-the ordinary way this goes wrong, and the file is unencrypted, so anyone who finds it has
-everything. If the destination is not one you would be comfortable posting the URL of,
-encrypt the dump before it leaves.
-
-**Then rehearse the restore, on a scratch database, before you need it:**
+On the server, put the private key from your password manager into a file only you can
+read, then restore into a scratch database:
 
 ```bash
 cd /srv/kalendhair
-
-# 0. the backup directory is 700 and owned by kalendhair, so read it as kalendhair.
-#    Every command below runs as that account, the gunzip included - see the note after.
-sudo -u kalendhair ls -l /srv/kalendhair-backups
+install -m 600 /dev/null ~/restore.key
+nano ~/restore.key    # paste the whole key, save
 
 # 1. a dump of zero bytes is the failure this drill exists to catch. Check before restoring.
-sudo -u kalendhair sh -c 'gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz | wc -c'
+age -d -i ~/restore.key /tmp/kalendhair-SOMEDATE.sql.gz.age | gunzip | wc -c
 
 # 2. restore it into a scratch database
 sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'CREATE DATABASE restore_drill;'
-sudo -u kalendhair sh -c 'gunzip -c /srv/kalendhair-backups/kalendhair-SOMEDATE.sql.gz' \
-  | sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill
+age -d -i ~/restore.key /tmp/kalendhair-SOMEDATE.sql.gz.age | gunzip \
+  | sudo -u kalendhair docker compose exec -T db psql -v ON_ERROR_STOP=1 -U salon -d restore_drill
 
-# 3. prove the data is really there
-sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c '\dt'
+# 3. prove the data is really there, and matches
 sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c 'SELECT count(*) FROM appointment;'
+sudo -u kalendhair docker compose exec -T db psql -U salon -d salon -c 'SELECT count(*) FROM appointment;'
 sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'DROP DATABASE restore_drill;'
+
+# 4. the key does not stay. The .save is what nano leaves if the connection dropped.
+rm -f ~/restore.key ~/restore.key.save /tmp/kalendhair-SOMEDATE.sql.gz.age
 ```
 
-**The `sudo -u kalendhair` on the `gunzip` is not redundant.** `/srv/kalendhair-backups` is
-`700` and owned by that account, which is what keeps the dumps private - so reading them as
-your own admin account fails with `Permission denied`, and the pipe then feeds an empty
-stream into `psql`, which reports success on zero input. That is the same shape of false
-confidence as an empty backup, arriving at the one moment you are trying to disprove it.
-Step 1 above is the cheap guard: a byte count of `0` means the backup is worthless no
-matter what the restore says.
+**`ON_ERROR_STOP=1` is the difference between a restore and a belief.** Without it `psql`
+carries on past a failing statement and exits `0` at the end. **And step 1 is the cheap
+guard:** a byte count of `0` means the backup is worthless no matter what the restore says.
 
-If the table list and the count look right, you have a backup. Write the date you did this
-in `WORK_LOG.md`, because the brief's condition is about a restore having happened, and
-nobody will remember whether it did.
+The two counts should differ by no more than what was booked since the dump was taken.
+
+Tested on a development machine, not a server: a real dump of 42 appointments, 6 staff, the
+core hours and the credential row went through `pg_dump`, `gzip` and `age` to a 4.5 KB file
+with no readable text in it, and came back out of a scratch database identical in every
+count.
+
+**The real thing, the day it is needed**, is the same pipe into `salon` instead of
+`restore_drill`, with the app stopped so nothing writes halfway:
+
+```bash
+sudo -u kalendhair docker compose stop app
+age -d -i ~/restore.key /tmp/kalendhair-SOMEDATE.sql.gz.age | gunzip \
+  | sudo -u kalendhair docker compose exec -T db psql -v ON_ERROR_STOP=1 -U salon -d salon
+sudo -u kalendhair docker compose start app
+rm -f ~/restore.key ~/restore.key.save /tmp/kalendhair-SOMEDATE.sql.gz.age
+```
+
+The key comes off the server again the moment the restore is done. **After a break-in, do
+not restore onto the machine that was broken into:** pasting the key there hands it to
+whoever is still in it, and deleting it afterwards does not take it back. Build a new server
+with steps 0 to 9 and restore there.
+
+The dump is taken with `--clean --if-exists`, so it replaces what is there rather than
+colliding with it. Restoring a dump over the database it came from, on a development
+machine, gave back the same 42 appointments with the same checksum over every id, name and
+note. On a new server, do steps 0 to 9 first; the migrations the server runs on start are
+harmless, because the dump then replaces every table.
 
 ---
 

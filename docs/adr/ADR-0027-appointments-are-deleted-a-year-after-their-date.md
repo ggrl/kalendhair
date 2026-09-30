@@ -48,7 +48,9 @@ is personal data about an employee.
   the next run.** Not refused, because nobody has been seen doing it.
 - **The promise covers the live database only.** Every backup is a full copy, so a deleted row
   lives on in every dump taken before it went. How long dumps are kept is decided with the
-  backup, not here.
+  backup, not here. *Decided 2026-10-01 in
+  [ADR-0028](ADR-0028-the-backup-is-encrypted-and-pulled-by-the-salon-laptop.md): seven on the
+  server and seven on the salon's laptop, so about a week longer.*
 - **Name suggestions lose nothing.** They were already limited to the same year.
 
 ## Alternatives rejected

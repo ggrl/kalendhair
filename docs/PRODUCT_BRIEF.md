@@ -257,6 +257,11 @@ the salon puts one real appointment in, there must be a backup that leaves the V
 schedule, and one restore that has actually been performed, not merely documented.** An
 untested backup is a belief, not a backup.
 
+**The shape was ruled on 2026-10-01 (ADR-0028):** the database only, encrypted on the server,
+pulled daily by the salon's laptop, seven kept on each side, checked by a person rather than an
+alarm. That settles what the backup is. It does not meet this condition - the restore has to
+happen on the real server.
+
 **Added 2026-09-30, by the owner: data older than a year is deleted automatically, and that too
 is built before deployment.** Decided and built the same day: appointments and blocks dated
 before the same calendar day a year ago, and nothing else - ADR-0027.
