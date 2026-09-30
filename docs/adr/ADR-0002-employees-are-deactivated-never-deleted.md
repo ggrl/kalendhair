@@ -12,9 +12,10 @@ otherwise are kept as written, because they record why it was decided that way f
 
 > **Amended 2026-09-30: nothing here is kept forever any more.**
 > [ADR-0027](ADR-0027-appointments-are-deleted-a-year-after-their-date.md) deletes every
-> appointment and block dated more than a year ago, a deactivated employee's included. It is the
-> "separate, deliberate mechanism" the last consequence below asks for. The employee row itself
-> is never deleted by it.
+> appointment and block dated more than a year ago, a deactivated employee's included, so a past
+> day stays readable for a year and reactivating somebody brings back only that year. The employee
+> row itself is never deleted by it. Deleting one person's data on request, which the last
+> consequence below names, still does not exist: this deletes by age.
 
 ## Context
 

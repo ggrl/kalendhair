@@ -1,5 +1,6 @@
 import type { Pool } from 'pg'
 import { todayIn } from '../src/calendar/salon-date.js'
+import { loggable } from './app.js'
 
 /**
  * ADR-0027: nothing on the board is kept for more than a year. Appointments and blocks dated
@@ -46,7 +47,7 @@ export async function startRetention(
   await run()
   return setInterval(() => {
     run().catch((error: unknown) => {
-      console.error('retention: delete failed, will try again in a day', error)
+      console.error('retention: delete failed, will try again in a day', loggable(error))
     })
   }, A_DAY_MS)
 }

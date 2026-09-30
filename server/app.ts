@@ -633,7 +633,7 @@ const jsonErrors: ErrorRequestHandler = (error, _request, response, _next) => {
  * `message`, `code` and `constraint` name the rule that was broken, which is what
  * debugging actually needs, and the stack says where. None of them carry column values.
  */
-function loggable(error: unknown): unknown {
+export function loggable(error: unknown): unknown {
   if (!(error instanceof Error)) return { error: String(error) }
 
   const database = error as Error & { code?: string; constraint?: string }

@@ -288,8 +288,9 @@ function StaffSection({
       <h2>Mitarbeiterinnen</h2>
       <p className="settings__hint">
         Die Reihenfolge ist die Reihenfolge der Spalten auf dem Kalender. Wer deaktiviert ist, erscheint dort
-        nicht mehr - und ihre Termine ebenfalls nicht, auch nicht an vergangenen Tagen. Nichts wird gelöscht:
-        beim Aktivieren ist alles wieder da.
+        nicht mehr - und ihre Termine ebenfalls nicht, auch nicht an vergangenen Tagen. Beim Deaktivieren wird
+        nichts gelöscht: beim Aktivieren ist alles aus dem letzten Jahr wieder da. Ältere Termine werden
+        automatisch gelöscht.
       </p>
 
       <ul className="settings__staff">

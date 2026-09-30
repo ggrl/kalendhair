@@ -12,10 +12,12 @@ automatically, before the board is deployed, and asked for the simplest mechanis
 
 ## Decision
 
-**The live database never holds an appointment or a block dated before the same calendar day one
-year ago.** Today being 2026-09-30, 2025-09-29 goes and 2025-09-30 stays. On 29 February the line
-is 28 February of the year before. "Today" is the salon's date, from `todayIn`, not the server's
-clock, as everywhere else (ADR-0007). Future dates are never touched.
+**The live database holds no appointment or block dated before the same calendar day one year
+ago, give or take one day.** The run is every 24 hours from startup, not at midnight, so a row can
+outlive its line by up to a day. Today being 2026-09-30, 2025-09-29 goes and 2025-09-30 stays.
+On 29 February the line is 28 February of the year before. "Today" is the salon's date, from
+`todayIn`, not the server's timezone, as everywhere else (ADR-0007). With the clock right, no
+future date is ever touched.
 
 `server/retention.ts` runs one `DELETE` on the `appointment` table, drawing the line with the same
 `interval '1 year'` that `server/suggestions.ts` already uses, so the suggestion window and the
@@ -32,7 +34,16 @@ is personal data about an employee.
   a day nobody booked. Nobody has asked to look that far back.
 - **ADR-0002's "history stays readable" now holds for a year.** A leaver whose appointments are
   all older than that has none left, which makes them deletable in the settings screen, since
-  that screen deletes only somebody who never held an appointment.
+  that screen deletes anybody who holds no appointment right now.
+- **Reactivating a leaver brings back only their last year.** The settings screen's hint said
+  "Nichts wird gelöscht: beim Aktivieren ist alles wieder da" and now says the last year comes
+  back and older appointments are deleted - changed on the owner's call, the one screen this
+  touches. `migrations/001_init.sql` says
+  "reactivating brings all of it back" in the comment on `active`. That comment is now wrong and
+  stays, because an applied migration is not edited.
+- **"Today" is only as right as the host clock.** A clock years ahead would delete every row,
+  future ones included. Not guarded, because nobody has seen it; the daily log line with its
+  count is where it would show.
 - **An appointment deliberately booked on a date older than a year is accepted and disappears on
   the next run.** Not refused, because nobody has been seen doing it.
 - **The promise covers the live database only.** Every backup is a full copy, so a deleted row
