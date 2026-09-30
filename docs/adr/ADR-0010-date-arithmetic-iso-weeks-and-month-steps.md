@@ -72,7 +72,8 @@ behaviour depend on invisible history, and refusing to step is absurd.
   above, not only against a comfortable mid-year date. 2026-12-28 to 2027-01-04 is the
   range that matters, and it is a fixed set of dates, so the test needs no clever
   generation.
-- Leap years are part of the month-step tests, not an afterthought.
+- Leap years are part of the month-step tests, not an afterthought. Those tests were deleted
+  with `addMonths` on 2026-09-30.
 - The date in the URL, decided in the brief, is a plain calendar date. ISO week-years
   never appear in it, so no navigation state depends on this arithmetic being right -
   only the display and the step buttons do.
