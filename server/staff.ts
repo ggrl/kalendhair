@@ -142,10 +142,10 @@ export async function moveStaff(pool: Pool, id: string, direction: 'up' | 'down'
 }
 
 /**
- * Removal, for somebody who was never really here.
+ * Removal, for somebody who holds no appointment right now.
  *
  * ADR-0018's exception to ADR-0002, and the database is what enforces it: `appointment.employee_id`
- * is `NOT NULL REFERENCES employee (id)`, so one appointment anywhere in history refuses this. The
+ * is `NOT NULL REFERENCES employee (id)`, so one appointment still in the table refuses this. The
  * job here is to say that in a sentence rather than to check it first and hope nothing changes in
  * between - a check would be a race, and the constraint is not.
  */

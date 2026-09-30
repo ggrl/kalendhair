@@ -258,8 +258,8 @@ schedule, and one restore that has actually been performed, not merely documente
 untested backup is a belief, not a backup.
 
 **Added 2026-09-30, by the owner: data older than a year is deleted automatically, and that too
-is built before deployment.** What counts as the data, and what a year is measured from, is not
-decided yet.
+is built before deployment.** Decided and built the same day: appointments and blocks dated
+before the same calendar day a year ago, and nothing else - ADR-0027.
 
 ## Permissions
 

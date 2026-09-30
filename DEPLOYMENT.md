@@ -427,7 +427,7 @@ than at 19:00 on a Friday.
 sudo -u kalendhair docker compose logs -f app
 ```
 
-**Five things to confirm**, and this output is exactly what a correct first run looks like:
+**Six things to confirm**, and this output is exactly what a correct first run looks like:
 
 ```
 migrate: applied 001_init.sql
@@ -436,6 +436,7 @@ migrate: applied 003_block_reason.sql
 migrate: applied 004_salon_credential.sql
 migrate: applied 005_core_hours.sql
 salon password and PIN seeded from the environment
+retention: deleted 0 appointment(s) and block(s) older than a year
 salon calendar api on http://0.0.0.0:3000
 salon timezone: Europe/Berlin
 session cookie: Secure - browsers will send it over HTTPS only
@@ -449,6 +450,8 @@ WARNING: if nothing in front of this is a proxy, a caller can pick their own add
 - **`seeded from the environment`** on a first run only. On later runs it says
   `SALON_PASSWORD and SALON_PIN are ignored` instead, which is ADR-0017 working correctly
   and not a fault.
+- **`retention: deleted 0`** on every start, and again once a day while it runs. Zero is right
+  until the board has appointments more than a year old. A count and never a name: ADR-0027.
 - **`on http://0.0.0.0:3000`.** Inside a container that is right, and is not a leak.
   `0.0.0.0` here means "every interface *in this container*"; what limits reach is the
   compose file publishing the port to `127.0.0.1` on the host.

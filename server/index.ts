@@ -3,6 +3,7 @@ import { createApp } from './app.js'
 import { loadConfig } from './config.js'
 import { hashSecret, seedCredentials } from './credentials.js'
 import { migrate } from './migrate.js'
+import { startRetention } from './retention.js'
 
 const config = loadConfig(process.env)
 const pool = new Pool({ connectionString: config.databaseUrl })
@@ -34,6 +35,11 @@ if (await seedCredentials(pool, config.salonPassword, config.salonPin)) {
 } else {
   console.log('salon password and PIN already set - SALON_PASSWORD and SALON_PIN are ignored')
 }
+
+// ADR-0027: appointments and blocks older than a year are deleted, now and then daily.
+await startRetention(pool, config.salonTimeZone, (message) => {
+  console.log(message)
+})
 
 const app = createApp(pool, {
   salonTimeZone: config.salonTimeZone,
