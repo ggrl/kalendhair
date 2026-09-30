@@ -13,7 +13,8 @@ Two in particular, both settled here so nobody re-derives them from memory.
 
 > **Amended 2026-09-30: month steps will not be built,** on the owner's call. The week-number
 > half of this ADR stands. The month-step half below is kept as the record of what was settled,
-> and governs nothing until somebody decides to build month steps after all.
+> and governs nothing until somebody decides to build month steps after all. `addMonths`, which
+> nothing on screen ever called, was deleted with its tests the same day.
 
 ## Decision
 

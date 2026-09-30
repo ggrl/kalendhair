@@ -192,7 +192,7 @@ re-decide.
 | [0007](docs/adr/ADR-0007-appointments-are-stored-as-salon-local-wall-clock-time.md) | Times are salon-local wall clock, never absolute instants |
 | [0008](docs/adr/ADR-0008-appointments-and-blocks-share-one-table.md) | Appointments and blocks share one table |
 | [0009](docs/adr/ADR-0009-appointment-colour-is-assigned-per-day.md) | Colour is assigned per day, one per customer |
-| [0010](docs/adr/ADR-0010-date-arithmetic-iso-weeks-and-month-steps.md) | ISO week numbers and month-step arithmetic |
+| [0010](docs/adr/ADR-0010-date-arithmetic-iso-weeks-and-month-steps.md) | ISO week numbers and month-step arithmetic - month steps dropped 2026-09-30 |
 | [0011](docs/adr/ADR-0011-the-screen-is-german-the-code-is-english.md) | The screen is German, the code is English |
 | [0012](docs/adr/ADR-0012-a-deactivated-employee-leaves-the-board-entirely.md) | A deactivated employee leaves the board entirely, appointments included |
 | [0013](docs/adr/ADR-0013-a-drag-is-the-edit-and-it-commits-on-release.md) | A drag is the edit, and it commits on release - with no undo |

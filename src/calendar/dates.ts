@@ -41,27 +41,6 @@ export function addWeeks(date: string, weeks: number): string | null {
   return addDays(date, weeks * 7)
 }
 
-/**
- * A month step keeps the day of the month, clamped to the last day of a shorter month.
- *
- * **Not reversible, and that is accepted rather than solved.** Forward from 31 January
- * lands on 28 February; back from there lands on 28 January. Remembering the original day
- * across clicks would make the button's behaviour depend on invisible history, which is
- * worse than a step that does not perfectly undo.
- */
-export function addMonths(date: string, months: number): string | null {
-  const start = toUtc(date)
-  const targetMonth = start.getUTCMonth() + months
-  const year = start.getUTCFullYear() + Math.floor(targetMonth / 12)
-  const month = ((targetMonth % 12) + 12) % 12
-
-  // Day 0 of the following month is the last day of this one.
-  const lastDayOfTarget = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
-  const day = Math.min(start.getUTCDate(), lastDayOfTarget)
-
-  return format(new Date(Date.UTC(year, month, day)))
-}
-
 export interface IsoWeek {
   week: number
   /**
