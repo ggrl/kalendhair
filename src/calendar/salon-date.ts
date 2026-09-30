@@ -22,9 +22,9 @@ export function isSalonDate(value: string): boolean {
   //
   // Two-digit years are worse, because they fail silently rather than loudly:
   // `Date.UTC(50, 0, 1)` means 1950, not year 50, so `isoWeek('0050-03-15')` returned
-  // `KW -99126` and `addMonths('0050-01-31', 1)` returned `1950-02-28`. Rather than patch
-  // each function, the boundary refuses the whole family. Nothing books an appointment in
-  // the first millennium, and everything downstream may now assume a four-digit year.
+  // `KW -99126`. Rather than patch each function, the boundary refuses the whole family.
+  // Nothing books an appointment in the first millennium, and everything downstream may now
+  // assume a four-digit year.
   if (Number(year) < 1000) return false
 
   const asUtc = new Date(`${year}-${month}-${day}T00:00:00Z`)

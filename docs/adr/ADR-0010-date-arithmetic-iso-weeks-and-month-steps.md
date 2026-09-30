@@ -11,6 +11,11 @@ date arithmetic that looks trivial and has a wrong answer that passes casual tes
 
 Two in particular, both settled here so nobody re-derives them from memory.
 
+> **Amended 2026-09-30: month steps will not be built,** on the owner's call. The week-number
+> half of this ADR stands. The month-step half below is kept as the record of what was settled,
+> and governs nothing until somebody decides to build month steps after all. `addMonths`, which
+> nothing on screen ever called, was deleted with its tests the same day.
+
 ## Decision
 
 ### The week number is ISO 8601, and its year is not the calendar year
@@ -67,7 +72,8 @@ behaviour depend on invisible history, and refusing to step is absurd.
   above, not only against a comfortable mid-year date. 2026-12-28 to 2027-01-04 is the
   range that matters, and it is a fixed set of dates, so the test needs no clever
   generation.
-- Leap years are part of the month-step tests, not an afterthought.
+- Leap years are part of the month-step tests, not an afterthought. Those tests were deleted
+  with `addMonths` on 2026-09-30.
 - The date in the URL, decided in the brief, is a plain calendar date. ISO week-years
   never appear in it, so no navigation state depends on this arithmetic being right -
   only the display and the step buttons do.

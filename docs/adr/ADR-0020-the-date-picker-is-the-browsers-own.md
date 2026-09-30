@@ -63,6 +63,8 @@ so a two-digit year fails silently rather than loudly, and `isoWeek('0050-03-15'
   for a word and the control says what it is by its shape.
 - Month steps and arrow keys remain unbuilt and remain on the brief's list. This does not replace
   them: they keep the weekday, which is what makes "same slot in four weeks" four clicks.
+  *Amended 2026-09-30: the arrow keys were built on 2026-08-14, and month steps were dropped and
+  will not be built. See ADR-0010.*
 
 ## Alternatives rejected
 
