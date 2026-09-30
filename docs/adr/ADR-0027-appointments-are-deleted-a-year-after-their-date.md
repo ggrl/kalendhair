@@ -13,8 +13,8 @@ automatically, before the board is deployed, and asked for the simplest mechanis
 ## Decision
 
 **The live database holds no appointment or block dated before the same calendar day one year
-ago, give or take one day.** The run is every 24 hours from startup, not at midnight, so a row can
-outlive its line by up to a day. Today being 2026-09-30, 2025-09-29 goes and 2025-09-30 stays.
+ago, a day late at most.** The run is every 24 hours from startup, not at midnight, so a row can
+outlive its line by up to a day, and by another day for each run that fails. Never early. Today being 2026-09-30, 2025-09-29 goes and 2025-09-30 stays.
 On 29 February the line is 28 February of the year before. "Today" is the salon's date, from
 `todayIn`, not the server's timezone, as everywhere else (ADR-0007). With the clock right, no
 future date is ever touched.

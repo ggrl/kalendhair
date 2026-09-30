@@ -25,6 +25,10 @@ Nothing here is built. Credentials are ADR-0017; this is the rest of the screen.
 **Staff: add, rename, reorder, deactivate, reactivate, and delete only when they have never held
 an entry.**
 
+> **Amended 2026-09-30:** "never held" now means "holds none right now", which it always meant in
+> code. [ADR-0027](ADR-0027-appointments-are-deleted-a-year-after-their-date.md) deletes entries a
+> year after their date, so a leaver becomes deletable once their last entry is a year old.
+
 **That delete is a narrow exception to ADR-0002, and the database already enforces it.**
 `appointment.employee_id` is `NOT NULL REFERENCES employee (id)`, so deleting anybody with a
 single appointment fails at the constraint. The screen's job is to turn that into a German

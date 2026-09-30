@@ -55,6 +55,10 @@ Reactivating brings the column and every one of their entries back, untouched. D
 still reversible, because nothing was deleted - which is the half of ADR-0002 that stands
 unchanged.
 
+> **Amended 2026-09-30:** reactivating brings back only the last year.
+> [ADR-0027](ADR-0027-appointments-are-deleted-a-year-after-their-date.md) deletes every entry
+> dated more than a year ago, a deactivated employee's included.
+
 ## Consequences
 
 - **An appointment can exist and appear nowhere.** This is the cost, it was named before the
