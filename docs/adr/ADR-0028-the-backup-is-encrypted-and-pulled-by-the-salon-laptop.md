@@ -24,10 +24,14 @@ documentation on 2026-10-01.
   directory: no shell, no writing, no forwarding. The server holds no credential for where
   the backups end up.
 - **The laptop trusts the server's names as little as it can.** It never replaces a copy it
-  already has, and it keeps what arrived in the last seven days by its own clock. A server that
-  has been taken over can offer junk, but cannot overwrite a copy on the laptop or push one out:
-  each stays seven days after it arrived. Both reviews on 2026-10-01 found the first version
-  kept the seven newest *names*, which let such a server replace every good copy in one run.
+  already has. A copy goes only once seven newer ones have arrived *and* it arrived more than
+  seven days ago, by the laptop's own clock. So a server that stops sending leaves the last
+  seven for good, and junk sent all at once cannot displace a good copy inside a week.
+  - The first version kept the seven newest *names*; both reviews found a server taken over
+    could then replace every good copy in one run.
+  - The second kept only what arrived in the last seven days; the next reviews found a server
+    that merely stopped sending would then empty the laptop a week later - the exact failure
+    this ADR rejects on the server.
 - **The server keeps its newest seven.** Each side prunes only after its own step succeeded,
   so a week of failures leaves what was there instead of nothing.
 - **Nothing alerts.** A person looks at the laptop's folder regularly. The owner chose that
@@ -40,9 +44,16 @@ documentation on 2026-10-01.
   is gone everywhere - provided the laptop's copies are not themselves copied elsewhere, and
   the laptop has had a good run since. A `.part` from a failed night goes after the next good
   one, because a cut-off dump still holds real rows.
-- **A server taken over is still bad news, just not a silent wipe.** It can stop sending good
-  dumps and send junk instead. What it cannot do is undo what the laptop already holds, so the
-  week of copies there is what a restore after a break-in comes from.
+- **A patient attacker on the server still wins, in about a week, silently.** One plausible
+  new file a night, which even decrypts - the server holds the public key - displaces every
+  good copy on the laptop, and nothing a look at the folder shows gives it away. Only a
+  restore does. What the design does stop is the fast versions: an overwrite, a burst of
+  junk, and simply stopping. Closing the slow one needs somebody to decrypt a copy regularly,
+  which is the restore drill, or a second copy the server never reaches.
+- **After a break-in, restore onto a new server,** never the one broken into: the private
+  key pasted there is the attacker's.
+- **A server taken over can also fill the laptop's disk** by offering huge files. That stops
+  the backups loudly rather than deleting any.
 - **The laptop is the only off-server copy.** Lost or broken, it takes them with it, but
   reveals nothing: every file is encrypted.
 - **A failure is only as visible as the next look.** Seven per side means one noticed within

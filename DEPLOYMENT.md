@@ -813,7 +813,7 @@ notepad "$HOME\kalendhair-backups\pull.ps1"
 Paste this, and change `YOUR-SERVER-NAME` in the fourth line:
 
 ```powershell
-# kalendhair: fetch the encrypted backups from the server and keep the newest seven.
+# kalendhair: fetch the encrypted backups from the server and keep a week of them.
 # Run daily by Task Scheduler. Every run writes one line to pull.log, success or not.
 param(
     [string]$Server = 'kalendhair-pull@YOUR-SERVER-NAME',
@@ -846,14 +846,17 @@ try {
 
     # Only names this laptop does not have yet. A copy that is here stays exactly
     # as it arrived, whatever the server offers under the same name later.
-    $new = @($fetched | Where-Object { -not (Test-Path (Join-Path $Folder $_.Name)) })
+    $new = @($fetched | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Folder $_.Name)) })
     $new | Move-Item -Destination $Folder
     Remove-Item $incoming -Recurse -Force
 
-    # Keep what arrived in the last seven days, by this laptop's clock - not the
-    # newest names, because the server chooses the names. Reached only after a
-    # successful download, so a week without one still leaves what was there.
+    # A copy goes only once seven newer ones have arrived AND it arrived more than
+    # seven days ago, by this laptop's clock. Not by name: the server chooses the
+    # names. A server that stops sending new dumps therefore leaves the last seven
+    # here for good, and junk it sends cannot push a good copy out inside a week.
     Get-ChildItem -Path $Folder -Filter 'kalendhair-*.age' |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -Skip 7 |
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } |
         Remove-Item
 
@@ -875,22 +878,33 @@ Get-Content "$HOME\kalendhair-backups\pull.log" -Tail 1
 It should say `ok, 7 new, newest kalendhair-...` - or fewer new, once it has run before - and
 the folder should hold the backups.
 
-**It trusts the server as little as it can.** It never replaces a copy it already has, and it
-keeps what *arrived* in the last seven days by the laptop's own clock, rather than the seven
-newest names - because the server chooses the names. A server that has been taken over can
-offer junk, but it cannot overwrite a copy here or push one out: every good copy stays seven
-days after it arrived, and a look at the folder inside that week finds it.
+**It trusts the server as little as it can.** It never replaces a copy it already has. And a
+copy goes only once seven newer ones have arrived *and* it arrived more than seven days ago,
+by the laptop's own clock - not by name, because the server chooses the names. So a server
+that stops sending new dumps leaves the last seven here for good, and junk it sends all at
+once cannot push a good copy out inside a week.
+
+**What it cannot stop, said plainly:** a server that has been taken over, sending one
+plausible new file a night, replaces every good copy here within about a week. The files
+would even decrypt: the server holds the public key, so it can encrypt fake dumps. Nothing a
+look at the folder shows gives that away - the names and the log look healthy. Only a
+restore does, which is one more reason 10f is not a one-off.
 
 **What this script was measured to do**, in PowerShell 7 on Linux against the test server,
-not on Windows: a first run fetched all seven, byte for byte the server's, stamped with the
-time they arrived. With the server's seven overwritten by junk under the same names, the next
-run took nothing and the copies here stayed byte for byte the same. With seven junk files
-named for 2099 added on the server, the next run added them and kept all seven real ones.
-Copies made to look eight days old survived a failed run and went after the next good one.
-With the server unreachable it exited `1`, logged `FAILED`, and deleted nothing. A file of
-your own in the folder is left alone. Twice, the emulated PowerShell used for the test
-crashed after writing its `ok` line; that is the emulator, and the same reason as below for
-running it by hand once on the laptop. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
+not on Windows, with seven distinct encrypted files: a first run fetched all seven, stamped
+with the time they arrived. With the laptop's copies made to look ten days old and nothing
+new on the server, the next run kept all seven. With the server's seven overwritten by junk
+under the same names, the next run took nothing and the copies here stayed byte for byte the
+same. Seven junk files named for 2099 were taken in and the real seven kept beside them;
+once those had arrived more than seven days before, the next good run let them go - the
+limit above - while a failed run in between deleted nothing. A name containing `[` arrived
+once and was recognised on the next run. With the server unreachable it exited `1`, logged
+`FAILED`, and deleted nothing. A file of your own in the folder is left alone.
+
+**One thing the test did not explain:** several runs, including ones that added nothing,
+ended with exit code `133` from the emulated PowerShell after writing a correct `ok` line.
+Whether that is the emulator or something the script does was not settled. On Windows,
+step 6 below and Task Scheduler's "Last Run Result" are where it would show. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
 which is why running it by hand once, above, is not optional.
 
 **5. Schedule it.** Daily at noon, and at every logon, so a laptop that was switched off at
@@ -948,9 +962,9 @@ chosen, by decision. So somebody looks, regularly, at the laptop's
   `sudo tail /var/log/kalendhair-backup.log` say whether the server's side did. A `.part`
   file is one failed night.
 
-With seven kept on each side, a failure noticed within a week has lost nothing that existed.
-The laptop keeps seven days of arrivals, which is usually seven or eight files. The count is
-not the thing to watch. The dates are.
+With a week kept on each side, a failure noticed within that week has lost nothing that
+existed. The laptop usually holds seven or eight files; the count is not the thing to watch,
+the dates are.
 
 ### 10f. Rehearse the restore, from a copy that went through the laptop
 
@@ -1014,8 +1028,10 @@ sudo -u kalendhair docker compose start app
 rm -f ~/restore.key ~/restore.key.save /tmp/kalendhair-SOMEDATE.sql.gz.age
 ```
 
-The key comes off the server again the moment the restore is done. After a break-in above
-all, this is the one machine it must not stay on.
+The key comes off the server again the moment the restore is done. **After a break-in, do
+not restore onto the machine that was broken into:** pasting the key there hands it to
+whoever is still in it, and deleting it afterwards does not take it back. Build a new server
+with steps 0 to 9 and restore there.
 
 The dump is taken with `--clean --if-exists`, so it replaces what is there rather than
 colliding with it. Restoring a dump over the database it came from, on a development
