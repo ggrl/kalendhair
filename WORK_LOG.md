@@ -2,6 +2,135 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-09-30, fifteenth session - the plan changed, and a year of retention
+
+The owner re-cut the plan before deployment: month steps are dropped, and two things now gate it -
+a backup with one real restore, and appointments deleted a year after their date. The second is
+built. Four pull requests merged.
+
+### Where things stand
+
+- **`main` is at `1977436`**, working tree clean. No branches except `main` and this log's branch.
+- `npm run verify` green - **114 unit** (119 minus the five `addMonths` tests). `npm run test:db`
+  green locally - **153** (147 plus six retention tests). Browser suite green in CI on #50, #51 and
+  #52; locally only `settings.browser.test.ts` was run (17 passed).
+- **Twenty-seven ADRs.** ADR-0027 is new. ADR-0002, ADR-0010, ADR-0012, ADR-0018 and ADR-0020
+  gained dated amendments.
+- The blocker on real customer data has half moved: retention is built, the backup is not.
+
+### What shipped
+
+**PR #49** - the fourteenth session's log and the measured server footprint. Both review passes
+SHIP; see the logic pass's notes below.
+
+**PR #50 - the plan.** Month steps will not be built, on the owner's call: README's table row is
+gone, the brief and ADR-0010 carry dated notes, ADR-0020's line that still promised them is
+amended, and `addMonths` in `src/calendar/dates.ts` - which nothing on screen ever called - is
+deleted with its tests. Two new README rows: backups with one restore performed, and yearly
+deletion.
+
+**PR #51 - five dependencies.** CI's `npm audit --audit-level=high` step went red on 2026-09-30 for
+advisories published after the last merge, and `main` was red with it. `qs` 6.16.0 (runtime, via
+Express), `brace-expansion`, `js-yaml`, `vitest` and `@vitest/*` 4.1.11. Lockfile only, every bump
+inside the existing ranges. The logic pass showed `qs` never touches this app's requests: Express 5
+parses queries with `node:querystring`, and the only body parser is `express.json`.
+
+**PR #52 - retention, ADR-0027.** Interviewed with `/grill-me` first. `server/retention.ts` runs
+`DELETE FROM appointment WHERE (starts_at)::date < ($1::date - interval '1 year')::date` with `$1`
+= `todayIn(salonTimeZone)`, from `startRetention` in `server/index.ts`: once at startup (a failure
+stops the server, like a failed migration), then every 24h (a failure is logged through
+`loggable()` and retried). Blocks go by the same rule. Employees, core hours and everything else
+are untouched. Logs a count, never a name. The settings hint changed on the owner's call: it said
+"Nichts wird gelöscht: beim Aktivieren ist alles wieder da", which retention made false.
+
+Rulings from the interview, all in ADR-0027: the server runs it, not `pg_cron` and not host cron
+(ADR-0006); a day older than a year shows an empty board with no notice; a booking deliberately
+made on a date older than a year is accepted and vanishes next run; **backups are outside the
+promise** - a deleted row lives on in every dump taken before it went.
+
+### What was verified, and how
+
+- **Postgres's own arithmetic, not assumed.** The logic pass ran it on the local 17.10:
+  `('2026-09-30'::date - interval '1 year')::date` = 2025-09-30, `2028-02-29` gives 2027-02-28, the
+  result is `timestamp without time zone` so session TimeZone cannot move it, and EXPLAIN uses
+  the `appointment_day` index.
+- **Six db tests**: 2025-09-29 19:45 deleted and 2025-09-30 06:00 kept on 2026-09-30; future kept;
+  blocks; 29 February; employees survive, including a leaver with nothing left; `startRetention`
+  deletes on start against the real clock and logs `deleted 1`.
+- **Eight mutations against the final code, all caught**: `<=`, `1 year 1 day`, `11 months`,
+  `365 days`, no run on start, blocks skipped, wrong today, delete nothing.
+- **The built server was started** against the local development database (42 rows, none older
+  than a year, counted first) and logged `retention: deleted 0 appointment(s) and block(s) older
+  than a year` in the order `DEPLOYMENT.md` now shows.
+- Every PR had both passes; every review-fix commit on #52 had its own pass except the last.
+
+### What was NOT verified, and why not
+
+- **The new settings hint has never been looked at on screen.** No test asserts its text; the
+  settings browser suite passing proves the screen still works, not what the sentence says.
+- **The last commit on #52 had no review pass of its own.** `2371363`, text only - ADR-0012,
+  ADR-0018, ADR-0027 wording and the `removeStaff` comment - and reachable only through PR #52
+  since the squash. Merged on the owner's instruction.
+- **Retention has never run anywhere but this laptop.** Not in a container, not on a VPS, not for
+  more than a few seconds, so the 24h timer has never fired for real.
+- **`pg_cron` was never checked for in `postgres:17-alpine`.** ADR-0027 rejects it on other
+  grounds and says so rather than claiming it is missing.
+- **No salon time zone where the date turns during a run was tested.** `todayIn` is computed per
+  run, so it should cope; nothing pins it.
+
+### Open findings, recorded so they are not rediscovered as new
+
+1. **`server/index.ts`'s `pool.on('error')` logs the raw error**, the same pattern `loggable()`
+   exists to prevent. Pre-existing, and an idle-connection error carries no row data in any case
+   anybody named. Not fixed.
+2. **"aus dem letzten Jahr"** in the settings hint can be read as "last calendar year". Owner's
+   wording; "aus den letzten zwölf Monaten" is the precise version if it ever matters.
+3. **A host clock years ahead would delete every row, future ones included.** Unguarded by
+   decision (ADR-0027); the daily count in the log is where it would show.
+4. **`migrations/001_init.sql:23` still says "reactivating brings all of it back".** Wrong now, and
+   left, because an applied migration is not edited. ADR-0027 says so.
+5. From PR #49's logic pass, never fixed: the fourteenth entry cites `EntryModal.tsx:165` where
+   `role="dialog"` is at 169-170; `db86ac0` and `3ffab63` exist only inside PRs #46 and #48, not on
+   `main`; "NO-SHIP twice, right all four times" means four findings across two passes.
+6. Still open from the fourteenth session: the `EntryModal` focus trap; `DEPLOYMENT.md`'s nginx
+   paragraph never names `$proxy_add_x_forwarded_for`; nothing checks `TRUST_PROXY` took effect.
+   **The fourteenth entry's "Month steps" next step is void** - dropped this session.
+
+### Unfinished, and the next step
+
+1. **The backup, and one restore actually performed.** The last gate on real data.
+   `DEPLOYMENT.md` Step 10 has a recipe nobody has run, and it never deletes old dumps - so **how
+   long dumps are kept is the decision that sets how long a deleted appointment really survives**.
+   `/grill-me` it first.
+2. **Deploy it, behind Caddy.** Top of the list for six sessions now.
+3. The `EntryModal` focus trap.
+4. Fold the measured sizing numbers into `DEPLOYMENT.md`, replacing "considerably more memory".
+
+### What surprised me
+
+**CI checks more than `npm run verify` does.** The audit step lives only in
+`.github/workflows/ci.yml`, so a green local verify said nothing about the red that stopped #50 -
+and the red was not the branch's at all, but advisories published overnight. A red check you did
+not cause still has to be understood before it is waved through; this one hid a runtime package.
+
+**`npm audit fix` crashes in npm 10.9.8** resolving vitest's peer set (`Cannot read properties of
+null (reading 'edgesOut')` in arborist's `#loadPeerSet`). `npx npm@11 update vitest` worked, and
+the lockfile it wrote installs cleanly with `npm ci` under npm 10. Worth knowing the next time
+audit goes red.
+
+**A mutation can survive for a reason that improves the code.** `<` -> `<=` passed against the
+first version, which compared timestamps, because nothing is ever booked at midnight. Comparing
+dates made the mutation fail, matched what the rule actually says, and let the delete use an index.
+And a second mutation "survived" only because the same text now also sat in a comment - the
+harness edited the comment. Reading why a mutation lives is worth as much as running it.
+
+**I stated something false in the interview.** I told the owner name suggestions would shrink;
+`server/suggestions.ts` was already limited to the same year. Found by reading the file while
+building, after the owner had "accepted" a cost that did not exist. The file was one grep away
+before the question was asked.
+
+Docker Desktop was started this session and left running, with the `db` container up.
+
 ## 2026-09-07, fourteenth session - the salon's two styling asks, and a blink
 
 The salon saw the board, wants to use it, and asked for two changes. Both shipped, plus a
