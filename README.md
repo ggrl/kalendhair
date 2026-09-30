@@ -39,7 +39,7 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
 | The salon's core hours, editable from that screen instead of hardcoded | done |
 | Backups that leave the server on a schedule, and one restore actually performed | not started |
-| Data older than a year deleted automatically | not started |
+| Appointments and blocks older than a year deleted automatically | done |
 
 The screen is German. Code, comments and these documents are English - they are for whoever
 maintains it, not for the salon.
@@ -50,8 +50,8 @@ are no backups, and `docs/PRODUCT_BRIEF.md` makes one tested restore the conditi
 real data in. The server still binds to loopback and there is still no TLS, so stage one runs
 on fake names only.
 
-Since 2026-09-30 there is a second condition before deployment: data older than a year is deleted
-automatically. Neither is built.
+Since 2026-09-30 there was a second condition before deployment: appointments and blocks older
+than a year are deleted automatically. That one is built - ADR-0027. The backup is not.
 
 ## Requirements
 
@@ -176,7 +176,7 @@ suite, because the files they were in had no tests at all.
 
 ## The decision log
 
-Twenty-six decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
+Twenty-seven decisions are settled and written down in [`docs/adr/`](docs/adr/), each with the
 tempting wrong answer recorded next to it. Read the one that governs what you are about to
 touch, and if it needs to change, write a new one that supersedes it. Never silently
 re-decide.
@@ -209,6 +209,7 @@ re-decide.
 | [0024](docs/adr/ADR-0024-the-repository-is-published-with-its-history-and-its-workflow-files.md) | The repository is published as kalendhair, keeping its history and its workflow files |
 | [0025](docs/adr/ADR-0025-the-reverse-proxy-is-caddy-and-it-stays-on-the-host.md) | The reverse proxy is Caddy, and it stays on the host rather than joining the compose file |
 | [0026](docs/adr/ADR-0026-the-grid-rules-the-hour-and-shades-the-working-rows.md) | Every full hour is ruled 2px on a whole-pixel pitch, and the working rows alternate |
+| [0027](docs/adr/ADR-0027-appointments-are-deleted-a-year-after-their-date.md) | Appointments and blocks are deleted a year after their date, by the server, daily |
 
 Two of them are worth knowing before reading any code, because they explain why it looks
 the way it does:
