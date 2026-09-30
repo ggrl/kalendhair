@@ -826,29 +826,36 @@ $incoming = Join-Path $Folder 'incoming'
 $batch    = Join-Path $Folder 'pull.sftp'
 
 try {
-    # Download into a folder of its own and only then move into place, so a
-    # transfer that dies halfway never replaces a good copy.
-    if (Test-Path $incoming) { Remove-Item $incoming -Recurse -Force }
-    New-Item -ItemType Directory -Path $incoming | Out-Null
-    Set-Content -Path $batch -Value 'get *.age'
-
-    Push-Location $incoming
-    try {
-        # BatchMode: fail instead of waiting for a password nobody will type.
-        & sftp -b $batch -i $Key -o BatchMode=yes $Server
-        if ($LASTEXITCODE -ne 0) { throw "sftp exited with $LASTEXITCODE" }
-    } finally {
-        Pop-Location
-    }
-
-    $fetched = @(Get-ChildItem -Path $incoming -Filter 'kalendhair-*.age')
-    if ($fetched.Count -eq 0) { throw 'the server offered no backups' }
+    # First the list, and only names of the exact shape the server script writes.
+    # The server chooses the names, and a name is also where sftp writes on this
+    # laptop - so nothing else, no path, no backslash, no wildcard, reaches a get.
+    Set-Content -Path $batch -Value 'ls -1'
+    # BatchMode: fail instead of waiting for a password nobody will type.
+    $listing = & sftp -q -b $batch -i $Key -o BatchMode=yes $Server
+    if ($LASTEXITCODE -ne 0) { throw "sftp exited with $LASTEXITCODE while listing" }
+    $offered = @($listing | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -cmatch '^kalendhair-[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}\.sql\.gz\.age$' })
+    if ($offered.Count -eq 0) { throw 'the server offered no backups' }
 
     # Only names this laptop does not have yet. A copy that is here stays exactly
     # as it arrived, whatever the server offers under the same name later.
-    $new = @($fetched | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Folder $_.Name)) })
-    $new | Move-Item -Destination $Folder
-    Remove-Item $incoming -Recurse -Force
+    $new = @($offered | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Folder $_)) })
+    if ($new.Count -gt 0) {
+        # Into a folder of its own first, so a transfer that dies halfway never
+        # sits beside the good copies under a good copy's name.
+        if (Test-Path $incoming) { Remove-Item $incoming -Recurse -Force }
+        New-Item -ItemType Directory -Path $incoming | Out-Null
+        Set-Content -Path $batch -Value ($new | ForEach-Object { "get $_ $_" })
+        Push-Location $incoming
+        try {
+            & sftp -q -b $batch -i $Key -o BatchMode=yes $Server
+            if ($LASTEXITCODE -ne 0) { throw "sftp exited with $LASTEXITCODE while downloading" }
+        } finally {
+            Pop-Location
+        }
+        Get-ChildItem -Path $incoming | Move-Item -Destination $Folder
+        Remove-Item $incoming -Recurse -Force
+    }
 
     # A copy goes only once seven newer ones have arrived AND it arrived more than
     # seven days ago, by this laptop's clock. Not by name: the server chooses the
@@ -860,7 +867,7 @@ try {
         Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } |
         Remove-Item
 
-    $newest = ($fetched | Sort-Object Name | Select-Object -Last 1).Name
+    $newest = $offered | Sort-Object | Select-Object -Last 1
     Add-Content -Path $log -Value "$(Get-Date -Format s) ok, $($new.Count) new, newest $newest"
 } catch {
     Add-Content -Path $log -Value "$(Get-Date -Format s) FAILED: $_"
@@ -878,31 +885,42 @@ Get-Content "$HOME\kalendhair-backups\pull.log" -Tail 1
 It should say `ok, 7 new, newest kalendhair-...` - or fewer new, once it has run before - and
 the folder should hold the backups.
 
-**It trusts the server as little as it can.** It never replaces a copy it already has. And a
-copy goes only once seven newer ones have arrived *and* it arrived more than seven days ago,
-by the laptop's own clock - not by name, because the server chooses the names. So a server
-that stops sending new dumps leaves the last seven here for good, and junk it sends all at
-once cannot push a good copy out inside a week.
+**It trusts the server as little as it can, and this is exactly how far that goes:**
 
-**What it cannot stop, said plainly:** a server that has been taken over, sending one
-plausible new file a night, replaces every good copy here within about a week. The files
-would even decrypt: the server holds the public key, so it can encrypt fake dumps. Nothing a
-look at the folder shows gives that away - the names and the log look healthy. Only a
-restore does, which is one more reason 10f is not a one-off.
+- **A name is only ever one of the server script's own.** The script asks for the list
+  first and takes only `kalendhair-YYYY-MM-DD-HHMM.sql.gz.age`, digits 0-9, lower case, and
+  fetches each by that exact name. The server chooses the names, and a name is also where
+  sftp writes on the laptop, so a path, a backslash or a wildcard never reaches a download.
+- **A copy here is never overwritten.** A name the laptop already has is not fetched again.
+- **A copy is kept at least seven days after it arrived**, by the laptop's own clock, and
+  after that for as long as fewer than seven newer copies have arrived. So a server that
+  stops sending leaves the last seven here for good.
+- **A server that has been taken over can still replace them.** Copies older than a week,
+  in one run of seven new files - after a holiday with the laptop off, say. Fresher copies,
+  within a week of one plausible file a night. Those files would even decrypt: the server
+  holds the public key and can encrypt fake dumps. Nothing a look at the folder shows gives
+  it away. Only a restore does, which is one more reason 10f is not a one-off.
 
 **What this script was measured to do**, in PowerShell 7 on Linux against the test server,
-not on Windows, with seven distinct encrypted files: a first run fetched all seven, stamped
-with the time they arrived. With the laptop's copies made to look ten days old and nothing
-new on the server, the next run kept all seven. With the server's seven overwritten by junk
-under the same names, the next run took nothing and the copies here stayed byte for byte the
-same. Seven junk files named for 2099 were taken in and the real seven kept beside them;
-once those had arrived more than seven days before, the next good run let them go - the
-limit above - while a failed run in between deleted nothing. A name containing `[` arrived
-once and was recognised on the next run. With the server unreachable it exited `1`, logged
-`FAILED`, and deleted nothing. A file of your own in the folder is left alone.
+not on Windows, with seven distinct encrypted files:
 
-**One thing the test did not explain:** several runs, including ones that added nothing,
-ended with exit code `133` from the emulated PowerShell after writing a correct `ok` line.
+- With `KALENDHAIR-...` in capitals, `kalendhair-[x]...`, a date containing the Arabic-Indic
+  digit `٣`, a `.part`, `x.age` and `..\kalendhair-...` on the server, only the seven
+  well-formed names arrived, and nothing was written beside the folder.
+- A server file dated 2020 arrived stamped with the time it arrived.
+- With the laptop's copies made to look ten days old and nothing new on the server, the next
+  run kept all seven.
+- With the server's seven overwritten by junk under the same names, the next run took
+  nothing and the copies here stayed byte for byte the same.
+- Seven junk files named for 2099 were taken in and the real seven kept beside them. Once
+  those had arrived more than seven days before, the next good run let them go - the limit
+  above. A failed run in between deleted nothing.
+- With the server unreachable it exited `1`, logged `FAILED`, and deleted nothing. A file of
+  your own in the folder is left alone.
+
+**One thing the test did not explain:** several runs ended with exit code `133` or `134`
+from the emulated PowerShell - mostly after writing a correct `ok` line, once after
+downloading but before logging, which the next run then counted correctly as nothing new.
 Whether that is the emulator or something the script does was not settled. On Windows,
 step 6 below and Task Scheduler's "Last Run Result" are where it would show. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
 which is why running it by hand once, above, is not optional.

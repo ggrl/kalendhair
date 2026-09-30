@@ -23,15 +23,18 @@ documentation on 2026-10-01.
 - **The laptop pulls, once a day, over SFTP.** Its login is locked by OpenSSH to reading one
   directory: no shell, no writing, no forwarding. The server holds no credential for where
   the backups end up.
-- **The laptop trusts the server's names as little as it can.** It never replaces a copy it
-  already has. A copy goes only once seven newer ones have arrived *and* it arrived more than
-  seven days ago, by the laptop's own clock. So a server that stops sending leaves the last
-  seven for good, and junk sent all at once cannot displace a good copy inside a week.
-  - The first version kept the seven newest *names*; both reviews found a server taken over
-    could then replace every good copy in one run.
-  - The second kept only what arrived in the last seven days; the next reviews found a server
-    that merely stopped sending would then empty the laptop a week later - the exact failure
-    this ADR rejects on the server.
+- **The laptop trusts the server as little as it can.**
+  - It takes only names of the server script's exact shape, from a listing, and fetches each
+    by that name, so no server-chosen path reaches a download.
+  - It never replaces a copy it already has.
+  - A copy goes only once seven newer ones have arrived *and* it arrived more than seven days
+    ago, by the laptop's clock. A server that stops sending leaves the last seven for good.
+  - Three review rounds on 2026-10-01 shaped this. The first version kept the seven newest
+    names, so a server taken over could replace every copy in one run. The second pruned
+    everything over a week old, so a server that merely stopped emptied the laptop. The third
+    was open, on Windows, to a name with a backslash writing outside the download folder,
+    according to one reading of the Windows OpenSSH source; another reading said the client
+    rejects such names. Neither was run on Windows, and the listing makes the question moot.
 - **The server keeps its newest seven.** Each side prunes only after its own step succeeded,
   so a week of failures leaves what was there instead of nothing.
 - **Nothing alerts.** A person looks at the laptop's folder regularly. The owner chose that
@@ -40,16 +43,18 @@ documentation on 2026-10-01.
 ## Consequences
 
 - **A deleted appointment survives about a week in backups.** Seven nightly dumps on the
-  server, seven days of arrivals on the laptop, so roughly a year and a week after its date it
-  is gone everywhere - provided the laptop's copies are not themselves copied elsewhere, and
-  the laptop has had a good run since. A `.part` from a failed night goes after the next good
-  one, because a cut-off dump still holds real rows.
-- **A patient attacker on the server still wins, in about a week, silently.** One plausible
-  new file a night, which even decrypts - the server holds the public key - displaces every
-  good copy on the laptop, and nothing a look at the folder shows gives it away. Only a
-  restore does. What the design does stop is the fast versions: an overwrite, a burst of
-  junk, and simply stopping. Closing the slow one needs somebody to decrypt a copy regularly,
-  which is the restore drill, or a second copy the server never reaches.
+  server; on the laptop, a copy goes a week after it arrived once newer ones keep coming. So
+  in normal operation it is gone everywhere roughly a year and a week after its date -
+  provided the laptop's copies are not copied elsewhere. If the server's dumps stop while the
+  laptop still connects, the laptop keeps its last seven, and the rows in them, until dumps
+  resume. A `.part` from a failed night goes after the next good one, because a cut-off dump
+  still holds real rows.
+- **A server taken over can still replace the laptop's copies, and nothing shows it.** Copies
+  more than a week old go in one run of seven new files, such as after a holiday with the
+  laptop off. Fresher ones go within a week of one plausible file a night, which even
+  decrypts, since the server holds the public key. What the design stops is an overwrite, a
+  path smuggled in a name, and a server that simply stops. Only a restore detects the rest -
+  the drill, done regularly, or a second copy the server never reaches.
 - **After a break-in, restore onto a new server,** never the one broken into: the private
   key pasted there is the attacker's.
 - **A server taken over can also fill the laptop's disk** by offering huge files. That stops
@@ -66,7 +71,8 @@ documentation on 2026-10-01.
   stand-in for `docker compose`: pruning, a failing dump, and every refusal of the laptop's
   login. A real dump of the development database went through encryption and back into a
   scratch database identical in every count. The laptop script ran in PowerShell 7 on Linux
-  against that container, including both ways a taken-over server could have wiped it. **Not tested: Windows, Windows PowerShell 5.1, Task Scheduler, and a real server.**
+  against that container: hostile names, an overwrite, a burst while the copies were under a
+  week old, a stopped server, and a failed run. **Not tested: Windows, Windows PowerShell 5.1, Task Scheduler, and a real server.**
   `DEPLOYMENT.md` Step 10 names each of those as a check to do on the day.
 
 ## Alternatives rejected
