@@ -2,6 +2,132 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-10-01, sixteenth session - the backup, designed and tested off-server
+
+Same conversation as the fifteenth, continued past midnight. One pull request, #54: the backup
+the brief makes the last gate on real data. **Designed, written and tested off-server. Not yet
+run on a server or on the laptop, and the restore the brief demands has not been performed.**
+
+### Where things stand
+
+- **`main` is at `3e2f0ab`**, working tree clean. No branches except `main` and this log's.
+- `npm run verify` green - **114 unit**. `npm run test:db` green locally - **153**. Browser suite
+  green in CI on #54. No app code changed this session.
+- **Twenty-eight ADRs.** ADR-0028 is new; ADR-0027 amended with the backup's retention.
+- Removed after the work, on the owner's instruction: the Debian test container and network, the
+  Debian, Ubuntu and PowerShell images, `age` (Homebrew), and every scratchpad file including the
+  throwaway test keys. **The harness that produced the evidence below no longer exists** - its
+  commands are in `DEPLOYMENT.md` Step 10 verbatim, so it can be rebuilt from there.
+
+### What was decided - ADR-0028, `DEPLOYMENT.md` Step 10a-10f
+
+Interviewed with `/grill-me`, with three researcher rounds against vendor pages.
+
+- **The database only, nightly, `pg_dump | gzip | age -R <public key>`** on the server. The
+  private key is made off the server and lives in the owner's password manager, with every `.env`
+  value. The server cannot read its own backups.
+- **The salon's Windows laptop pulls it**, over SFTP with the SSH client Windows ships, through
+  `kalendhair-pull`: an `sshd` `Match` block with `ChrootDirectory`, `ForceCommand internal-sftp
+  -R`, no TTY or forwarding, publickey only. Task Scheduler runs `pull.ps1` daily at noon and at
+  logon, only while logged on. The laptop is not managed by any IT department; the owner will set
+  it up by hand.
+- **Seven kept on the server**, by name, pruned only after a successful dump; `.part` files go
+  after the next good night, because a cut-off dump still holds real rows.
+- **On the laptop**: names taken only from a listing and only of the exact server-script shape,
+  never overwritten, and a copy deleted only once seven newer ones have arrived *and* it arrived
+  over a week ago.
+- **No alerting.** A person looks at the laptop's folder. Owner's choice over a dead man's switch.
+- **Restore rehearsed on deployment day**, from a copy carried from the laptop via the admin's own
+  computer. After a break-in, restore onto a new server, never the broken one.
+- **Rejected:** Google Drive (rclone's shared client retired in 2026, own GCP project needed,
+  tokens die after 7 days in Testing or 6 months unused, quota shared with Gmail), iCloud
+  (experimental rclone backend, 30-day re-authentication, Apple's terms forbid scripts), R2
+  (cleanest technically, but a card on file very probably, and the laptop needs no outside
+  account). R2 stays the fallback if the laptop stops being there.
+
+### What was verified, and how
+
+- **Server blocks, verbatim, in a Debian 12 container** with a stand-in for `docker compose`:
+  first run; nine older backups pruned to exactly seven; a failing dump exits 1, keeps the seven,
+  leaves a `.part`, which the next good night removes; modes `2750`/`640`/`600` as documented.
+- **The pull login, from outside**: `get` works; `put`, overwrite, `rm`, `rename`, `mkdir`
+  denied; only `/files` visible; `/etc/passwd` not found; no shell; port forward "administratively
+  prohibited"; password refused; `sshd -T` shows the `Match` binds only that user.
+- **`age`**: packaged in Debian 12/13 and Ubuntu 22.04/24.04 (1.0.0-1.2.1); 1.1.1 and 1.3.2
+  decrypt each other's files; a wrong key is refused; no plain text in a dump.
+- **A real dump of the development database** (42 appointments) through `age` into a scratch
+  database: identical counts. Restored over the live development database: identical checksum
+  over every id, name and note.
+- **`pull.ps1` in PowerShell 7 on Linux** (the amd64 image under emulation; no arm64 image exists)
+  against the container, with seven distinct encrypted files: hostile names (capitals, `[x]`, an
+  Arabic-Indic digit, `.part`, `x.age`, `..\`) all refused; a server file dated 2020 stamped with
+  its arrival time; a stopped server keeps seven; same-name junk changes nothing; a 2099 burst
+  keeps the real seven until their week is up; a failed run deletes nothing.
+- **Four review rounds, both passes each time.** Rounds one to three were NO-SHIP and each found
+  something real; round four was SHIP from both. The last commit - `de17565`, only inside #54
+  since the squash, text and one comment - had no pass of its own.
+
+### What was NOT verified, and why not
+
+- **Nothing ran on Windows.** Not Windows PowerShell 5.1, not the in-box `sftp.exe`, not Task
+  Scheduler, not `where.exe`, not `-StartWhenAvailable`, the logon trigger, the battery switch or
+  "Run only when user is logged on". Step 10d's steps 1, 3, 5 and 6 are where each gets checked.
+- **Nothing ran on a real server.** Not `systemctl reload ssh` applying the `Match` block, not
+  cron, not Ubuntu's socket activation.
+- **The restore the brief demands has not happened.** The README still says so.
+- **Several emulated PowerShell runs exited 133 or 134**, mostly after a correct `ok` line, once
+  after downloading but before logging. Not explained; the guide says so.
+- **Whether Windows `sftp` would write a backslash name outside its folder** was read both ways
+  from the Win32-OpenSSH source by two reviewers. Moot now that only listed, well-formed names are
+  fetched, but never settled.
+
+### Open findings, recorded so they are not rediscovered as new
+
+1. **A server taken over can still replace the laptop's copies**: copies over a week old in one
+  burst of seven (after a holiday with the laptop off, say), fresh ones in about a week of one
+  plausible file a night - which decrypts, since the server holds the public key. Stated in
+  ADR-0028 and the guide. Only a restore detects it.
+2. The logon-trigger run may fire before Wi-Fi is up and log `FAILED`; the noon run covers it.
+3. `groupadd`/`useradd` in 10b and 10c exit 9 if run twice. Harmless when pasted.
+4. A box set up with the old Step 10 keeps its unencrypted dumps in what is now the chroot root.
+  Only test boxes exist.
+5. `Test-Path` on `$incoming` and `Get-ChildItem` on `$Folder` take `-Path`, not `-LiteralPath`,
+  so a Windows user name containing `[` is untested.
+6. Still open from the fifteenth: the raw `pool.on('error')` log, the "aus dem letzten Jahr"
+  wording, the `EntryModal` focus trap, the nginx `$proxy_add_x_forwarded_for` line, the sizing
+  numbers not yet in `DEPLOYMENT.md`.
+
+### Unfinished, and the next step
+
+1. **Deploy it**, following `DEPLOYMENT.md` 0-10, behind Caddy - still never done.
+2. **Set up the laptop** with 10d, and run step 6's checks there.
+3. **Perform the 10f restore on the server from a laptop copy, and write its date here.** That
+  is the brief's condition for the first real appointment.
+4. The `EntryModal` focus trap; the sizing numbers into `DEPLOYMENT.md`.
+
+### What surprised me
+
+**Each review round found a real hole in the fix for the last one.** Force-overwrite and
+newest-by-name let a hijacked server wipe the laptop in one run; pruning by arrival age then
+emptied it a week after a server merely *stopped*, the exact failure the ADR rejected one
+paragraph up; the combined rule was sound but the text still promised a burst could not win, and
+a filename could reach a path. My own trace of the stopped-server case saw the gap and called it
+acceptable - the reviewer called it what it was. The lesson is not "review more"; it is that a
+retention rule fed by an attacker-controlled source has a limit no rule removes, and the job was
+to state that limit exactly, not to keep tuning the rule.
+
+**Two reviewers read the same source file and came to opposite conclusions** about Windows sftp
+and backslashes. Instead of choosing, the script stopped depending on it. When a fact cannot be
+settled, design so it does not matter.
+
+**I cited a commit hash from memory twice, and got it wrong both times** - once in the
+fifteenth entry, once to the owner in this session. Hashes come from `git log` or `gh pr view`,
+never from recall.
+
+**My test harness failed three times for reasons of its own** - zsh word splitting, a
+`ssh-keyscan -q` that wrote nothing, a 32-bit ARM PowerShell image crashing under emulation -
+and each looked at first like a failure of the thing under test.
+
 ## 2026-09-30, fifteenth session - the plan changed, and a year of retention
 
 The owner re-cut the plan before deployment: month steps are dropped, and two things now gate it -
