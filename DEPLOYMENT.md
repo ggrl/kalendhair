@@ -860,7 +860,7 @@ try {
     # A copy goes only once seven newer ones have arrived AND it arrived more than
     # seven days ago, by this laptop's clock. Not by name: the server chooses the
     # names. A server that stops sending new dumps therefore leaves the last seven
-    # here for good, and junk it sends cannot push a good copy out inside a week.
+    # here for good, and junk cannot push a copy out inside a week of its arrival.
     Get-ChildItem -Path $Folder -Filter 'kalendhair-*.age' |
         Sort-Object LastWriteTime -Descending |
         Select-Object -Skip 7 |
@@ -897,9 +897,11 @@ the folder should hold the backups.
   stops sending leaves the last seven here for good.
 - **A server that has been taken over can still replace them.** Copies older than a week,
   in one run of seven new files - after a holiday with the laptop off, say. Fresher copies,
-  within a week of one plausible file a night. Those files would even decrypt: the server
+  in about a week of one plausible file a night. Those files would even decrypt: the server
   holds the public key and can encrypt fake dumps. Nothing a look at the folder shows gives
   it away. Only a restore does, which is one more reason 10f is not a one-off.
+- **It can also make every run fail**, by listing a name it will not serve. That is loud -
+  `FAILED` in `pull.log`, nothing deleted - which is the better way for this to go wrong.
 
 **What this script was measured to do**, in PowerShell 7 on Linux against the test server,
 not on Windows, with seven distinct encrypted files:

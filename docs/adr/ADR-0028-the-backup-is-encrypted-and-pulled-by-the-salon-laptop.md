@@ -51,7 +51,7 @@ documentation on 2026-10-01.
   still holds real rows.
 - **A server taken over can still replace the laptop's copies, and nothing shows it.** Copies
   more than a week old go in one run of seven new files, such as after a holiday with the
-  laptop off. Fresher ones go within a week of one plausible file a night, which even
+  laptop off. Fresher ones go in about a week of one plausible file a night, which even
   decrypts, since the server holds the public key. What the design stops is an overwrite, a
   path smuggled in a name, and a server that simply stops. Only a restore detects the rest -
   the drill, done regularly, or a second copy the server never reaches.
