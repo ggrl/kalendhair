@@ -575,7 +575,8 @@ age-keygen -o kalendhair-backup.key
 ```
 
 It prints `Public key: age1...`. **Put the whole content of `kalendhair-backup.key` into your
-password manager, then delete the file.** That file is the only thing that can read a
+password manager, then delete the file** - permanently, not to the Trash or the Recycle Bin,
+where it is still a file. That file is the only thing that can read a
 backup. Lose it and every dump is noise; leave it on the server and whoever breaks in reads
 them all. The public key is not a secret and is what the server gets.
 
@@ -590,6 +591,7 @@ Install `age` and give the server the public key. Replace the placeholder with t
 `age1...` line from 10a:
 
 ```bash
+sudo apt update
 sudo apt install -y age
 echo 'PASTE-YOUR-PUBLIC-KEY-HERE' | sudo tee /etc/kalendhair-backup.pub >/dev/null
 ```
@@ -658,6 +660,10 @@ mv "$dest.part" "$dest"
 # that fails deletes nothing, and a week of failures still leaves the last
 # seven good ones. The names sort by date because they start with it.
 ls -1 "$dir"/kalendhair-*.sql.gz.age | head -n -7 | xargs -r rm --
+
+# A .part is a night that failed partway. It can hold whole chunks of real rows,
+# so it goes too, once a night has succeeded.
+rm -f "$dir"/*.part
 SCRIPT
 
 sudo chown root:root /usr/local/bin/kalendhair-backup
@@ -682,10 +688,12 @@ them theoretical:
   **It must be `bash`, not `sh`:** on Debian and Ubuntu `/bin/sh` is dash, which answers
   `set -o pipefail` with `Illegal option`.
 - **`.part` then `mv`.** A half-written dump never carries the name the laptop fetches -
-  it fetches `*.age`, and `.part` does not match. A leftover `.part` is the trace of a
-  failed run.
+  it fetches `*.age`, and `.part` does not match. A `.part` that is still there is the
+  trace of a night that failed since the last good one.
 - **The prune comes last.** Measured with the dump made to fail: exit `1`, the seven
-  finished backups untouched, one `.part` left behind. Deleting by age instead - "anything
+  finished backups untouched, one `.part` left behind - and gone after the next good night,
+  because a cut-off dump still holds whole chunks of real rows, and ADR-0027's year would
+  not otherwise apply to it. Deleting by age instead - "anything
   older than seven days" - would have spent a week of silent failures deleting the last good
   backup.
 
@@ -789,8 +797,10 @@ which is exactly what happened when this was first tested.
 sftp -i "$HOME\.ssh\kalendhair-pull" kalendhair-pull@YOUR-SERVER-NAME
 ```
 
-Before answering `yes`, compare the fingerprint it shows with the one the server prints for
-`ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`. Then `ls` should list the backups, and
+Before answering `yes`, compare the fingerprint it shows with the one of the same type -
+`ED25519`, `ECDSA` or `RSA`, it says which - among those the server prints for
+`for f in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$f"; done`. An older Windows SSH
+client may be offered a different type than a newer one. Then `ls` should list the backups, and
 `bye` leaves.
 
 **4. The script.** Make the folder and save this as `pull.ps1` in it:
@@ -800,7 +810,7 @@ New-Item -ItemType Directory -Force "$HOME\kalendhair-backups"
 notepad "$HOME\kalendhair-backups\pull.ps1"
 ```
 
-Paste this, and change `YOUR-SERVER-NAME` in the third line:
+Paste this, and change `YOUR-SERVER-NAME` in the fourth line:
 
 ```powershell
 # kalendhair: fetch the encrypted backups from the server and keep the newest seven.
@@ -833,18 +843,22 @@ try {
 
     $fetched = @(Get-ChildItem -Path $incoming -Filter 'kalendhair-*.age')
     if ($fetched.Count -eq 0) { throw 'the server offered no backups' }
-    $fetched | Move-Item -Destination $Folder -Force
+
+    # Only names this laptop does not have yet. A copy that is here stays exactly
+    # as it arrived, whatever the server offers under the same name later.
+    $new = @($fetched | Where-Object { -not (Test-Path (Join-Path $Folder $_.Name)) })
+    $new | Move-Item -Destination $Folder
     Remove-Item $incoming -Recurse -Force
 
-    # Keep the newest seven. Reached only after a successful download, so a week
-    # without one still leaves the last seven. The names sort by date.
+    # Keep what arrived in the last seven days, by this laptop's clock - not the
+    # newest names, because the server chooses the names. Reached only after a
+    # successful download, so a week without one still leaves what was there.
     Get-ChildItem -Path $Folder -Filter 'kalendhair-*.age' |
-        Sort-Object Name -Descending |
-        Select-Object -Skip 7 |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-7) } |
         Remove-Item
 
     $newest = ($fetched | Sort-Object Name | Select-Object -Last 1).Name
-    Add-Content -Path $log -Value "$(Get-Date -Format s) ok, newest $newest"
+    Add-Content -Path $log -Value "$(Get-Date -Format s) ok, $($new.Count) new, newest $newest"
 } catch {
     Add-Content -Path $log -Value "$(Get-Date -Format s) FAILED: $_"
     exit 1
@@ -858,13 +872,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$HOME\kalendhair-backups\pu
 Get-Content "$HOME\kalendhair-backups\pull.log" -Tail 1
 ```
 
-It should say `ok, newest kalendhair-...`, and the folder should hold the backups.
+It should say `ok, 7 new, newest kalendhair-...` - or fewer new, once it has run before - and
+the folder should hold the backups.
+
+**It trusts the server as little as it can.** It never replaces a copy it already has, and it
+keeps what *arrived* in the last seven days by the laptop's own clock, rather than the seven
+newest names - because the server chooses the names. A server that has been taken over can
+offer junk, but it cannot overwrite a copy here or push one out: every good copy stays seven
+days after it arrived, and a look at the folder inside that week finds it.
 
 **What this script was measured to do**, in PowerShell 7 on Linux against the test server,
-not on Windows: a first run fetched all seven, byte for byte the server's. With ten older
-copies already there, it left exactly the newest seven. With the server unreachable it
-exited `1`, logged `FAILED`, and deleted nothing. A file of your own in the folder is left
-alone. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
+not on Windows: a first run fetched all seven, byte for byte the server's, stamped with the
+time they arrived. With the server's seven overwritten by junk under the same names, the next
+run took nothing and the copies here stayed byte for byte the same. With seven junk files
+named for 2099 added on the server, the next run added them and kept all seven real ones.
+Copies made to look eight days old survived a failed run and went after the next good one.
+With the server unreachable it exited `1`, logged `FAILED`, and deleted nothing. A file of
+your own in the folder is left alone. Twice, the emulated PowerShell used for the test
+crashed after writing its `ok` line; that is the emulator, and the same reason as below for
+running it by hand once on the laptop. **Windows PowerShell 5.1, which is what a laptop runs, was not available to test** -
 which is why running it by hand once, above, is not optional.
 
 **5. Schedule it.** Daily at noon, and at every logon, so a laptop that was switched off at
@@ -923,17 +949,23 @@ chosen, by decision. So somebody looks, regularly, at the laptop's
   file is one failed night.
 
 With seven kept on each side, a failure noticed within a week has lost nothing that existed.
+The laptop keeps seven days of arrivals, which is usually seven or eight files. The count is
+not the thing to watch. The dates are.
 
 ### 10f. Rehearse the restore, from a copy that went through the laptop
 
 **This is the step the brief is about.** Do it before the first real appointment, and write
 the date in `WORK_LOG.md`, because nobody will remember whether it happened.
 
-On the laptop, send one backup to the server, as your own admin account:
+Carry one backup from the laptop's `kalendhair-backups` folder to the computer you administer
+the server from - a USB stick is fine, it is encrypted - and send it up from there:
 
-```powershell
-scp "$HOME\kalendhair-backups\kalendhair-SOMEDATE.sql.gz.age" YOUR-ADMIN-USER@YOUR-SERVER-NAME:/tmp/
+```bash
+scp kalendhair-SOMEDATE.sql.gz.age YOUR-ADMIN-USER@YOUR-SERVER-NAME:/tmp/
 ```
+
+Not from the laptop directly: its only key is the one that can read backups, and the server
+will not let it log in as you.
 
 On the server, put the private key from your password manager into a file only you can
 read, then restore into a scratch database:
@@ -956,8 +988,8 @@ sudo -u kalendhair docker compose exec -T db psql -U salon -d restore_drill -c '
 sudo -u kalendhair docker compose exec -T db psql -U salon -d salon -c 'SELECT count(*) FROM appointment;'
 sudo -u kalendhair docker compose exec -T db psql -U salon -d postgres -c 'DROP DATABASE restore_drill;'
 
-# 4. the key does not stay
-rm ~/restore.key /tmp/kalendhair-SOMEDATE.sql.gz.age
+# 4. the key does not stay. The .save is what nano leaves if the connection dropped.
+rm -f ~/restore.key ~/restore.key.save /tmp/kalendhair-SOMEDATE.sql.gz.age
 ```
 
 **`ON_ERROR_STOP=1` is the difference between a restore and a belief.** Without it `psql`
@@ -979,7 +1011,11 @@ sudo -u kalendhair docker compose stop app
 age -d -i ~/restore.key /tmp/kalendhair-SOMEDATE.sql.gz.age | gunzip \
   | sudo -u kalendhair docker compose exec -T db psql -v ON_ERROR_STOP=1 -U salon -d salon
 sudo -u kalendhair docker compose start app
+rm -f ~/restore.key ~/restore.key.save /tmp/kalendhair-SOMEDATE.sql.gz.age
 ```
+
+The key comes off the server again the moment the restore is done. After a break-in above
+all, this is the one machine it must not stay on.
 
 The dump is taken with `--clean --if-exists`, so it replaces what is there rather than
 colliding with it. Restoring a dump over the database it came from, on a development

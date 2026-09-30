@@ -22,17 +22,27 @@ documentation on 2026-10-01.
   own backups, so neither can anybody who breaks into it.
 - **The laptop pulls, once a day, over SFTP.** Its login is locked by OpenSSH to reading one
   directory: no shell, no writing, no forwarding. The server holds no credential for where
-  the backups end up, so a compromised server cannot reach them.
-- **Seven are kept on each side, counted, not aged.** Each side prunes only after its own
-  step succeeded, so a week of failures leaves the last seven good copies instead of none.
+  the backups end up.
+- **The laptop trusts the server's names as little as it can.** It never replaces a copy it
+  already has, and it keeps what arrived in the last seven days by its own clock. A server that
+  has been taken over can offer junk, but cannot overwrite a copy on the laptop or push one out:
+  each stays seven days after it arrived. Both reviews on 2026-10-01 found the first version
+  kept the seven newest *names*, which let such a server replace every good copy in one run.
+- **The server keeps its newest seven.** Each side prunes only after its own step succeeded,
+  so a week of failures leaves what was there instead of nothing.
 - **Nothing alerts.** A person looks at the laptop's folder regularly. The owner chose that
   over a dead man's switch, which would be one more outside account.
 
 ## Consequences
 
 - **A deleted appointment survives about a week in backups.** Seven nightly dumps on the
-  server, seven on the laptop, so roughly a year and a week after its date it is gone
-  everywhere - provided the laptop's copies are not themselves copied elsewhere.
+  server, seven days of arrivals on the laptop, so roughly a year and a week after its date it
+  is gone everywhere - provided the laptop's copies are not themselves copied elsewhere, and
+  the laptop has had a good run since. A `.part` from a failed night goes after the next good
+  one, because a cut-off dump still holds real rows.
+- **A server taken over is still bad news, just not a silent wipe.** It can stop sending good
+  dumps and send junk instead. What it cannot do is undo what the laptop already holds, so the
+  week of copies there is what a restore after a break-in comes from.
 - **The laptop is the only off-server copy.** Lost or broken, it takes them with it, but
   reveals nothing: every file is encrypted.
 - **A failure is only as visible as the next look.** Seven per side means one noticed within
@@ -44,8 +54,8 @@ documentation on 2026-10-01.
 - **Tested, and where.** The server blocks ran verbatim on a Debian 12 container, with a
   stand-in for `docker compose`: pruning, a failing dump, and every refusal of the laptop's
   login. A real dump of the development database went through encryption and back into a
-  scratch database identical in every count. The laptop script ran in PowerShell 7 on Linux against that
-  container. **Not tested: Windows, Windows PowerShell 5.1, Task Scheduler, and a real server.**
+  scratch database identical in every count. The laptop script ran in PowerShell 7 on Linux
+  against that container, including both ways a taken-over server could have wiped it. **Not tested: Windows, Windows PowerShell 5.1, Task Scheduler, and a real server.**
   `DEPLOYMENT.md` Step 10 names each of those as a check to do on the day.
 
 ## Alternatives rejected
@@ -62,7 +72,7 @@ documentation on 2026-10-01.
 - **Cloudflare R2.** The technically cleaner fit - a bucket-scoped key that does not expire -
   and the one to reach for if the laptop stops being there. Turned down because the laptop
   is simpler to own, needs no outside account - R2 very probably needs a payment card on
-  file - and keeps the backups out of reach of a compromised server. R2's own lifecycle rule
+  file - and a compromised server holds no key to it. R2's own lifecycle rule
   would also have deleted by age, which is the failure above.
 - **Unencrypted dumps.** The file carries health data in `notes` and every password hash.
 - **Deleting by age.** See above: a silent week of failures would delete the last good copy.
