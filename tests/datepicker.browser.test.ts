@@ -110,6 +110,30 @@ test('a tap focuses the field, because that is what opens the picker on an iPhon
   await context.close()
 })
 
+test('after a tap, the keyboard belongs to the board again', async ({ browser }) => {
+  // The salon has a touchscreen PC with a keyboard, so a tap and a key press meet. Before this,
+  // measured here: tap, close the popup, ArrowUp, and the hidden field raised its focused segment
+  // and the board jumped with it - while ArrowRight did nothing at all.
+  const context = await browser.newContext({ hasTouch: true })
+  const page = await context.newPage()
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+
+  await pickButton(page).tap()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('ArrowUp')
+  // Settled rather than asserted instantly: "nothing moved" passes for free before anything could.
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+  await expect(pickInput(page)).not.toBeFocused()
+
+  await pickButton(page).tap()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+  await context.close()
+})
+
 test('a mouse click does not leave focus in the field', async ({ page }) => {
   // The other half. Focus left in the hidden field after the popup closes would make the arrows
   // edit the date in it instead of stepping the board, so only a tap focuses.

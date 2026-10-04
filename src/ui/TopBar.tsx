@@ -66,6 +66,8 @@ export function TopBar({
    * the button rather than somewhere else on the page.
    */
   const picker = useRef<HTMLInputElement>(null)
+  /** Whether the field has focus because a tap put it there, rather than the fallback below. */
+  const tapped = useRef(false)
 
   function openPicker(event: MouseEvent): void {
     const input = picker.current
@@ -74,7 +76,10 @@ export function TopBar({
     // pickers come from focus, so a tap focuses the field first. Only a tap - on a desktop the
     // focus would stay in the field after the popup closes, and arrows would edit the date
     // instead of stepping the board.
-    if ((event.nativeEvent as PointerEvent).pointerType === 'touch') input.focus()
+    if ((event.nativeEvent as PointerEvent).pointerType === 'touch') {
+      tapped.current = true
+      input.focus()
+    }
     // `showPicker` needs a user gesture, which a click is. Older browsers without it fall back to
     // focusing the field - which is worse than a picker and better than a control that does
     // nothing when pressed.
@@ -214,6 +219,19 @@ export function TopBar({
               // would be a second copy of one rule, and the copy that is never the authority is the
               // one that drifts.
               onChange={(event) => onPick(event.target.value)}
+              // A tap leaves focus here after the popup closes, and the salon's touchscreen PC has a
+              // keyboard too: arrows would edit the date in a field nobody can see. A key can only
+              // reach the field once its popup is closed, so the first one hands focus back to the
+              // board. `preventDefault` as well, because Chromium was measured editing the field
+              // after the blur; `App.tsx` reads where focus is now, so the board still gets the key.
+              onKeyDown={(event) => {
+                if (!tapped.current) return
+                event.preventDefault()
+                event.currentTarget.blur()
+              }}
+              onBlur={() => {
+                tapped.current = false
+              }}
             />
           </span>
         </div>

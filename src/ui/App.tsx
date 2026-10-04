@@ -446,8 +446,10 @@ export function App() {
       // the day stops moving until you tab away. A list of exceptions is worth more than that.
       //
       // Named `focused` rather than `target`, which in this component is already the day being
-      // asked for.
-      const focused = event.target
+      // asked for. Where focus is now rather than `event.target`, which is where it was when the
+      // key went down: the top bar's date field gives focus back on the first key after a tap,
+      // and that key belongs to the board.
+      const focused = document.activeElement
       if (
         focused instanceof HTMLElement &&
         (focused.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(focused.tagName))

@@ -64,7 +64,8 @@ so a two-digit year fails silently rather than loudly, and `isoWeek('0050-03-15'
   there, citing WebKit bug 261703, still open, where a WebKit engineer writes that iOS pickers are
   "tied to element focus". So a tap now focuses the field before calling `showPicker`. A mouse
   click does not, because focus left in the field would make the arrow keys edit the date instead
-  of stepping the board. Firefox on iOS fails the same way because it runs on WebKit too. **Not
+  of stepping the board. The salon's touchscreen PC has a keyboard as well, so after a tap the
+  first key hands focus back to the board and acts there. Firefox on iOS fails the same way because it runs on WebKit too. **Not
   yet seen to work on an iPhone**: no iPhone runs in the tests, which prove only that a tap focuses.
 - ADR-0010's arithmetic is untouched. This adds a way to choose a date, not a way to compute one.
 - The label is present for a screen reader and invisible on screen, because the top bar has no room
