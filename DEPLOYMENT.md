@@ -561,7 +561,8 @@ schedule, and one restore that has actually been performed rather than merely do
 An untested backup is a belief, not a backup.
 
 You can skip this for a throwaway test box with fake names. You cannot skip it for the real
-one, and this is the gate between the two.
+one, and this is the gate between the two. The first real deployment passed it only in part, by
+the owner's decision: see the brief's 2026-10-04 paragraph.
 
 **The shape, decided in [ADR-0028](docs/adr/ADR-0028-the-backup-is-encrypted-and-pulled-by-the-salon-laptop.md):**
 the server dumps the database every night and encrypts it to a key it cannot decrypt with.
@@ -1041,7 +1042,9 @@ guard:** a byte count of `0` means the backup is worthless no matter what the re
 
 The two counts should differ by no more than what was booked since the dump was taken.
 
-Tested on a development machine, not a server: a real dump of 42 appointments, 6 staff, the
+Performed on the real server on 2026-10-04, from a copy carried to the admin's computer and
+back rather than through the laptop: 2 appointments and 4 staff, and an identical md5 over every
+appointment row. Before that, tested on a development machine: a real dump of 42 appointments, 6 staff, the
 core hours and the credential row went through `pg_dump`, `gzip` and `age` to a 4.5 KB file
 with no readable text in it, and came back out of a scratch database identical in every
 count.
@@ -1152,8 +1155,8 @@ ever becomes more than that, it becomes a secret manager.
 | --- | --- |
 | Salon cannot log in with the password you set | An unquoted `$` in `.env`. Compose truncated it at the `$`, and ADR-0017 already seeded the short version. Fix `.env` with single quotes, then reset via `MASTER_PASSWORD` - editing `.env` alone will not help |
 | `destination path already exists and is not an empty directory` at step 4 | `useradd --create-home` was used. The home belongs in `/var/lib/kalendhair`, not the checkout. See step 4 |
-| `mkdir /home/kalendhair: permission denied` at step 6 | The account has no home directory. Run step 4's `install -d` line, then `sudo usermod -d /var/lib/kalendhair kalendhair` |
 | `Permission denied` on `cd /srv/kalendhair` | Same cause: the directory is `750` from `--create-home`. It should be `755` and owned by `kalendhair` |
+| `mkdir /home/kalendhair: permission denied` at step 6 | The account has no home directory. Run step 4's `install -d` line, then `sudo usermod -d /var/lib/kalendhair kalendhair` |
 | `set POSTGRES_PASSWORD in .env` before anything starts | Compose substitution, not the app. `.env` is missing or not in the directory you ran compose from |
 | `... is required and was not set` in the app log | That name is missing from `.env`. The message names the one it wants |
 | App container restarts in a loop | `docker compose logs app`. Usually the database URL or a missing secret. `depends_on` waits for healthy, so it is rarely a race |

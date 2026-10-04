@@ -239,10 +239,10 @@ Deliberately not doing, and each one will feel missing before it is missed:
 
 ## Two stages, and the condition between them
 
-**Stage one, now.** Runs locally under `docker compose` on one machine, for testing.
+**Stage one, until 2026-10-04.** Ran locally under `docker compose` on one machine, for testing.
 Fake data only. No backups, no TLS, not reachable from the internet.
 
-**Stage two, later.** The same compose file on a VPS, behind a domain with HTTPS,
+**Stage two, since 2026-10-04.** The same compose file on a VPS, behind a domain with HTTPS,
 because ADR-0004 puts one shared password in front of everything and over plain HTTP
 that password, the session cookie and every customer name travel readable across every
 network in between, salon wifi included.
@@ -269,8 +269,11 @@ encrypted dump runs on the server (DEPLOYMENT.md 10a and 10b), and one restore w
 that day, from a copy carried to the admin's computer and back, into a scratch database with
 identical counts and an identical checksum over every appointment. The other half is not: no
 backup leaves the VPS on a schedule, because the laptop pull (10c to 10e) waits for that
-machine. Until it is set up, a dropped table or a broken database costs at most a day, and
-losing the VPS itself costs everything since the start.
+machine. Until it is set up, a dropped table or a broken database costs everything since the
+last good dump - a day, if somebody looks. Nobody is alerted when a night fails, and the
+laptop's folder that ADR-0028 makes the check does not exist yet, so until then the admin has
+to look at `/srv/kalendhair-backups/files` on the server. Losing the VPS itself costs
+everything since the start.
 
 **Added 2026-09-30, by the owner: data older than a year is deleted automatically, and that too
 is built before deployment.** Decided and built the same day: appointments and blocks dated
