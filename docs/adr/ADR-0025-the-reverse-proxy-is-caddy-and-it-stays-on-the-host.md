@@ -1,6 +1,6 @@
 # ADR-0025: The reverse proxy is Caddy, and it stays on the host
 
-- Status: accepted, 2026-08-16. Written, not yet run on a real server.
+- Status: accepted, 2026-08-16. Running on the real server since 2026-10-04.
 - Completes [ADR-0005](ADR-0005-self-hosted-containers.md), which said the stack "sits behind a
   reverse proxy terminating TLS" and left both which one and where it runs unanswered.
 

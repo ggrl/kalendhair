@@ -1,7 +1,8 @@
 # ADR-0028: The backup is encrypted on the server and pulled by the salon's laptop
 
-- Status: accepted, 2026-10-01. Written into `DEPLOYMENT.md` Step 10 and tested off-server;
-  not yet run on a real server, and the restore the brief demands has not happened
+- Status: accepted, 2026-10-01. Written into `DEPLOYMENT.md` Step 10 and tested off-server.
+  On the real server since 2026-10-04: the nightly dump runs and one restore was performed.
+  The laptop pull (10c to 10e) is not set up yet
 - Settles what [ADR-0027](ADR-0027-appointments-are-deleted-a-year-after-their-date.md) left
   open: how long a deleted appointment survives in a backup
 
