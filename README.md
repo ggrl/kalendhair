@@ -38,22 +38,15 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Authentication: one shared password, a session that a password change ends, and a master-password reset | done |
 | A settings screen behind the PIN: add, rename, reorder, deactivate and delete staff, change the password and the PIN | done |
 | The salon's core hours, editable from that screen instead of hardcoded | done |
-| Backups that leave the server on a schedule, and one restore actually performed | written and tested off-server; not yet run on a server, no restore performed |
+| Backups that leave the server on a schedule, and one restore actually performed | nightly encrypted dump on the server and one restore performed, 2026-10-04; nothing pulls it off the server yet |
 | Appointments and blocks older than a year deleted automatically | done |
 
-The screen is German. Code, comments and these documents are English - they are for whoever
-maintains it, not for the salon.
-
-**Still not ready for a real customer name, and now for a different reason.** The board is
-behind a password as of 2026-08-13, which was one of the two blockers. The other stands: there
-are no backups, and `docs/PRODUCT_BRIEF.md` makes one tested restore the condition for putting
-real data in. The server still binds to loopback and there is still no TLS, so stage one runs
-on fake names only.
-
-Since 2026-09-30 there was a second condition before deployment: appointments and blocks older
-than a year are deleted automatically. That one is built - ADR-0027. The backup is designed,
-written into `DEPLOYMENT.md` Step 10 and tested off-server (ADR-0028), but the restore the brief
-demands has not been performed, so the condition still stands.
+The screen is German. Code, comments and these documents are English - they are for whoever**Live since 2026-10-04** at `termine.haarstyle-by-yasemin.de`, behind Caddy with HTTPS, for
+the salon to try with its real book. One restore has been performed from a copy that left the
+server. The brief's condition is only half met, by the owner's decision: no backup leaves the
+server on a schedule until the machine that pulls it is chosen. `docs/PRODUCT_BRIEF.md` says
+what that costs.
+ed, so the condition still stands.
 
 ## Requirements
 

@@ -262,6 +262,16 @@ pulled daily by the salon's laptop, seven kept on each side, checked by a person
 alarm. That settles what the backup is. It does not meet this condition - the restore has to
 happen on the real server.
 
+**2026-10-04, by the owner: real names before the condition is fully met.** The board went
+live at `termine.haarstyle-by-yasemin.de` so the salon can try it with its real book before
+choosing the machine that will pull the backups. Half the condition is met: the nightly
+encrypted dump runs on the server (DEPLOYMENT.md 10a and 10b), and one restore was performed
+that day, from a copy carried to the admin's computer and back, into a scratch database with
+identical counts and an identical checksum over every appointment. The other half is not: no
+backup leaves the VPS on a schedule, because the laptop pull (10c to 10e) waits for that
+machine. Until it is set up, a dropped table or a broken database costs at most a day, and
+losing the VPS itself costs everything since the start.
+
 **Added 2026-09-30, by the owner: data older than a year is deleted automatically, and that too
 is built before deployment.** Decided and built the same day: appointments and blocks dated
 before the same calendar day a year ago, and nothing else - ADR-0027.

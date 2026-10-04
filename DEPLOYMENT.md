@@ -202,7 +202,8 @@ install from Docker rather than from `apt` by default.
 Do not run this as root. Give it its own unprivileged user that owns nothing else:
 
 ```bash
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin kalendhair
+sudo useradd --system --no-create-home --home-dir /var/lib/kalendhair --shell /usr/sbin/nologin kalendhair
+sudo install -d -m 700 -o kalendhair -g kalendhair /var/lib/kalendhair
 sudo mkdir -p /srv/kalendhair
 sudo chown kalendhair:kalendhair /srv/kalendhair
 sudo chmod 755 /srv/kalendhair
@@ -212,8 +213,16 @@ sudo chmod 755 /srv/kalendhair
 `--create-home --home-dir /srv/kalendhair` the directory arrives holding a copy of
 `/etc/skel`, and `git clone` then refuses it: `destination path already exists and is not
 an empty directory`. That home would also be mode `750`, which makes every `cd
-/srv/kalendhair` later in this guide fail for your own admin account. This is a service
-account that never logs in, so it needs no home at all.
+/srv/kalendhair` later in this guide fail for your own admin account.
+
+**But the account does need a home, just not that one.** `sudo -u kalendhair` sets `HOME` to
+the account's home, and `docker compose up --build` writes there. Without the `install` line
+`useradd` still records `/home/kalendhair`, nothing creates it, and step 6 stops with
+`mkdir /home/kalendhair: permission denied` - met on the first real deployment, 2026-10-04.
+
+**Run git as the owner too.** As root, `git log` in `/srv/kalendhair` stops with `detected
+dubious ownership`. Use `sudo -u kalendhair git -C /srv/kalendhair ...` rather than adding the
+`safe.directory` exception it suggests.
 
 Clone into it. A deploy key or a personal access token is the usual way to read a private
 repository from a server:
@@ -676,7 +685,7 @@ it, which matters because that account is in the `docker` group: anything that c
 the application would otherwise be able to edit a script that runs every night.
 
 That last line is worth running rather than skipping. It executes the script exactly as cron
-will - same account, same absent `HOME` - so if anything in the environment is wrong you find
+will - same account, same `HOME` - so if anything in the environment is wrong you find
 out now rather than from a directory that quietly stopped filling.
 
 **The lines in that script that exist because of a specific way this goes wrong**, none of
@@ -1142,7 +1151,8 @@ ever becomes more than that, it becomes a secret manager.
 | Symptom | First thing to check |
 | --- | --- |
 | Salon cannot log in with the password you set | An unquoted `$` in `.env`. Compose truncated it at the `$`, and ADR-0017 already seeded the short version. Fix `.env` with single quotes, then reset via `MASTER_PASSWORD` - editing `.env` alone will not help |
-| `destination path already exists and is not an empty directory` at step 4 | `useradd --create-home` was used. The account needs no home. See step 4 |
+| `destination path already exists and is not an empty directory` at step 4 | `useradd --create-home` was used. The home belongs in `/var/lib/kalendhair`, not the checkout. See step 4 |
+| `mkdir /home/kalendhair: permission denied` at step 6 | The account has no home directory. Run step 4's `install -d` line, then `sudo usermod -d /var/lib/kalendhair kalendhair` |
 | `Permission denied` on `cd /srv/kalendhair` | Same cause: the directory is `750` from `--create-home`. It should be `755` and owned by `kalendhair` |
 | `set POSTGRES_PASSWORD in .env` before anything starts | Compose substitution, not the app. `.env` is missing or not in the directory you ran compose from |
 | `... is required and was not set` in the app log | That name is missing from `.env`. The message names the one it wants |
