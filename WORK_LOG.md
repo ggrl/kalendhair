@@ -2,6 +2,97 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-10-04 to 10-05, eighteenth session - the date picker on an iPhone
+
+Two pull requests, #58 (`fc382e4`) and #59 (`58eafb1`), both merged and deployed by the owner.
+The owner found that the date picker opened nothing on their iPhone (iOS 26.6.2), in Safari
+and in Firefox.
+
+### Where things stand
+
+- **`main` is at `58eafb1`.** `npm run verify` passes, 114 unit tests. Browser suite: 167
+  passed locally and in CI on #59, along with database and verify.
+- **Live**, checked from my machine: the served bundle `assets/index-BSBf1wOS.js` contains
+  `w.focus(),typeof w.showPicker=="function"&&w.showPicker()`.
+- **The owner reports that everything works** on the iPhone after #59 was deployed. I did not
+  see it, and I do not know which of the three re-open sequences below they tried.
+
+### What changed, and why
+
+- **The cause.** iOS has `showPicker` and it does nothing for a date field. Sources:
+  - MDN's compatibility data marks `date_input` unsupported on `safari_ios`.
+  - That entry cites WebKit bug 261703, still open. A WebKit engineer writes there that iOS
+    pickers are "tied to element focus".
+  - So `openPicker` in `src/ui/TopBar.tsx` called a method that did nothing and never reached
+    its `focus()` fallback.
+- **#58 was wrong.** It focused the field only when the click's `pointerType` was `"touch"`. The
+  owner deployed it and nothing changed. Their Safari Web Inspector then showed a finger tap on the
+  glyph arriving as `click PointerEvent "mouse"`.
+  - **Do not trust `pointerType` to mean "phone" on iOS 26.** `Board.tsx:396` uses
+    `pointerType === 'touch'` for drags. Whether that one works on iOS is not known either.
+- **#59** focuses the field on every click, then calls `showPicker` if present. Before building
+  it, the owner tested it by hand: a console listener on the glyph that called `focus()` opened
+  the wheel.
+- **Keyboard hand-off (since #58, applied to every click since #59).** Focus left in the hidden
+  field would make arrows edit the date: measured in Chromium, ArrowUp moved the board, and
+  ArrowRight did nothing.
+  - So the field's `onKeyDown` does `preventDefault` and focuses the glyph.
+  - `App.tsx`'s arrow guard now reads `document.activeElement`, so that first key still steps the
+    board.
+  - The salon has a touchscreen PC with a keyboard (the owner's answer), which is why this
+    mattered.
+- **ADR-0020 amended** with the cause, the `"mouse"` finding, and the cost: the first key after
+  the picker is used up if it is Tab, F5, Enter, Space or Shift alone.
+
+### What was verified, and how
+
+- Browser tests in `tests/datepicker.browser.test.ts`:
+  - A click focuses the field.
+  - After the picker, the keyboard belongs to the board. This runs twice, once with a click and
+    once with a touch tap, because Chromium starts Tab from different places after each. It covers
+    arrows, and Tab, Tab, ArrowUp.
+- Mutation checks: removing `focus()`, or the hand-off's `preventDefault`, makes a test fail. A
+  plain `blur()` instead of focusing the glyph now passes too, and the comment says so.
+- Review passes:
+  - **#58:** three rounds of both passes. The logic pass blocked once: after a tap, `blur()` let
+    Tab walk back into the field.
+  - **#59:** one round of both passes, both ship.
+- The researcher's sources are listed above.
+
+### What was NOT verified
+
+- **On the iPhone:** re-opening by tapping the glyph again while the field still has focus (the
+  logic pass's three sequences), and whether the page zooms in. WebKit's
+  `WKWebViewIOS.mm` scales by 16/font-size on focus. The field has no font size set.
+- **Not tested on any device:** the salon PC's tap-then-keyboard path, Android, an iPad with a
+  Pencil or trackpad, and VoiceOver. No WebKit runs in CI.
+
+### Unfinished, and the next step
+
+1. **2026-10-05:** check that `kalendhair-2026-10-05-0320.sql.gz.age` exists and the backup log
+   is empty. The owner will do it.
+2. Still open from the seventeenth session:
+   - SSH: switch to key login and turn password login off.
+   - Steps 10c to 10e, once the salon picks its machine.
+   - The `EntryModal` focus trap.
+   - Server sizing in `DEPLOYMENT.md`.
+   - The Step 10b wording.
+3. **Known, deliberately left:** Enter on the glyph leaves focus on the `aria-hidden` field until
+   the next key.
+   - Fix: skip `focus()` when `event.detail === 0`.
+   - Only after measuring what `detail` iOS reports for a tap, because getting it wrong breaks the
+     iPhone again.
+
+### What surprised me
+
+**I shipped a fix whose central assumption nobody had measured.** The researcher had written "BCD
+does not say which `pointerType` a tap gives", and I built on `"touch"` anyway. The owner's Web
+Inspector settled in one tap what a merged PR had not. For anything iOS-specific, get the device's
+console first: the owner has a Mac and a cable, and it takes five minutes.
+
+**Headless Chromium opens a real date popup,** and while it is open no keydown reaches the page.
+The tests rely on that.
+
 ## 2026-10-04, seventeenth session - first deployment, live, restore performed
 
 One pull request, #56 (`534b3f9`), documentation only. The rest of the session was the owner
