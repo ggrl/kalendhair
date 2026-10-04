@@ -157,24 +157,6 @@ test('a day cannot change under a drag in flight', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Neuer Eintrag' })).toBeVisible()
 })
 
-test('a focused date field keeps its own arrow keys', async ({ page }) => {
-  // Not hypothetical: `TopBar.openPicker` falls back to `input.focus()` on a browser without
-  // `showPicker`, which leaves the hidden `<input type="date">` focused - and arrows are how a
-  // native date field is edited. Two things answering one press is the state to avoid.
-  //
-  // Focused directly rather than through the glyph, because this browser has `showPicker` and so
-  // never takes the fallback. The state is what matters, not the route into it.
-  await page.goto(`/?date=${TODAY}`)
-  await page.waitForSelector('.board__grid')
-
-  await page.locator('.topbar__pick-input').focus()
-  await page.keyboard.press('ArrowRight')
-  await page.keyboard.press('ArrowRight')
-
-  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
-  expect(new URL(page.url()).searchParams.get('date')).toBe(TODAY)
-})
-
 test('an arrow inside the open picker moves one day, not two', async ({ page }) => {
   // A review pass reported that the board steps behind the open picker, and asked for a guard on
   // the glyph button. Measured before building one, and the mechanism is not what it looked like:

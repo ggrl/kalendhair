@@ -429,9 +429,9 @@ export function App() {
       // press, one day - Shift is how you cover ground.
       if (event.repeat) return
 
-      // Typing beats navigating. The form is already excluded above, so what this catches is the
-      // hidden `<input type="date">` in the top bar: `TopBar.openPicker` focuses it on a tap and on
-      // a browser without `showPicker`, and arrows are how a native date field is edited.
+      // Typing beats navigating. The form is already excluded above, and the hidden
+      // `<input type="date">` in the top bar hands its first key to the glyph (`TopBar.tsx`), so
+      // what this catches today is a column's whole-day checkbox.
       //
       // A review pass reported that the open picker lets the board step behind it, and asked for a
       // guard on the glyph button as well. Measured before building one, and it does not happen: a
@@ -447,8 +447,8 @@ export function App() {
       //
       // Named `focused` rather than `target`, which in this component is already the day being
       // asked for. Where focus is now rather than `event.target`, which is where it was when the
-      // key went down: the top bar's date field hands focus to its glyph on the first key after a tap,
-      // and that key belongs to the board.
+      // key went down: the top bar's date field hands focus to its glyph on the first key after the
+      // picker, and that key belongs to the board.
       const focused = document.activeElement
       if (
         focused instanceof HTMLElement &&

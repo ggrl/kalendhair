@@ -95,66 +95,58 @@ test('the glyph is the only control, and it opens the browser picker', async ({ 
   expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(1)
 })
 
-test('a tap focuses the field, because that is what opens the picker on an iPhone', async ({ browser }) => {
+test('a click focuses the field, because that is what opens the picker on an iPhone', async ({ page }) => {
   // iOS Safari has `showPicker` and it opens nothing for a date field - WebKit bug 261703, still
-  // open. Its pickers are tied to focus, so the tap has to focus the field. The owner found it on
-  // their own iPhone, Safari and Firefox both, which share WebKit. No iPhone runs here: what is
-  // proved is that a tap focuses, not that iOS then opens its wheel.
-  const context = await browser.newContext({ hasTouch: true })
-  const page = await context.newPage()
-  await stubDay(page)
-  await page.goto('/?date=2026-08-13')
-
-  await pickButton(page).tap()
-  await expect(pickInput(page)).toBeFocused()
-  await context.close()
-})
-
-test('after a tap, the keyboard belongs to the board again', async ({ browser }) => {
-  // The salon has a touchscreen PC with a keyboard, so a tap and a key press meet. Before this,
-  // measured here: tap, close the popup, ArrowUp, and the hidden field raised its focused segment
-  // and the board jumped with it - while ArrowRight did nothing at all.
-  const context = await browser.newContext({ hasTouch: true })
-  const page = await context.newPage()
-  await stubDay(page)
-  await page.goto('/?date=2026-08-13')
-
-  await pickButton(page).tap()
-  await page.keyboard.press('Escape')
-  await page.keyboard.press('ArrowUp')
-  // Settled rather than asserted instantly: "nothing moved" passes for free before anything could.
-  await page.waitForTimeout(300)
-  await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
-  await expect(pickInput(page)).not.toBeFocused()
-
-  await pickButton(page).tap()
-  await page.keyboard.press('Escape')
-  await page.keyboard.press('ArrowRight')
-  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
-
-  // Found by the review pass on the first version, which only blurred the field: the next Tab
-  // walked straight back into it, and ArrowUp raised its month to 14 September.
-  await pickButton(page).tap()
-  await page.keyboard.press('Escape')
-  await page.keyboard.press('Tab')
-  await page.keyboard.press('Tab')
-  await page.keyboard.press('ArrowUp')
-  await page.waitForTimeout(300)
-  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
-  await expect(pickInput(page)).not.toBeFocused()
-  await context.close()
-})
-
-test('a mouse click does not leave focus in the field', async ({ page }) => {
-  // The other half. Focus left in the hidden field after the popup closes would make the arrows
-  // edit the date in it instead of stepping the board, so only a tap focuses.
+  // open. Its pickers are tied to focus, so the click has to focus the field. Every click, because
+  // iOS 26 reports a finger's click as `pointerType` "mouse": a first fix that focused only on
+  // "touch" changed nothing on the owner's iPhone. No iPhone runs here: what is proved is that the
+  // click focuses, and the owner saw focus open the wheel on their phone.
   await stubDay(page)
   await page.goto('/?date=2026-08-13')
 
   await pickButton(page).click()
-  await page.keyboard.press('Escape')
-  await expect(pickInput(page)).not.toBeFocused()
+  await expect(pickInput(page)).toBeFocused()
 })
+
+// Both ways in, because Chromium treats them differently: after a tap, Tab starts from the hidden
+// field rather than the button, and a tap is how the salon's touchscreen PC opens the picker.
+for (const how of ['click', 'tap'] as const) {
+  test(`after the picker, the keyboard belongs to the board again (${how})`, async ({ browser }) => {
+    // Focus stays in the hidden field after the popup closes. Before the hand-off, measured here:
+    // close the popup, ArrowUp, and the field raised its focused segment and the board jumped with
+    // it - while ArrowRight did nothing at all.
+    const context = await browser.newContext({ hasTouch: how === 'tap' })
+    const page = await context.newPage()
+    await stubDay(page)
+    await page.goto('/?date=2026-08-13')
+    const open = () => (how === 'tap' ? pickButton(page).tap() : pickButton(page).click())
+
+    await open()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('ArrowUp')
+    // Settled rather than asserted instantly: "nothing moved" passes for free before anything could.
+    await page.waitForTimeout(300)
+    await expect(page.getByRole('heading', { name: 'Donnerstag, 13. August 2026' })).toBeVisible()
+    await expect(pickInput(page)).not.toBeFocused()
+
+    await open()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+
+    // Found by a review pass on a version that only blurred the field: the next Tab walked
+    // straight back into it, and ArrowUp raised its month to 14 September.
+    await open()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('Tab')
+    await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(300)
+    await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+    await expect(pickInput(page)).not.toBeFocused()
+    await context.close()
+  })
+}
 
 test('the field the calendar hangs from sits on the glyph, at every width', async ({ page }) => {
   // The owner found this by opening the picker: the calendar appeared about 400px to the right of
