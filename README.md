@@ -41,12 +41,14 @@ Being built in stages, smallest useful piece first, each one reviewed before the
 | Backups that leave the server on a schedule, and one restore actually performed | nightly encrypted dump on the server and one restore performed, 2026-10-04; nothing pulls it off the server yet |
 | Appointments and blocks older than a year deleted automatically | done |
 
-The screen is German. Code, comments and these documents are English - they are for whoever**Live since 2026-10-04** at `termine.haarstyle-by-yasemin.de`, behind Caddy with HTTPS, for
+The screen is German. Code, comments and these documents are English - they are for whoever
+maintains it, not for the salon.
+
+**Live since 2026-10-04** at `termine.haarstyle-by-yasemin.de`, behind Caddy with HTTPS, for
 the salon to try with its real book. One restore has been performed from a copy that left the
 server. The brief's condition is only half met, by the owner's decision: no backup leaves the
 server on a schedule until the machine that pulls it is chosen. `docs/PRODUCT_BRIEF.md` says
 what that costs.
-ed, so the condition still stands.
 
 ## Requirements
 
