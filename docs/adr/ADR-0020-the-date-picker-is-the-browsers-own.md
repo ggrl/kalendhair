@@ -70,8 +70,8 @@ so a two-digit year fails silently rather than loudly, and `isoWeek('0050-03-15'
   Focus left in the hidden field would make arrows edit the date instead of stepping the board, so
   the first key the field receives moves focus to the glyph and still acts on the board. A key
   reaches the field only once its popup is closed. Not a plain `blur()`: a review pass measured the
-  next Tab walking back into the field. The cost: that first key is used up if it is F5, Enter,
-  Space or Shift alone.
+  next Tab walking back into the field. The cost: that first key is used up if it is Tab, F5,
+  Enter, Space or Shift alone - Tab then lands on the glyph rather than the next control.
 - ADR-0010's arithmetic is untouched. This adds a way to choose a date, not a way to compute one.
 - The label is present for a screen reader and invisible on screen, because the top bar has no room
   for a word and the control says what it is by its shape.
