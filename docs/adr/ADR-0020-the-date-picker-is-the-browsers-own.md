@@ -1,6 +1,6 @@
 # ADR-0020: The date picker is the browser's own
 
-- Status: accepted and built, 2026-08-14; amended 2026-10-04 for the iPhone
+- Status: accepted and built, 2026-08-14; amended 2026-10-04 and 2026-10-05 for the iPhone
 - Settles the date picker named in `docs/PRODUCT_BRIEF.md`'s build order. Supersedes nothing;
   ADR-0010 still owns every piece of date arithmetic and is not touched
 
@@ -62,12 +62,16 @@ so a two-digit year fails silently rather than loudly, and `isoWeek('0050-03-15'
   tapped the glyph on iOS 26.6.2, in Safari and in Firefox, and nothing opened. iOS has
   `showPicker` and it does nothing for a date field: MDN's compatibility data marks it unsupported
   there, citing WebKit bug 261703, still open, where a WebKit engineer writes that iOS pickers are
-  "tied to element focus". So a tap now focuses the field before calling `showPicker`. A mouse
-  click does not, because focus left in the field would make the arrow keys edit the date instead
-  of stepping the board. The salon's touchscreen PC has a keyboard as well, so after a tap the
-  first key moves focus to the glyph and still acts on the board. Not a plain `blur()`: a review
-  pass measured the next Tab walking straight back into the hidden field. Firefox on iOS fails the same way because it runs on WebKit too. **Not
-  yet seen to work on an iPhone**: no iPhone runs in the tests, which prove only that a tap focuses.
+  "tied to element focus". Firefox on iOS fails the same way because it runs on WebKit too.
+  **So every click on the glyph focuses the field before calling `showPicker`.** A first fix
+  focused only when the click's `pointerType` was "touch", and changed nothing: the owner's Web
+  Inspector showed iOS 26 reporting a finger's click as "mouse". Focusing from the click handler
+  was then seen to open the wheel on the same phone, 2026-10-05.
+  Focus left in the hidden field would make arrows edit the date instead of stepping the board, so
+  the first key the field receives moves focus to the glyph and still acts on the board. A key
+  reaches the field only once its popup is closed. Not a plain `blur()`: a review pass measured the
+  next Tab walking back into the field. The cost: that first key is used up if it is Tab, F5,
+  Enter, Space or Shift alone - Tab then lands on the glyph rather than the next control.
 - ADR-0010's arithmetic is untouched. This adds a way to choose a date, not a way to compute one.
 - The label is present for a screen reader and invisible on screen, because the top bar has no room
   for a word and the control says what it is by its shape.
