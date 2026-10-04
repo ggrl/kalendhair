@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import type { MouseEvent } from 'react'
 import { isoWeek, longGermanDate } from '../calendar/dates'
 import { holidayName } from '../calendar/opening'
 
@@ -65,10 +66,21 @@ export function TopBar({
    * the button rather than somewhere else on the page.
    */
   const picker = useRef<HTMLInputElement>(null)
+  const glyph = useRef<HTMLButtonElement>(null)
+  /** Whether the field has focus because a tap put it there, rather than the fallback below. */
+  const tapped = useRef(false)
 
-  function openPicker(): void {
+  function openPicker(event: MouseEvent): void {
     const input = picker.current
     if (input === null) return
+    // iOS has `showPicker` and it opens nothing for a date field (WebKit bug 261703, open): its
+    // pickers come from focus, so a tap focuses the field first. Only a tap - on a desktop the
+    // focus would stay in the field after the popup closes, and arrows would edit the date
+    // instead of stepping the board.
+    if ((event.nativeEvent as PointerEvent).pointerType === 'touch') {
+      tapped.current = true
+      input.focus()
+    }
     // `showPicker` needs a user gesture, which a click is. Older browsers without it fall back to
     // focusing the field - which is worse than a picker and better than a control that does
     // nothing when pressed.
@@ -184,7 +196,13 @@ export function TopBar({
               span the whole bar and the popup opened 573px to the right of the button that opened
               it, off the screen on a narrow window. */}
           <span className="topbar__picker">
-            <button type="button" className="topbar__pick" onClick={openPicker} aria-label="Datum wählen">
+            <button
+              ref={glyph}
+              type="button"
+              className="topbar__pick"
+              onClick={openPicker}
+              aria-label="Datum wählen"
+            >
               {/* Drawn rather than an emoji: `AGENTS.md` forbids one, and a glyph that renders as a
                   different picture on every platform is not a control anybody learns. */}
               <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
@@ -208,6 +226,20 @@ export function TopBar({
               // would be a second copy of one rule, and the copy that is never the authority is the
               // one that drifts.
               onChange={(event) => onPick(event.target.value)}
+              // A tap leaves focus here after the popup closes, and the salon's touchscreen PC has a
+              // keyboard too: arrows would edit the date in a field nobody can see. A key can only
+              // reach the field once its popup is closed, so the first one moves focus to the glyph
+              // that opened it. Not `blur()`: a review pass measured the next Tab walking straight
+              // back into the field. `preventDefault` because Chromium was measured editing the
+              // field anyway; `App.tsx` reads where focus is now, so the board still gets the key.
+              onKeyDown={(event) => {
+                if (!tapped.current) return
+                event.preventDefault()
+                glyph.current?.focus()
+              }}
+              onBlur={() => {
+                tapped.current = false
+              }}
             />
           </span>
         </div>
