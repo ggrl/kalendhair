@@ -430,8 +430,8 @@ export function App() {
       if (event.repeat) return
 
       // Typing beats navigating. The form is already excluded above, so what this catches is the
-      // hidden `<input type="date">` in the top bar: `TopBar.openPicker` focuses it on a browser
-      // without `showPicker`, and arrows are how a native date field is edited.
+      // hidden `<input type="date">` in the top bar: `TopBar.openPicker` focuses it on a tap and on
+      // a browser without `showPicker`, and arrows are how a native date field is edited.
       //
       // A review pass reported that the open picker lets the board step behind it, and asked for a
       // guard on the glyph button as well. Measured before building one, and it does not happen: a
