@@ -2,6 +2,78 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-10-04, seventeenth session - first deployment, live, restore performed
+
+One pull request, #56 (`534b3f9`), documentation only. The rest of the session was the owner
+pasting `DEPLOYMENT.md` steps into the real server and me checking each output.
+
+### Where things stand
+
+- **Live at `https://termine.haarstyle-by-yasemin.de`**, Contabo VPS, Ubuntu 24.04.5, x86_64,
+  7.8 GB RAM. Docker 29.8.2, Compose v5.6.0, Caddy from its own apt repository. A and AAAA
+  records both point at it (`157.173.103.152`, `2a02:c207:3020:7830::1`).
+- **`main` is at `534b3f9`.** `npm run verify` green, 114 unit. CI on #56 green: verify,
+  database, browser.
+- **The salon may now use real names, by the owner's decision**, before the brief's condition is
+  fully met. Recorded in `docs/PRODUCT_BRIEF.md` (the 2026-10-04 paragraph), README, ADR-0025 and
+  ADR-0028 status lines, and `DEPLOYMENT.md` Step 10. No new ADR: the condition lives in the brief.
+
+### What was done on the server
+
+- Steps 2 to 9 as written, except: step 5's three machine secrets were written into `.env` with
+  `sed` so they never reached the screen; everything ran as root rather than with `sudo`.
+- **10a, 10b and 10f. Not 10c, 10d, 10e** - the laptop pull waits for the salon to choose the
+  machine that will run it. The private key and every `.env` value are in the owner's password
+  manager only.
+- **Restore performed 2026-10-04** (Step 10f asks for this date here): a dump copied with `scp`
+  to the owner's Mac and back, decrypted to 8277 bytes, restored with `ON_ERROR_STOP=1` into
+  `restore_drill`. Same 2 appointments (fake names), 4 staff, and the same md5 over every
+  appointment row as `salon`. Key and copy deleted from the server afterwards, confirmed by `ls`.
+- Cron line confirmed by `crontab -u kalendhair -l`: `20 3 * * *`, as 10b gives it.
+
+### What was verified, and how
+
+- From my machine: HTTPS `200` over HTTP/2, `http://` gives `308` to HTTPS, `/api/day` gives
+  `401`; certificate Let's Encrypt `YE1`, CN the hostname, valid to 2027-01-02. Ports 3000 and
+  5432 time out over IPv4 and IPv6. After the reboot: ping6 and HTTPS over IPv6 work.
+- On the server, by the owner's pasted output: the startup log matched Step 7 line for line;
+  `ufw` allows only OpenSSH, 80, 443; `.env` is `600 kalendhair`.
+- The owner reports logging in and that everything came back after a reboot. I did not see either.
+
+### What was NOT verified
+
+- **The first cron run.** Nobody has seen a 03:20 file yet. The two files so far were run by hand.
+- **Nobody is alerted and nobody watches.** ADR-0028's check is the laptop's folder, which does not
+  exist. Until it does, the admin has to look at `/srv/kalendhair-backups/files` on the server.
+- **Why IPv6 failed before the reboot and worked after.** Observed both ways, cause not read.
+  Let's Encrypt issued anyway, presumably over IPv4.
+- **SSH is still root with a password**, open on port 22. The owner will change it themself.
+- No phone was tested by me. Contabo's own panel firewall was not looked at.
+
+### Unfinished, and the next step
+
+1. SSH: key login, password login off - before real names go in.
+2. Check on 2026-10-05 that a `kalendhair-2026-10-05-0320.sql.gz.age` exists and the log is empty.
+3. Once the salon picks its machine: 10c to 10e, then the brief's condition is met in full.
+4. Still open from before: the `EntryModal` focus trap, sizing numbers into `DEPLOYMENT.md`.
+5. The security pass noted (not a finding): 10b says the backup account cannot rewrite the
+  root-owned script, but it can steer it through `~/.docker/cli-plugins` - and as a `docker`
+  group member it could take root anyway. The wording overstates the protection.
+
+### What surprised me
+
+**The guide's own step 4 failed on the first real server.** `useradd --no-create-home` still
+records `/home/kalendhair`, `sudo -u` sets `HOME` there, and `docker compose up --build` stopped
+with `mkdir /home/kalendhair: permission denied`. Fixed with a home at `/var/lib/kalendhair`; the
+guide now says so.
+
+**I spliced a README paragraph into the middle of a sentence** with a Python edit that computed
+string offsets before another replacement shifted them, and pushed it. Caught by reading the diff
+after the push, not before. Read the diff before committing.
+
+**The logic pass caught a claim I wrote, "costs at most a day"**, which is only true if somebody
+looks - and the thing ADR-0028 makes the looker does not exist yet.
+
 ## 2026-10-01, sixteenth session - the backup, designed and tested off-server
 
 Same conversation as the fifteenth, continued past midnight. One pull request, #54: the backup
