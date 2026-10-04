@@ -447,7 +447,7 @@ export function App() {
       //
       // Named `focused` rather than `target`, which in this component is already the day being
       // asked for. Where focus is now rather than `event.target`, which is where it was when the
-      // key went down: the top bar's date field gives focus back on the first key after a tap,
+      // key went down: the top bar's date field hands focus to its glyph on the first key after a tap,
       // and that key belongs to the board.
       const focused = document.activeElement
       if (

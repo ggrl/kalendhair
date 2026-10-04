@@ -131,6 +131,17 @@ test('after a tap, the keyboard belongs to the board again', async ({ browser })
   await page.keyboard.press('Escape')
   await page.keyboard.press('ArrowRight')
   await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+
+  // Found by the review pass on the first version, which only blurred the field: the next Tab
+  // walked straight back into it, and ArrowUp raised its month to 14 September.
+  await pickButton(page).tap()
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForTimeout(300)
+  await expect(page.getByRole('heading', { name: 'Freitag, 14. August 2026' })).toBeVisible()
+  await expect(pickInput(page)).not.toBeFocused()
   await context.close()
 })
 

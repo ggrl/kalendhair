@@ -66,6 +66,7 @@ export function TopBar({
    * the button rather than somewhere else on the page.
    */
   const picker = useRef<HTMLInputElement>(null)
+  const glyph = useRef<HTMLButtonElement>(null)
   /** Whether the field has focus because a tap put it there, rather than the fallback below. */
   const tapped = useRef(false)
 
@@ -195,7 +196,13 @@ export function TopBar({
               span the whole bar and the popup opened 573px to the right of the button that opened
               it, off the screen on a narrow window. */}
           <span className="topbar__picker">
-            <button type="button" className="topbar__pick" onClick={openPicker} aria-label="Datum wählen">
+            <button
+              ref={glyph}
+              type="button"
+              className="topbar__pick"
+              onClick={openPicker}
+              aria-label="Datum wählen"
+            >
               {/* Drawn rather than an emoji: `AGENTS.md` forbids one, and a glyph that renders as a
                   different picture on every platform is not a control anybody learns. */}
               <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
@@ -221,13 +228,14 @@ export function TopBar({
               onChange={(event) => onPick(event.target.value)}
               // A tap leaves focus here after the popup closes, and the salon's touchscreen PC has a
               // keyboard too: arrows would edit the date in a field nobody can see. A key can only
-              // reach the field once its popup is closed, so the first one hands focus back to the
-              // board. `preventDefault` as well, because Chromium was measured editing the field
-              // after the blur; `App.tsx` reads where focus is now, so the board still gets the key.
+              // reach the field once its popup is closed, so the first one moves focus to the glyph
+              // that opened it. Not `blur()`: a review pass measured the next Tab walking straight
+              // back into the field. `preventDefault` because Chromium was measured editing the
+              // field anyway; `App.tsx` reads where focus is now, so the board still gets the key.
               onKeyDown={(event) => {
                 if (!tapped.current) return
                 event.preventDefault()
-                event.currentTarget.blur()
+                glyph.current?.focus()
               }}
               onBlur={() => {
                 tapped.current = false
