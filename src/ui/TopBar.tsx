@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import type { MouseEvent } from 'react'
 import { isoWeek, longGermanDate } from '../calendar/dates'
 import { holidayName } from '../calendar/opening'
 
@@ -66,9 +67,14 @@ export function TopBar({
    */
   const picker = useRef<HTMLInputElement>(null)
 
-  function openPicker(): void {
+  function openPicker(event: MouseEvent): void {
     const input = picker.current
     if (input === null) return
+    // iOS has `showPicker` and it opens nothing for a date field (WebKit bug 261703, open): its
+    // pickers come from focus, so a tap focuses the field first. Only a tap - on a desktop the
+    // focus would stay in the field after the popup closes, and arrows would edit the date
+    // instead of stepping the board.
+    if ((event.nativeEvent as PointerEvent).pointerType === 'touch') input.focus()
     // `showPicker` needs a user gesture, which a click is. Older browsers without it fall back to
     // focusing the field - which is worse than a picker and better than a control that does
     // nothing when pressed.

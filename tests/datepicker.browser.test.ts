@@ -95,6 +95,32 @@ test('the glyph is the only control, and it opens the browser picker', async ({ 
   expect(await page.evaluate(() => (window as unknown as { __picked: number }).__picked)).toBe(1)
 })
 
+test('a tap focuses the field, because that is what opens the picker on an iPhone', async ({ browser }) => {
+  // iOS Safari has `showPicker` and it opens nothing for a date field - WebKit bug 261703, still
+  // open. Its pickers are tied to focus, so the tap has to focus the field. The owner found it on
+  // their own iPhone, Safari and Firefox both, which share WebKit. No iPhone runs here: what is
+  // proved is that a tap focuses, not that iOS then opens its wheel.
+  const context = await browser.newContext({ hasTouch: true })
+  const page = await context.newPage()
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+
+  await pickButton(page).tap()
+  await expect(pickInput(page)).toBeFocused()
+  await context.close()
+})
+
+test('a mouse click does not leave focus in the field', async ({ page }) => {
+  // The other half. Focus left in the hidden field after the popup closes would make the arrows
+  // edit the date in it instead of stepping the board, so only a tap focuses.
+  await stubDay(page)
+  await page.goto('/?date=2026-08-13')
+
+  await pickButton(page).click()
+  await page.keyboard.press('Escape')
+  await expect(pickInput(page)).not.toBeFocused()
+})
+
 test('the field the calendar hangs from sits on the glyph, at every width', async ({ page }) => {
   // The owner found this by opening the picker: the calendar appeared about 400px to the right of
   // the button that opened it, and off the edge of a narrow window.

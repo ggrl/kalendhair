@@ -1,6 +1,6 @@
 # ADR-0020: The date picker is the browser's own
 
-- Status: accepted and built, 2026-08-14
+- Status: accepted and built, 2026-08-14; amended 2026-10-04 for the iPhone
 - Settles the date picker named in `docs/PRODUCT_BRIEF.md`'s build order. Supersedes nothing;
   ADR-0010 still owns every piece of date arithmetic and is not touched
 
@@ -58,6 +58,14 @@ so a two-digit year fails silently rather than loudly, and `isoWeek('0050-03-15'
   way to override it from the page: this is the price of not building the control. If it ever reads
   wrongly to the salon, that is the argument for the popup this ADR rejected, and it should be
   recorded as such rather than patched.
+- **"A phone opens the native date wheel" was never true on an iPhone; found 2026-10-04.** The owner
+  tapped the glyph on iOS 26.6.2, in Safari and in Firefox, and nothing opened. iOS has
+  `showPicker` and it does nothing for a date field: MDN's compatibility data marks it unsupported
+  there, citing WebKit bug 261703, still open, where a WebKit engineer writes that iOS pickers are
+  "tied to element focus". So a tap now focuses the field before calling `showPicker`. A mouse
+  click does not, because focus left in the field would make the arrow keys edit the date instead
+  of stepping the board. Firefox on iOS fails the same way because it runs on WebKit too. **Not
+  yet seen to work on an iPhone**: no iPhone runs in the tests, which prove only that a tap focuses.
 - ADR-0010's arithmetic is untouched. This adds a way to choose a date, not a way to compute one.
 - The label is present for a screen reader and invisible on screen, because the top bar has no room
   for a word and the control says what it is by its shape.
