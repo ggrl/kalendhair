@@ -2,6 +2,75 @@
 
 Newest first. Read the top entry before doing anything.
 
+## 2026-10-22, nineteenth session - the salon PC pulls the backups
+
+No code and no pull request. The owner ran `DEPLOYMENT.md` Steps 10c and 10d on the server and
+on the salon's PC, pasting each output to me. Written up on 2026-11-10.
+
+### Where things stand
+
+- **`main` is at `be5e409`**, the owner's own README edit of 2026-10-29: the backup row now says
+  `done` and the "only half met" paragraph is gone. `npm run verify` passes, 114 unit tests.
+  Database and browser suites not run.
+- **The pull is set up, by the owner's report.** The machine is a **Windows 10 desktop PC**, not
+  the laptop the guide assumes. `pull.ps1` run by hand logged `ok, 7 new`; `Start-ScheduledTask`
+  then logged `ok, 0 new`. I did not see the PC, only what the owner pasted.
+- **The server side** on 2026-10-22: seven `.age` files in `/srv/kalendhair-backups/files`, newest
+  from that day. That settles the 2026-10-05 check from the eighteenth session.
+- **The owner moved the daily trigger from 12:00 to 08:00.** The server dumps at 03:20 by its own
+  clock, so either time zone puts the dump before 08:00. The logon trigger is unchanged.
+
+### What went wrong on the way, in the order it happened
+
+1. **`ssh-keygen` failed: `$HOME\.ssh` did not exist** on a PC that had never used SSH. Fixed with
+   `New-Item -ItemType Directory -Force "$HOME\.ssh"`. 10d step 2 does not have that line.
+2. **The owner skipped 10d step 3** (meeting the server by hand), so the script's BatchMode got
+   `Host key verification failed`; `pull.log` records only `sftp exited with 255`.
+3. **10c had been run earlier with the placeholder pasted unchanged.** `kalendhair-pull` existed,
+   and `/etc/ssh/kalendhair-pull.keys` held the literal `PASTE-THE-LAPTOP-PUBLIC-KEY-HERE`. Nothing
+   errors on that; the connection just answers `Permission denied`. Fixed with `tee` over the file.
+   The owner did not paste `sshd -T` output, so the `Match` block was confirmed only by the
+   connection working: `ls` showed the seven backups.
+4. **`pull.ps1` had the server's IP in `$Server`, but the fingerprint was accepted for the
+   hostname.** `known_hosts` keys on the name typed, so BatchMode failed again with 255. Fixed by
+   putting `termine.haarstyle-by-yasemin.de` in the script.
+
+### What was NOT verified
+
+- **Step 6's other checks:** sign out and in for the logon trigger, "Run only when user is logged
+  on", and "Last Run Result" `0x0`. I asked; the owner did not answer them. The last one matters
+  because Windows PowerShell 5.1 was never tested (`DEPLOYMENT.md` 10d).
+- **The 08:00 trigger has not been seen firing.** Only the manual `Start-ScheduledTask`.
+- **No restore from a copy that came through the PC.** 10f's restore used a copy carried another
+  way.
+- **The read-only lock** (`put`, `rm` refused) was measured on a Debian 12 test server when the
+  guide was written, not on this server.
+
+### Unfinished, and the next step
+
+1. **Ask the owner** for step 6's three checks, and who in the salon does 10e's look at the
+   folder, and how often.
+2. **Documentation PR**, which I offered and did not do:
+   - 10d step 2: add the `New-Item ... "$HOME\.ssh"` line.
+   - 10c: say plainly that the placeholder must be replaced, and how to check (`sudo cat` the keys
+     file).
+   - 10d step 4: `$Server` must be the same name used in step 3, not the IP.
+   - 08:00 instead of 12:00 in step 5, and "PC" where it matters.
+   - **Still stale after the owner's README edit:** `docs/PRODUCT_BRIEF.md:271` and ADR-0028's
+     status line (line 5) still say the pull is not set up.
+3. **Restore one PC copy** on the server, the 10f way, and write its date down. Then the brief's
+   condition is met with evidence rather than by report.
+4. Still open from earlier sessions: SSH key login with password login off, the `EntryModal`
+   focus trap, server sizing in `DEPLOYMENT.md`, the Step 10b wording, and `event.detail` on an
+   iPhone tap.
+
+### What surprised me
+
+**Each failure printed the same line.** `sftp exited with 255 while listing` covered a missing
+known-hosts entry, a placeholder key, and an IP-versus-name mismatch. The script's `-q` and
+BatchMode are right for a scheduled run and useless for diagnosis; the manual `sftp -v` with the
+script's exact arguments is what told them apart. Worth a line in the guide.
+
 ## 2026-10-04 to 10-05, eighteenth session - the date picker on an iPhone
 
 Two pull requests, #58 (`fc382e4`) and #59 (`58eafb1`), both merged and deployed by the owner.
